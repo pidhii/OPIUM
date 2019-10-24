@@ -1,0 +1,3 @@
+[submodule "siphash"]
+	path = siphash
+	url = https://github.com/antirez/siphash.git

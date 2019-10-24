@@ -2,7 +2,13 @@ cmake_minimum_required (VERSION 3.15)
 project (opium)
 enable_language (C)
 
-set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -Wextra -Wno-unused")
+
+include (ExternalProject)
+find_package (BISON REQUIRED)
+find_package (FLEX REQUIRED)
+
+
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -Wextra -Wno-unused -Wno-strict-aliasing")
 set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Og -ggdb")
 set (CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3")
 
@@ -11,6 +17,71 @@ set (OPIUM_INCLUDE ${CMAKE_SOURCE_DIR}/include)
 
 include_directories (${CMAKE_SOURCE_DIR}/include)
 
-add_library (opium_object_lib OBJECT ${OPIUM_OBJ_LIB_SRC})
-add_executable (opium ${CMAKE_SOURCE_DIR}/main.c $<TARGET_OBJECTS:opium_object_lib>)
+
+################################################################################
+#                                   LibJIT
+#
+set (LIBJIT_ROOT ${CMAKE_SOURCE_DIR}/libjit)
+# configure and build
+ExternalProject_Add(libjit_external
+  PREFIX ${LIBJIT_ROOT}
+  GIT_REPOSITORY "https://git.savannah.gnu.org/git/libjit.git"
+  INSTALL_DIR ${LIBJIT_ROOT}/install
+  CONFIGURE_COMMAND ${LIBJIT_ROOT}/src/libjit_external/configure --prefix=<INSTALL_DIR>
+  BUILD_COMMAND ${MAKE}
+  UPDATE_COMMAND ""
+  BUILD_BYPRODUCTS <INSTALL_DIR>/lib/libjit.a)
+# bootstrap
+ExternalProject_Add_Step(libjit_external bootstrap
+  COMMAND ./bootstrap
+  DEPENDEES download
+  DEPENDERS configure
+  WORKING_DIRECTORY ${LIBJIT_ROOT}/src/libjit_external)
+# wrap into target
+add_library (libjit STATIC IMPORTED)
+set_target_properties (libjit
+  PROPERTIES
+    IMPORTED_LOCATION ${LIBJIT_ROOT}/install/lib/libjit.a)
+add_dependencies (libjit libjit_external)
+
+
+################################################################################
+#                                  SipHash
+#
+set (SIPHASH_SRC ${CMAKE_SOURCE_DIR}/siphash/siphash.c)
+set (SIPHASH_OUT ${CMAKE_BINARY_DIR}/siphash.c)
+set (SIPHASH_PATCH ${CMAKE_SOURCE_DIR}/siphash.diff)
+add_custom_target (siphash
+  COMMAND patch ${SIPHASH_SRC} -i ${SIPHASH_PATCH} -o ${SIPHASH_OUT}
+  BYPRODUCTS ${SIPHASH_OUT}
+  SOURCES ${SIPHASH_SRC})
+
+
+################################################################################
+#                                   syntax
+#
+set (SYNTAX_DIR ${CMAKE_SOURCE_DIR}/src/syntax)
+
+BISON_TARGET (opium_parser ${SYNTAX_DIR}/parser.y ${CMAKE_BINARY_DIR}/parser.c)
+FLEX_TARGET (opium_scanner ${SYNTAX_DIR}/lexer.l ${CMAKE_BINARY_DIR}/scanner.c)
+ADD_FLEX_BISON_DEPENDENCY (opium_scanner opium_parser)
+
+
+################################################################################
+#                                   opium
+#
+# objects
+add_library (opium_object_lib OBJECT
+  ${OPIUM_OBJ_LIB_SRC}
+  ${BISON_opium_parser_OUTPUTS}
+  ${FLEX_opium_scanner_OUTPUTS}
+  ${SIPHASH_OUT})
+target_include_directories (opium_object_lib PUBLIC ${LIBJIT_ROOT}/install/include)
+add_dependencies (opium_object_lib libjit siphash) # ensure headers are ready
+# execuable
+add_executable (opium
+  ${CMAKE_SOURCE_DIR}/main.c
+  $<TARGET_OBJECTS:opium_object_lib>)
+target_include_directories (opium PUBLIC ${LIBJIT_ROOT}/install/include)
+target_link_libraries (opium libjit)
 

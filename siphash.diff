@@ -1,0 +1,38 @@
+--- siphash/siphash.c	2019-10-19 15:42:52.577556991 +0300
++++ siphash.c	2019-10-19 15:48:11.170912220 +0300
+@@ -116,11 +116,17 @@
+ 
+     switch (left) {
+     case 7: b |= ((uint64_t)in[6]) << 48;
++    // fall through
+     case 6: b |= ((uint64_t)in[5]) << 40;
++    // fall through
+     case 5: b |= ((uint64_t)in[4]) << 32;
++    // fall through
+     case 4: b |= ((uint64_t)in[3]) << 24;
++    // fall through
+     case 3: b |= ((uint64_t)in[2]) << 16;
++    // fall through
+     case 2: b |= ((uint64_t)in[1]) << 8;
++    // fall through
+     case 1: b |= ((uint64_t)in[0]); break;
+     case 0: break;
+     }
+@@ -175,11 +181,17 @@
+ 
+     switch (left) {
+     case 7: b |= ((uint64_t)tolower(in[6])) << 48;
++    // fall through
+     case 6: b |= ((uint64_t)tolower(in[5])) << 40;
++    // fall through
+     case 5: b |= ((uint64_t)tolower(in[4])) << 32;
++    // fall through
+     case 4: b |= ((uint64_t)tolower(in[3])) << 24;
++    // fall through
+     case 3: b |= ((uint64_t)tolower(in[2])) << 16;
++    // fall through
+     case 2: b |= ((uint64_t)tolower(in[1])) << 8;
++    // fall through
+     case 1: b |= ((uint64_t)tolower(in[0])); break;
+     case 0: break;
+     }
