@@ -39,7 +39,6 @@ opi_alist_pop(struct opi_alist *a, size_t n)
   }
 }
 
-
 void
 opi_builder_init(struct opi_builder *bldr)
 {
@@ -65,8 +64,30 @@ opi_builder_init(struct opi_builder *bldr)
   opi_strvec_init(bldr->trait_names = malloc(sizeof(struct opi_strvec)));
   opi_ptrvec_init(bldr->traits = malloc(sizeof(struct opi_ptrvec)));
 
-  opi_builder_add_type(bldr, "pair", opi_pair_type);
-  opi_alist_push(bldr->alist, "pair", NULL);
+  opi_builder_def_type(bldr, "undefined", opi_undefined_type);
+  opi_ptrvec_pop(bldr->all_types, NULL);
+  opi_builder_def_type(bldr, "number", opi_number_type);
+  opi_ptrvec_pop(bldr->all_types, NULL);
+  opi_builder_def_type(bldr, "symbol", opi_symbol_type);
+  opi_ptrvec_pop(bldr->all_types, NULL);
+  opi_builder_def_type(bldr, "nil", opi_nil_type);
+  opi_ptrvec_pop(bldr->all_types, NULL);
+  opi_builder_def_type(bldr, "string", opi_string_type);
+  opi_ptrvec_pop(bldr->all_types, NULL);
+  opi_builder_def_type(bldr, "boolean", opi_boolean_type);
+  opi_ptrvec_pop(bldr->all_types, NULL);
+  opi_builder_def_type(bldr, "pair", opi_pair_type);
+  opi_ptrvec_pop(bldr->all_types, NULL);
+  opi_builder_def_type(bldr, "table", opi_table_type);
+  opi_ptrvec_pop(bldr->all_types, NULL);
+  opi_builder_def_type(bldr, "fn", opi_fn_type);
+  opi_ptrvec_pop(bldr->all_types, NULL);
+  opi_builder_def_type(bldr, "iport", opi_iport_type);
+  opi_ptrvec_pop(bldr->all_types, NULL);
+  opi_builder_def_type(bldr, "oport", opi_oport_type);
+  opi_ptrvec_pop(bldr->all_types, NULL);
+  opi_builder_def_type(bldr, "lazy", opi_lazy_type);
+  opi_ptrvec_pop(bldr->all_types, NULL);
 }
 
 void
@@ -205,6 +226,13 @@ opi_builder_def_const(struct opi_builder *bldr, const char *name, opi_t val)
   opi_inc_rc(val);
 }
 
+void
+opi_builder_def_type(struct opi_builder *bldr, const char *name, opi_type_t type)
+{
+  opi_builder_add_type(bldr, name, type);
+  opi_alist_push(bldr->alist, name, NULL);
+}
+
 opi_t
 opi_builder_find_const(struct opi_builder *bldr, const char *name)
 {
@@ -246,6 +274,15 @@ opi_builder_assoc(struct opi_builder *bldr, const char *var)
     opi_error("no such variable, '%s'\n", var);
     exit(EXIT_FAILURE);
   }
+  return bldr->alist->vals.data[idx];
+}
+
+const char*
+opi_builder_try_assoc(struct opi_builder *bldr, const char *var)
+{
+  int idx = opi_strvec_rfind(&bldr->alist->keys, var);
+  if (idx < 0)
+    return NULL;
   return bldr->alist->vals.data[idx];
 }
 
@@ -396,22 +433,6 @@ make_struct(void)
   return (opi_t)s;
 }
 
-static void
-generic_delete(struct opi_fn *self)
-{
-  opi_trait_delete(self->data);
-  opi_fn_delete(self);
-}
-
-static opi_t
-generic(void)
-{
-  opi_t x = opi_get(1);
-  struct opi_trait *trait = opi_fn_get_data(opi_current_fn);
-  opi_t handle = opi_trait_find(trait, x->type);
-  return opi_fn_apply(handle);
-}
-
 static opi_t
 generic_default(void)
 {
@@ -456,7 +477,25 @@ opi_builder_build(struct opi_builder *bldr, struct opi_ast *ast)
       opi_t const_val;
       size_t offs;
 
-      const char *varname = opi_builder_assoc(bldr, ast->var);
+      char *name0 = NULL;
+      char *p = strchr(ast->var, ':');
+      if (p && p[1] == ':') {
+        size_t len = p - ast->var;
+        char namespace[len + 1];
+        memcpy(namespace, ast->var, len);
+        namespace[len] = 0;
+        const char *map = opi_builder_try_assoc(bldr, namespace);
+        if (map) {
+          len =  strlen(map) + 2 + strlen(p + 2);
+          name0 = malloc(len + 1);
+          sprintf(name0, "%s::%s", map, p + 2);
+        }
+      }
+
+      const char *varname = opi_builder_assoc(bldr, name0 ? name0 : ast->var);
+      if (name0)
+        free(name0);
+
       int var_idx = opi_strvec_rfind(&bldr->decls, varname);
       if (var_idx >= 0) {
         // # Found in local variables:
@@ -478,7 +517,17 @@ opi_builder_build(struct opi_builder *bldr, struct opi_ast *ast)
 
     case OPI_AST_USE:
     {
-      opi_alist_push(bldr->alist, ast->use.new, ast->use.old);
+      if (strcmp(ast->use.new, "*") == 0) {
+        char *prefix = ast->use.old;
+        size_t prefixlen = strlen(ast->use.old);
+        for (size_t i = 0, n = opi_alist_get_size(bldr->alist); i < n; ++i) {
+          char *vname = bldr->alist->vals.data[i];
+          if (strncmp(prefix, vname, prefixlen) == 0)
+            opi_alist_push(bldr->alist, vname + prefixlen, vname);
+        }
+      } else {
+        opi_alist_push(bldr->alist, ast->use.new, ast->use.old);
+      }
       return opi_ir_const(opi_nil);
     }
 
@@ -725,23 +774,19 @@ opi_builder_build(struct opi_builder *bldr, struct opi_ast *ast)
 
     case OPI_AST_TRAIT:
     {
-      // create default handle
+      // create trait
       opi_assert(ast->trait.deflt->tag == OPI_AST_FN);
       int arity = ast->trait.deflt->fn.nargs;
-      struct opi_ir *true_default = opi_builder_build(bldr, ast->trait.deflt);
       opi_t deflt = opi_fn("generic_deflt", generic_default, arity);
-
-      // create trait
       struct opi_trait *trait = opi_trait(deflt);
       opi_builder_add_trait(bldr, ast->trait.name, trait);
 
       // create generic function
-      opi_t generic_fn = opi_fn(ast->trait.name, generic, arity);
-      opi_fn_set_data(generic_fn, trait, generic_delete);
+      opi_t generic_fn = opi_trait_into_generic(trait, ast->trait.name);
 
       // declare generic function
       opi_builder_push_decl(bldr, ast->trait.name);
-      struct opi_ir *fn_ir = opi_ir_const(generic_fn);
+      struct opi_ir *generic_fn_ir = opi_ir_const(generic_fn);
 
       // default implementation
       struct impl_data *data = malloc(sizeof(struct impl_data));
@@ -750,9 +795,12 @@ opi_builder_build(struct opi_builder *bldr, struct opi_ast *ast)
       opi_t impl_fn = opi_fn("impl-default", impl, 1);
       opi_fn_set_data(impl_fn, data, impl_data_delete);
 
+      // create default handle
+      struct opi_ir *true_default = opi_builder_build(bldr, ast->trait.deflt);
+
       // auxilary block
       struct opi_ir *body[] = {
-        opi_ir_let(&fn_ir, 1, NULL),
+        opi_ir_let(&generic_fn_ir, 1, NULL),
         opi_ir_apply(opi_ir_const(impl_fn), &true_default, 1),
       };
       struct opi_ir *block = opi_ir_block(body, 2);
@@ -781,10 +829,13 @@ opi_builder_build(struct opi_builder *bldr, struct opi_ast *ast)
       
       // apply implementer
       opi_assert(ast->impl.fn->tag == OPI_AST_FN);
-      opi_assert(ast->impl.fn->fn.nargs == opi_trait_get_arity(trait));
+      opi_assert((int)ast->impl.fn->fn.nargs == opi_trait_get_arity(trait));
       struct opi_ir *handle = opi_builder_build(bldr, ast->impl.fn);
       return opi_ir_apply(opi_ir_const(impl_fn), &handle, 1);
     }
+
+    case OPI_AST_RETURN:
+      return opi_ir_return(opi_builder_build(bldr, ast->ret));
   }
 
   abort();
@@ -843,6 +894,10 @@ opi_ir_delete(struct opi_ir *node)
         opi_ir_delete(node->match.then);
       if (node->match.els)
         opi_ir_delete(node->match.els);
+      break;
+
+    case OPI_IR_RETURN:
+      opi_ir_delete(node->ret);
       break;
   }
 
@@ -949,6 +1004,15 @@ opi_ir_match(opi_type_t type, size_t *offs, size_t n, struct opi_ir *expr,
   node->match.expr = expr;
   node->match.then = then;
   node->match.els = els;
+  return node;
+}
+
+struct opi_ir*
+opi_ir_return(struct opi_ir *val)
+{
+  struct opi_ir *node = malloc(sizeof(struct opi_ir));
+  node->tag = OPI_IR_RETURN;
+  node->ret = val;
   return node;
 }
 

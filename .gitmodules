@@ -1,3 +1,9 @@
 [submodule "siphash"]
 	path = siphash
 	url = https://github.com/antirez/siphash.git
+[submodule "include/opium/uniform_allocator"]
+	path = include/opium/uniform_allocator
+	url = https://gist.github.com/4b98cb5dcfa78bb0211e37ab1f8a0f78.git
+[submodule "include/opium/generic_vector"]
+	path = include/opium/generic_vector
+	url = https://gist.github.com/91a86b1c58816d0fa010083967666ed6.git

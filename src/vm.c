@@ -17,7 +17,10 @@ opi_vm(struct opi_bytecode *bc)
   while (1) {
     switch (ip->opc) {
       case OPI_OPC_NOP:
+        break;
+
       case OPI_OPC_PHI:
+        r[OPI_PHI_REG(ip)] = opi_nil;
         break;
 
       case OPI_OPC_END:
@@ -42,17 +45,31 @@ opi_vm(struct opi_bytecode *bc)
       case OPI_OPC_APPLY:
       {
         opi_t fn = r[OPI_APPLY_REG_FN(ip)];
-        opi_assert(fn->type == opi_fn_type);
-        opi_assert(opi_fn_get_arity(fn) == OPI_APPLY_ARG_NARGS(ip));
-        r[OPI_APPLY_REG_OUT(ip)] = opi_fn_apply(fn);
+        if (opi_unlikely(fn->type != opi_fn_type)) {
+          r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("type_error"));
+          break;
+        }
+        size_t nargs = OPI_APPLY_ARG_NARGS(ip);
+        if (opi_unlikely(!opi_test_arity(opi_fn_get_arity(fn), nargs))) {
+          r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("arity_error"));
+          break;
+        }
+        r[OPI_APPLY_REG_OUT(ip)] = opi_fn_apply(fn, nargs);
         break;
       }
 
       case OPI_OPC_APPLYTC:
       {
         opi_t fn = r[OPI_APPLY_REG_FN(ip)];
-        opi_assert(fn->type == opi_fn_type);
-        opi_assert(opi_fn_get_arity(fn) == OPI_APPLY_ARG_NARGS(ip));
+        if (opi_unlikely(fn->type != opi_fn_type)) {
+          r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("type_error"));
+          break;
+        }
+        size_t nargs = OPI_APPLY_ARG_NARGS(ip);
+        if (opi_unlikely(!opi_test_arity(opi_fn_get_arity(fn), nargs))) {
+          r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("arity_error"));
+          break;
+        }
         if (opi_is_lambda(fn)) {
           // Tail Call
           struct opi_lambda *lam = opi_fn_get_data(fn);
@@ -63,7 +80,7 @@ opi_vm(struct opi_bytecode *bc)
           continue;
         } else {
           // Fall back to default APPLY
-          r[OPI_APPLY_REG_OUT(ip)] = opi_fn_apply(fn);
+          r[OPI_APPLY_REG_OUT(ip)] = opi_fn_apply(fn, nargs);
         }
         break;
       }

@@ -68,14 +68,14 @@ binds_push(struct binds *binds, const char *var, struct opi_ast *val)
 //
 // Tokens
 //
-%left '=' RARROW '\\'
+%right '=' RARROW '\\' '@'
 
 %token<num> NUMBER
 %token<str> SYMBOL STRING
 %token<opi> CONST
 %left LET REC
 %left DEF
-%left IF THEN ELSE
+%left IF UNLESS THEN ELSE
 %right IN
 %token AND
 %token LOAD
@@ -84,6 +84,9 @@ binds_push(struct binds *binds, const char *var, struct opi_ast *val)
 %token STRUCT
 %token USE AS
 %token TRAIT IMPL
+%nonassoc RETURN
+%token WTF
+
 
 //
 // Patterns
@@ -105,7 +108,8 @@ binds_push(struct binds *binds, const char *var, struct opi_ast *val)
 %type<matches> matches matches_aux matches_key matches_pos
 %type<strvec> fields
 
-%right '$'
+%right OR
+%right '$' LONGFLUSH
 %right SCOR
 %right SCAND
 %nonassoc IS ISNOT EQ EQUAL NUMLT NUMGT NUMLE NUMGE NUMEQ NUMNE
@@ -113,6 +117,8 @@ binds_push(struct binds *binds, const char *var, struct opi_ast *val)
 %right '+' '-'
 %left '*' '/' '%'
 // TODO: **
+%right '.'
+%left AT
 %right NOT
 
 %start entry
@@ -126,6 +132,16 @@ Atom
   | CONST { $$ = opi_ast_const($1); }
   | STRING { $$ = opi_ast_const(opi_string($1)); free($1); }
   | '(' Expr ')' { $$ = $2; }
+  | WTF { $$ = opi_ast_var("wtf"); }
+  | '[' arg_aux ']' {
+    $$ = opi_ast_apply(opi_ast_var("list"), (struct opi_ast**)$2->data, $2->size);
+    opi_ptrvec_destroy($2, NULL);
+    free($2);
+  }
+  | '!' Atom {
+    struct opi_ast *p[] = { $2 };
+    $$ = opi_ast_apply(opi_ast_var("!"), p, 1);
+  }
 ;
 
 refstr
@@ -154,6 +170,14 @@ Expr
     $$ = opi_ast_apply(opi_ast_var("()"), NULL, 0);
   }
   | lambda
+  | '@' Expr {
+    struct opi_ast *fn = opi_ast_fn(NULL, 0, $2);
+    $$ = opi_ast_apply(opi_ast_var("lazy"), &fn, 1);
+  }
+  | LONGFLUSH Expr {
+    struct opi_ast *p[] = { $2 };
+    $$ = opi_ast_apply(opi_ast_var("!"), p, 1);
+  }
   | Expr IS Expr {
     struct opi_ast *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("is"), p, 2);
@@ -231,9 +255,21 @@ Expr
     struct opi_ast *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("/"), p, 2);
   }
+  | Expr '%' Expr {
+    struct opi_ast *p[] = { $1, $3 };
+    $$ = opi_ast_apply(opi_ast_var("%"), p, 2);
+  }
   | Expr ':' Expr {
     struct opi_ast *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var(":"), p, 2);
+  }
+  | Expr '.' Expr {
+    struct opi_ast *p[] = { $1, $3 };
+    $$ = opi_ast_apply(opi_ast_var("."), p, 2);
+  }
+  | Expr AT Expr {
+    struct opi_ast *p[] = { $1, $3 };
+    $$ = opi_ast_apply(opi_ast_var("!!"), p, 2);
   }
   | Expr '$' Expr {
     struct opi_ast *p[] = { $3 };
@@ -242,6 +278,9 @@ Expr
   | '{' block '}' { $$ = $2; }
   | IF Expr THEN Expr if_tail {
     $$ = opi_ast_if($2, $4, $5);
+  }
+  | UNLESS Expr THEN Expr if_tail {
+    $$ = opi_ast_if($2, $5, $4);
   }
   | LET REC fnbinds IN Expr {
     $$ = opi_ast_fix($3->vars.data, (struct opi_ast**)$3->vals.data, $3->vars.size, $5);
@@ -274,20 +313,41 @@ Expr
     free($2);
     free($4);
   }
-  | LET refstr '{' matches '}' '=' Expr THEN Expr ELSE Expr {
-    $$ = opi_ast_match($2, $4.vars->data, $4.fields->data, $4.vars->size, $7, $9, $11),
-    free($2);
-    opi_strvec_destroy($4.vars);
-    opi_strvec_destroy($4.fields);
-    free($4.vars);
-    free($4.fields);
+  | IF LET refstr '{' matches '}' '=' Expr THEN Expr ELSE Expr {
+    $$ = opi_ast_match($3, $5.vars->data, $5.fields->data, $5.vars->size, $8, $10, $12),
+    free($3);
+    opi_strvec_destroy($5.vars);
+    opi_strvec_destroy($5.fields);
+    free($5.vars);
+    free($5.fields);
   }
-  | LET SYMBOL ':' SYMBOL '=' Expr THEN Expr ELSE Expr {
+  | IF LET SYMBOL ':' SYMBOL '=' Expr THEN Expr ELSE Expr {
     char *flds[] = { "car", "cdr" };
-    char *vars[] = { $2, $4 };
-    $$ = opi_ast_match("pair", vars, flds, 2, $6, $8, $10),
-    free($2);
-    free($4);
+    char *vars[] = { $3, $5 };
+    $$ = opi_ast_match("pair", vars, flds, 2, $7, $9, $11),
+    free($3);
+    free($5);
+  }
+  | UNLESS LET refstr '{' matches '}' '=' Expr THEN Expr ELSE Expr {
+    $$ = opi_ast_match($3, $5.vars->data, $5.fields->data, $5.vars->size, $8, $12, $10),
+    free($3);
+    opi_strvec_destroy($5.vars);
+    opi_strvec_destroy($5.fields);
+    free($5.vars);
+    free($5.fields);
+  }
+  | UNLESS LET SYMBOL ':' SYMBOL '=' Expr THEN Expr ELSE Expr {
+    char *flds[] = { "car", "cdr" };
+    char *vars[] = { $3, $5 };
+    $$ = opi_ast_match("pair", vars, flds, 2, $7, $11, $9),
+    free($3);
+    free($5);
+  }
+  | RETURN Expr {
+    $$ = opi_ast_return($2);
+  }
+  | Expr OR Expr {
+    $$ = opi_ast_eor($1, $3);
   }
 ;
 
@@ -346,7 +406,7 @@ lambda
 ;
 
 if_tail
-  : { $$ = opi_ast_apply(opi_ast_var("()"), NULL, 0); }
+  : { $$ = opi_ast_const(opi_nil); }
   | ELSE Expr { $$ = $2; }
 ;
 
@@ -485,6 +545,13 @@ block_expr
     char *p = strrchr($2, ':');
     opi_assert(p);
     $$ = opi_ast_use($2, p + 1);
+    free($2);
+  }
+  | USE refstr DCOL '*' {
+    size_t len = strlen($2) + 2;
+    char buf[len + 1];
+    sprintf(buf, "%s::", $2);
+    $$ = opi_ast_use(buf, "*");
     free($2);
   }
   | TRAIT SYMBOL def_aux {

@@ -1,0 +1,50 @@
+namespace itertools {
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Miscelenious functions:
+#
+let rec range from to =
+  if from >= to then nil
+  else @from : range (from + 1) to;
+
+let rec map f l =
+  unless let x:xs = next l then nil
+  else @f x : map f xs;
+
+let flip2 f (x, y) = f (y, x);
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Traits:
+#
+trait reverse (self) =
+  let rec loop (l, acc) =
+    unless let x:xs = next l then nil
+    else loop (xs, x:acc)
+  in loop (self, nil);
+
+trait foreach (self, f) =
+  let rec loop l =
+    unless let x:xs = next l then nil
+    else { f x; loop xs }
+  in loop self;
+let foreach l f = foreach (l, f);
+
+trait foldl (self, f, z) =
+  let rec fold (l, acc) =
+    unless let x:xs = next l then acc
+    else fold (xs, f (acc, x))
+  in fold (self, z);
+let foldl f z xs = foldl (xs, f, z);
+
+trait foldr (self, f, z) =
+  foldl (flip2 f) z (reverse self);
+let foldr f z l = foldr (l, f, z);
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Consumers:
+#
+
+trait tolist (self) =
+  reverse $ foldl (flip2 (:)) nil self;
+
+}; # namespace itertools

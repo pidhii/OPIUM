@@ -1,0 +1,19 @@
+load "itertools.opi";
+use itertools::*;
+
+let l = 1:2:3:4:5:nil;
+print ("l =", l);
+
+let max =
+  let max2 (x, y) = if x > y then x else y in
+  let aux l =
+    if let x:xs = l then foldl max2 x xs else l
+  in aux . list;
+
+print (max (1,2,3,4,5,6,7,8));
+
+print "----------------------";
+let l = map (\x -> x + 1) $ range 0 3;
+print $ tolist l;
+foreach l print;
+print $ foldl (+) 0 $ tolist l;

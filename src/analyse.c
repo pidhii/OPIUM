@@ -85,6 +85,63 @@ split_if(struct opi_insn *if_insn, struct trace *then, struct trace *els)
 }
 
 static int
+check_end(struct opi_bytecode *bc, struct opi_insn *begin, struct opi_insn *end)
+{
+  for (struct opi_insn *ip = begin; ip != end; ip = ip->next) {
+    if (ip->opc == OPI_OPC_IF) {
+      struct trace then_trace, else_trace;
+      struct opi_insn *cont_start;
+
+      cont_start = split_if(ip, &then_trace, &else_trace);
+
+      int a = check_end(bc, then_trace.start, then_trace.end);
+      int b = check_end(bc, then_trace.start, then_trace.end);
+      int c = check_end(bc, cont_start, end);
+      return c || (a && b);
+    }
+
+    if (ip->opc == OPI_OPC_JMP) {
+      ip = OPI_JMP_ARG_TO(ip);
+      continue;
+    }
+
+    if (opi_insn_is_end(ip))
+      return TRUE;
+  }
+
+  return FALSE;
+}
+
+
+static int
+kill_end(struct opi_bytecode *bc, struct opi_insn *begin, struct opi_insn *end, int vid)
+{
+  for (struct opi_insn *ip = begin; ip != end; ip = ip->next) {
+    if (ip->opc == OPI_OPC_IF) {
+      struct trace then_trace, else_trace;
+      struct opi_insn *cont_start;
+
+      cont_start = split_if(ip, &then_trace, &else_trace);
+
+      int a = check_end(bc, then_trace.start, then_trace.end);
+      int b = check_end(bc, then_trace.start, then_trace.end);
+      int c = check_end(bc, cont_start, end);
+      return c || (a && b);
+    }
+
+    if (ip->opc == OPI_OPC_JMP) {
+      ip = OPI_JMP_ARG_TO(ip);
+      continue;
+    }
+
+    if (opi_insn_is_end(ip))
+      return TRUE;
+  }
+
+  return FALSE;
+}
+
+static int
 kill_value_aux(struct opi_bytecode *bc, struct opi_insn *begin, struct opi_insn *end, int vid)
 {
   struct opi_insn *last_user = NULL;
@@ -100,6 +157,20 @@ kill_value_aux(struct opi_bytecode *bc, struct opi_insn *begin, struct opi_insn 
       cont_start = split_if(ip, &then_trace, &else_trace);
 
       if (kill_value_aux(bc, cont_start, end, vid)) {
+        if (check_end(bc, then_trace.start, then_trace.end)) {
+          if (!kill_value_aux(bc, then_trace.start, then_trace.end, vid)) {
+            // kill value at the beginning of a then-branch
+            bc->point = then_trace.start;
+            opi_bytecode_unref(bc, vid);
+          }
+        }
+        if (check_end(bc, else_trace.start, else_trace.end)) {
+          if (!kill_value_aux(bc, else_trace.start, else_trace.end, vid)) {
+            // kill value at the beginning of a else-branch
+            bc->point = else_trace.start;
+            opi_bytecode_unref(bc, vid);
+          }
+        }
         return TRUE;
 
       } else {
@@ -131,8 +202,8 @@ kill_value_aux(struct opi_bytecode *bc, struct opi_insn *begin, struct opi_insn 
       continue;
     }
 
-    /*if (opi_insn_is_end(ip))*/
-      /*break;*/
+    if (opi_insn_is_end(ip))
+      break;
   }
 
   if (last_user == NULL) {

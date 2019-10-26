@@ -285,7 +285,13 @@ emit(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int tc)
           return phi;
         }
       }
+    }
 
+    case OPI_IR_RETURN:
+    {
+      int ret = emit(ir->ret, bc, stack, TRUE);
+      opi_bytecode_ret(bc, ret);
+      return opi_bytecode_const(bc, opi_nil);
     }
   }
 

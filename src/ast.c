@@ -3,6 +3,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+struct opi_ast*
+opi_parse_string(const char *str)
+{
+  FILE *fs = fmemopen((void*)str, strlen(str), "r");
+  struct opi_ast *ast = opi_parse(fs);
+  fclose(fs);
+  return ast;
+}
+
 void
 opi_ast_delete(struct opi_ast *node)
 {
@@ -95,6 +104,10 @@ opi_ast_delete(struct opi_ast *node)
       free(node->impl.typename);
       free(node->impl.traitname);
       opi_ast_delete(node->impl.fn);
+      break;
+
+    case OPI_AST_RETURN:
+      opi_ast_delete(node->ret);
       break;
   }
 
@@ -295,3 +308,25 @@ opi_ast_or(struct opi_ast *x, struct opi_ast *y)
   return opi_ast_let(&var, &x, 1,
       opi_ast_if(opi_ast_var(" or tmp "), opi_ast_var(" or tmp "), y));
 }
+
+struct opi_ast*
+opi_ast_return(struct opi_ast *val)
+{
+  struct opi_ast *node = malloc(sizeof(struct opi_ast));
+  node->tag = OPI_AST_RETURN;
+  node->ret = val;
+  return node;
+}
+
+struct opi_ast*
+opi_ast_eor(struct opi_ast *try, struct opi_ast *els)
+{
+  char *var = " eor tmp ";
+  char *vars[] = { "wtf" };
+  char *fields[] = { "what" };
+  return
+    opi_ast_let(&var, &try, 1,
+      opi_ast_match("undefined", vars, fields, 1, opi_ast_var(" eor tmp "),
+        els, opi_ast_var(" eor tmp ")));
+}
+

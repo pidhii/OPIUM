@@ -16,6 +16,8 @@ file (GLOB OPIUM_OBJ_LIB_SRC ${CMAKE_SOURCE_DIR}/src/*.c)
 set (OPIUM_INCLUDE ${CMAKE_SOURCE_DIR}/include)
 
 include_directories (${CMAKE_SOURCE_DIR}/include)
+include_directories (${CMAKE_SOURCE_DIR}/include/opium/generic_vector)
+include_directories (${CMAKE_SOURCE_DIR}/include/opium/uniform_allocator)
 
 
 ################################################################################
@@ -83,5 +85,5 @@ add_executable (opium
   ${CMAKE_SOURCE_DIR}/main.c
   $<TARGET_OBJECTS:opium_object_lib>)
 target_include_directories (opium PUBLIC ${LIBJIT_ROOT}/install/include)
-target_link_libraries (opium libjit)
+target_link_libraries (opium libjit -lm)
 

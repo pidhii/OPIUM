@@ -402,7 +402,7 @@ opi_insn_alcfn(int out)
 }
 
 struct opi_insn*
-opi_insn_finfn(int cell, size_t arity, struct opi_bytecode *bc, int *cap, size_t ncap)
+opi_insn_finfn(int cell, int arity, struct opi_bytecode *bc, int *cap, size_t ncap)
 {
   struct opi_insn *insn = malloc(sizeof(struct opi_insn));
   insn->opc = OPI_OPC_FINFN;
@@ -434,6 +434,7 @@ opi_insn_if(int test)
   insn->opc = OPI_OPC_IF;
   OPI_IF_REG_TEST(insn) = test;
   insn->ptr[1] = NULL;
+  insn->reg[2] = 0;
   return insn;
 }
 
@@ -795,7 +796,7 @@ opi_bytecode_param(struct opi_bytecode *bc, size_t offs)
 
 void
 opi_bytecode_finfn(struct opi_bytecode *bc,
-    int cell, size_t arity, struct opi_bytecode *body, int *cap, size_t ncap)
+    int cell, int arity, struct opi_bytecode *body, int *cap, size_t ncap)
 { opi_bytecode_write(bc, opi_insn_finfn(cell, arity, body, cap, ncap)); }
 
 void

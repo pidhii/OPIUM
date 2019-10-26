@@ -25,8 +25,11 @@
     fprintf(OPI_ERROR, fmt, ##__VA_ARGS__);                \
   } while (0)
 
+__attribute__((noreturn)) void
+opi_die(const char *fmt, ...);
+
 #define opi_likely(expr) __builtin_expect(!!(expr), 1)
-#define opi_unlikely(expr) __builtin_expect((expr), 0)
+#define opi_unlikely(expr) __builtin_expect(!!(expr), 0)
 
 #define opi_assert(expr)                                          \
   do {                                                            \
@@ -61,9 +64,42 @@ extern
 opi_t *opi_sp;
 extern
 opi_t opi_current_fn;
-
+extern
+size_t opi_nargs;
 
 struct opi_bytecode;
+
+
+void
+opi_allocators_init(void);
+
+void
+opi_allocators_cleanup(void);
+
+void*
+opi_alloc_number(void);
+
+void*
+opi_alloc_pair(void);
+
+void*
+opi_alloc_string(void);
+
+void*
+opi_alloc_lazy(void);
+
+void
+opi_free_number(void* ptr);
+
+void
+opi_free_pair(void* ptr);
+
+void
+opi_free_string(void* ptr);
+
+void
+opi_free_lazy(void *ptr);
+
 
 /* ==========================================================================
  * Type
@@ -106,6 +142,9 @@ opi_type_set_equal(opi_type_t ty, int (*fn)(opi_type_t,opi_t,opi_t));
 void
 opi_type_set_hash(opi_type_t ty, size_t (*fn)(opi_type_t,opi_t));
 
+int
+opi_type_is_hashable(opi_type_t ty);
+
 void
 opi_type_set_fields(opi_type_t ty, size_t offs, char **fields, size_t n);
 
@@ -132,7 +171,7 @@ opi_trait(opi_t deflt);
 void
 opi_trait_delete(struct opi_trait *t);
 
-size_t
+int
 opi_trait_get_arity(struct opi_trait *t);
 
 opi_t
@@ -146,6 +185,9 @@ opi_trait_impl(struct opi_trait *t, opi_type_t type, opi_t fn);
 
 opi_t
 opi_trait_find(struct opi_trait *t, opi_type_t type);
+
+opi_t
+opi_trait_into_generic(struct opi_trait *trait, const char *name);
 
 /* ==========================================================================
  * Cell
@@ -207,6 +249,8 @@ opi_unref(opi_t x)
     opi_delete(x);
 }
 
+size_t
+opi_hashof(opi_t x);
 
 /* ==========================================================================
  * Stack
@@ -228,7 +272,7 @@ opi_get(size_t offs)
 { return *(opi_sp - offs); }
 
 /* ==========================================================================
- * number
+ * Number
  */
 struct opi_number {
   struct opi_header header;
@@ -247,7 +291,7 @@ opi_number_cleanup(void);
 static inline opi_t
 opi_number(long double x)
 {
-  struct opi_number *num = malloc(sizeof(struct opi_number));
+  struct opi_number *num = opi_alloc_number();
   opi_init_cell(num, opi_number_type);
   num->val = x;
   return (opi_t)num;
@@ -258,7 +302,7 @@ opi_number_get_value(opi_t cell)
 { return opi_as(cell, struct opi_number).val; }
 
 /* ==========================================================================
- * symbol
+ * Symbol
  */
 extern
 opi_type_t opi_symbol_type;
@@ -276,8 +320,13 @@ const char*
 opi_symbol_get_string(opi_t x);
 
 /* ==========================================================================
- * undefined
+ * Undefined
  */
+struct opi_undefined {
+  struct opi_header header;
+  opi_t what;
+};
+
 extern
 opi_type_t opi_undefined_type;
 
@@ -287,13 +336,8 @@ opi_undefined_init(void);
 void
 opi_undefined_cleanup(void);
 
-static inline opi_t
-opi_undefined()
-{
-  opi_t cell = malloc(sizeof(struct opi_header));
-  opi_init_cell(cell, opi_undefined_type);
-  return cell;
-}
+opi_t
+opi_undefined(opi_t what);
 
 /* ==========================================================================
  * Nil
@@ -313,6 +357,12 @@ opi_t opi_nil;
 /* ==========================================================================
  * String
  */
+struct opi_string {
+  struct opi_header header;
+  char *str;
+  size_t size;
+};
+
 extern
 opi_type_t opi_string_type;
 
@@ -324,6 +374,9 @@ opi_string_cleanup(void);
 
 opi_t
 opi_string(const char *str);
+
+opi_t
+opi_string_from_char(char c);
 
 const char*
 opi_string_get_value(opi_t x);
@@ -352,6 +405,7 @@ opi_t opi_true, opi_false;
 struct opi_pair {
   struct opi_header header;
   opi_t car, cdr;
+  size_t len;
 };
 
 extern
@@ -363,8 +417,16 @@ opi_pair_init(void);
 void
 opi_pair_cleanup(void);
 
-opi_t
-opi_cons(opi_t car, opi_t cdr);
+static inline opi_t
+opi_cons(opi_t car, opi_t cdr)
+{
+  struct opi_pair *p = opi_alloc_pair();
+  opi_inc_rc(p->car = car);
+  opi_inc_rc(p->cdr = cdr);
+  p->len = cdr->type == opi_pair_type ? opi_as(cdr, struct opi_pair).len + 1 : 1;
+  opi_init_cell(p, opi_pair_type);
+  return (opi_t)p;
+}
 
 static inline opi_t
 opi_car(opi_t x)
@@ -373,6 +435,14 @@ opi_car(opi_t x)
 static inline opi_t
 opi_cdr(opi_t x)
 { return opi_as(x, struct opi_pair).cdr; }
+
+static inline size_t
+opi_length(opi_t x)
+{
+  if (x->type == opi_pair_type)
+    return opi_as(x, struct opi_pair).len;
+  return 0;
+}
 
 /* ==========================================================================
  * Table
@@ -386,6 +456,43 @@ opi_table_init(void);
 void
 opi_table_cleanup(void);
 
+opi_t
+opi_table(void);
+
+opi_t
+opi_table_at(opi_t tab, opi_t key, opi_t *err);
+
+int
+opi_table_insert(opi_t tab, opi_t key, opi_t val, int replace, opi_t *err);
+
+/* ==========================================================================
+ * Port
+ */
+extern
+opi_type_t opi_iport_type, opi_oport_type; 
+
+extern
+opi_t opi_stdin, opi_stdout, opi_stderr;
+
+void
+opi_port_init(void);
+
+void
+opi_port_cleanup(void);
+
+opi_t
+opi_oport(FILE *fs, int (*close)(FILE*));
+
+opi_t
+opi_iport(FILE *fs, int (*close)(FILE*));
+
+FILE*
+opi_port_get_filestream(opi_t x);
+
+static inline int
+opi_is_port(opi_t x)
+{ return (x->type == opi_iport_type) | (x->type == opi_oport_type); }
+
 /* ==========================================================================
  * Fn
  */
@@ -398,7 +505,7 @@ struct opi_fn {
   opi_fn_handle_t handle;
   void *data;
   void (*delete)(struct opi_fn *self);
-  size_t arity;
+  int arity;
 };
 
 void
@@ -417,15 +524,15 @@ opi_t
 opi_fn_alloc();
 
 void
-opi_fn_finalize(opi_t fn, const char *name, opi_fn_handle_t f, size_t arity);
+opi_fn_finalize(opi_t fn, const char *name, opi_fn_handle_t f, int arity);
 
 opi_t
-opi_fn(const char *name, opi_fn_handle_t f, size_t arity);
+opi_fn(const char *name, opi_fn_handle_t f, int arity);
 
 void
 opi_fn_set_data(opi_t cell, void *data, void (*delete)(struct opi_fn *self));
 
-size_t
+int
 opi_fn_get_arity(opi_t cell);
 
 void*
@@ -438,8 +545,46 @@ const char*
 opi_fn_get_name(opi_t f);
 
 opi_t
-opi_fn_apply(opi_t cell);
+opi_fn_apply(opi_t cell, size_t nargs);
 
+static inline int
+opi_test_arity(int arity, int nargs)
+{ return ((arity < 0) & (nargs >= -(1 + arity))) | (arity == nargs); }
+
+/* ==========================================================================
+ * Lazy
+ */
+extern
+opi_type_t opi_lazy_type;
+
+struct opi_lazy {
+  struct opi_header header;
+  opi_t cell;
+  uint_fast8_t is_ready;
+};
+
+void
+opi_lazy_init(void);
+
+void
+opi_lazy_cleanup(void);
+
+opi_t
+opi_lazy(opi_t x);
+
+static inline opi_t
+opi_lazy_get_value(opi_t x)
+{
+  struct opi_lazy *lazy = opi_as_ptr(x);
+  if (!lazy->is_ready) {
+    opi_t val = opi_fn_apply(lazy->cell, 0);
+    opi_inc_rc(val);
+    opi_unref(lazy->cell);
+    lazy->cell = val;
+    lazy->is_ready = TRUE;
+  }
+  return lazy->cell;
+}
 
 /* ==========================================================================
  * AST
@@ -459,6 +604,7 @@ enum opi_ast_tag {
   OPI_AST_USE,
   OPI_AST_TRAIT,
   OPI_AST_IMPL,
+  OPI_AST_RETURN,
 };
 
 struct opi_ast {
@@ -477,11 +623,15 @@ struct opi_ast {
     struct { char *old, *new; } use;
     struct { char *name; struct opi_ast *deflt; } trait;
     struct { char *traitname, *typename; struct opi_ast *fn; } impl;
+    struct opi_ast *ret;
   };
 };
 
 struct opi_ast*
 opi_parse(FILE *in);
+
+struct opi_ast*
+opi_parse_string(const char *str);
 
 void
 opi_ast_delete(struct opi_ast *node);
@@ -542,6 +692,12 @@ opi_ast_and(struct opi_ast *x, struct opi_ast *y);
 struct opi_ast*
 opi_ast_or(struct opi_ast *x, struct opi_ast *y);
 
+struct opi_ast*
+opi_ast_eor(struct opi_ast *try, struct opi_ast *els);
+
+struct opi_ast*
+opi_ast_return(struct opi_ast *val);
+
 /* ==========================================================================
  * IR
  */
@@ -596,6 +752,9 @@ void
 opi_builder_destroy(struct opi_builder *bldr);
 
 void
+opi_builtins(struct opi_builder *bldr);
+
+void
 opi_builder_push_decl(struct opi_builder *bldr, const char *var);
 
 void
@@ -606,6 +765,9 @@ opi_builder_capture(struct opi_builder *bldr, const char *var);
 
 const char*
 opi_builder_assoc(struct opi_builder *bldr, const char *var);
+
+const char*
+opi_builder_try_assoc(struct opi_builder *bldr, const char *var);
 
 struct opi_build_scope { size_t nvars1, ntypes1, ntraits1, vasize1; };
 
@@ -636,6 +798,9 @@ opi_builder_find_trait(struct opi_builder *bldr, const char *traitname);
 void
 opi_builder_def_const(struct opi_builder *bldr, const char *name, opi_t val);
 
+void
+opi_builder_def_type(struct opi_builder *bldr, const char *name, opi_type_t type);
+
 struct opi_ir*
 opi_builder_build(struct opi_builder *bldr, struct opi_ast *ast);
 
@@ -649,6 +814,7 @@ enum opi_ir_tag {
   OPI_IR_FIX,
   OPI_IR_BLOCK,
   OPI_IR_MATCH,
+  OPI_IR_RETURN,
 };
 
 struct opi_ir {
@@ -662,6 +828,7 @@ struct opi_ir {
     struct { struct opi_ir *test, *then, *els; } iff;
     struct { struct opi_ir **exprs; size_t n; int drop; } block;
     struct { opi_type_t type; size_t *offs, n; struct opi_ir *expr, *then, *els; } match;
+    struct opi_ir *ret;
   };
 };
 
@@ -702,6 +869,9 @@ opi_ir_block_set_drop(struct opi_ir *block, int drop)
 struct opi_ir*
 opi_ir_match(opi_type_t type, size_t *offs, size_t n, struct opi_ir *expr,
     struct opi_ir *then, struct opi_ir *els);
+
+struct opi_ir*
+opi_ir_return(struct opi_ir *val);
 
 /* ==========================================================================
  * Bytecode
@@ -872,6 +1042,30 @@ opi_insn_test(int out, int in);
 struct opi_insn*
 opi_insn_if(int test);
 
+static inline int
+opi_insn_if_is_analysed(struct opi_insn *iff)
+{ return iff->reg[2] & 0x1; }
+
+static inline void
+opi_insn_if_set_analysed(struct opi_insn *iff)
+{ iff->reg[2] |= 0x1; }
+
+static inline int
+opi_insn_if_is_then_end(struct opi_insn *iff)
+{ return iff->reg[2] & 0x2; }
+
+static inline void
+opi_insn_if_set_then_end(struct opi_insn *iff, int is_end)
+{  iff->reg[2] |= 0x2; }
+
+static inline int
+opi_insn_if_is_else_end(struct opi_insn *iff)
+{ return iff->reg[2] & 0x4; }
+
+static inline void
+opi_insn_if_set_else_end(struct opi_insn *iff, int is_end)
+{  iff->reg[2] |= 0x4; }
+
 struct opi_insn*
 opi_insn_jmp(struct opi_insn *to);
 
@@ -901,7 +1095,7 @@ struct opi_insn*
 opi_insn_alcfn(int out);
 
 struct opi_insn*
-opi_insn_finfn(int cell, size_t arity, struct opi_bytecode *bc, int *cap, size_t ncap);
+opi_insn_finfn(int cell, int arity, struct opi_bytecode *bc, int *cap, size_t ncap);
 
 struct opi_insn*
 opi_insn_begscp(size_t n);
@@ -1020,7 +1214,7 @@ opi_bytecode_alcfn(struct opi_bytecode *bc, enum opi_val_type valtype);
 
 void
 opi_bytecode_finfn(struct opi_bytecode *bc,
-    int cell, size_t arity, struct opi_bytecode *body, int *cap, size_t ncap);
+    int cell, int arity, struct opi_bytecode *body, int *cap, size_t ncap);
 
 int
 opi_bytecode_test(struct opi_bytecode *bc, int in);
