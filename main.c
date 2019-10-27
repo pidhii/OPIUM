@@ -27,10 +27,12 @@ main(int argc, char **argv)
   struct opi_strvec srcdirs;
   opi_strvec_init(&srcdirs);
   int show_bytecode = FALSE;
+  int use_base = TRUE;
 
   struct option opts[] = {
     { "help", FALSE, NULL, 'h' },
     { "show-bytecode", FALSE, NULL, 0x01 },
+    { "no-base", FALSE, NULL, 0x02 },
     { 0, 0, 0, 0 }
   };
   int opt;
@@ -47,6 +49,10 @@ main(int argc, char **argv)
         show_bytecode = TRUE;
         break;
 
+      case 0x02:
+        use_base = FALSE;
+        break;
+
       default:
         help_and_exit(argv[0], EXIT_FAILURE);
     }
@@ -59,7 +65,6 @@ main(int argc, char **argv)
       opi_error("%s\n", strerror(errno));
       exit(EXIT_FAILURE);
     }
-
     strcpy(path, argv[optind]);
   }
 
@@ -70,9 +75,10 @@ main(int argc, char **argv)
   opi_debug("initialize environment\n");
   opi_init();
 
-  opi_debug("initialize builder\n");
+  struct opi_context ctx;
+  opi_context_init(&ctx);
   struct opi_builder builder;
-  opi_builder_init(&builder);
+  opi_builder_init(&builder, &ctx);
 
   opi_debug("add source directories:\n");
   opi_strvec_push(&srcdirs, dir);
@@ -95,30 +101,13 @@ main(int argc, char **argv)
     fclose(in);
 
   opi_debug("translate AST\n");
-  struct opi_ir *ir = opi_builder_build(&builder, ast);
-  if (builder.frame_offset > 0) {
-    for (int i = 0; i < builder.frame_offset; ++i)
-      opi_error("undefined variable: '%s'\n", builder.decls.data[i]);
-    exit(EXIT_FAILURE);
-  }
-  opi_ast_delete(ast);
-
-  opi_debug("emit bytecode\n");
   struct opi_bytecode bc;
   opi_bytecode_init(&bc);
-  opi_ir_emit(ir, &bc);
-  opi_ir_delete(ir);
+  opi_build(&builder, ast, &bc);
+  opi_ast_delete(ast);
 
   if (show_bytecode) {
-    opi_debug("bytecode before optimization:\n");
-    opi_insn_dump(bc.head, stdout);
-  }
-
-  opi_debug("optimize bytecode\n");
-  opi_bytecode_finalize(&bc);
-
-  if (show_bytecode) {
-    opi_debug("bytecode after optimization:\n");
+    opi_debug("bytecode:\n");
     opi_insn_dump(bc.head, stdout);
   }
 
@@ -135,5 +124,6 @@ main(int argc, char **argv)
   opi_bytecode_destroy(&bc);
 
   opi_builder_destroy(&builder);
+  opi_context_destroy(&ctx);
   opi_cleanup();
 }

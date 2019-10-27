@@ -1,5 +1,4 @@
-load "itertools.opi";
-use itertools::*;
+load "base";
 
 let l = 1:2:3:4:5:nil;
 print ("l =", l);
@@ -16,4 +15,12 @@ print "----------------------";
 let l = map (\x -> x + 1) $ range 0 3;
 print $ tolist l;
 foreach l print;
-print $ foldl (+) 0 $ tolist l;
+print $ foldl (+) 0 l;
+
+
+let test (a, b) (c, d) =
+  print ('a, a, 'b, b, 'c, c, 'd, d);
+
+newline ();
+test (1, 2) (3, 4);
+flip test (3, 4) (1, 2);

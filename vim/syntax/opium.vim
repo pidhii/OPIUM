@@ -24,7 +24,8 @@ syn keyword opiType undefined number symbol string boolean pair table fn lazy
 syn region opiList matchgroup=opiType start=/\[/ matchgroup=opiType end=/\]/ skipwhite skipnl contains=TOP
 
 syn keyword Function write display newline print printf fprintf format
-syn keyword Function null? car cdr list
+syn keyword Function any? null? boolean? lazy? pair? table? string? undefined? number?
+syn keyword Function car cdr list
 syn keyword Function apply length
 syn keyword Function next
 syn keyword Function id

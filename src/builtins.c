@@ -610,9 +610,9 @@ apply(void)
   }
 
   opi_sp += nargs;
-  size_t iarg = nargs;
+  size_t iarg = 1;
   for (opi_t it = l; it->type == opi_pair_type; it = opi_cdr(it))
-    opi_sp[-iarg--] = opi_car(it);
+    opi_sp[-iarg++] = opi_car(it);
   opi_t ret = opi_fn_apply(f, nargs);
 
   opi_inc_rc(ret);
@@ -658,9 +658,44 @@ default_next(void)
   return opi_undefined(opi_symbol("unimplemented_trait"));
 }
 
+static opi_t
+any(void)
+{
+  opi_drop(opi_pop());
+  return opi_true;
+}
+
+#define TYPE_PRED(name, ty)                          \
+  static opi_t                                       \
+  name(void)                                         \
+  {                                                  \
+    opi_t x = opi_pop();                             \
+    opi_t ret = x->type == ty? opi_true : opi_false; \
+    opi_drop(x);                                     \
+    return ret;                                      \
+  }
+
+TYPE_PRED(boolean_p, opi_boolean_type)
+TYPE_PRED(lazy_p, opi_lazy_type)
+TYPE_PRED(pair_p, opi_pair_type)
+TYPE_PRED(table_p, opi_table_type)
+TYPE_PRED(string_p, opi_string_type)
+TYPE_PRED(undefined_p, opi_undefined_type)
+TYPE_PRED(number_p, opi_number_type)
+
 void
 opi_builtins(struct opi_builder *bldr)
 {
+  opi_builder_def_const(bldr, "null?", opi_fn("null?", null_, 1));
+  opi_builder_def_const(bldr, "any?", opi_fn("any?", any, 1));
+  opi_builder_def_const(bldr, "boolean?", opi_fn("boolean?", boolean_p, 1));
+  opi_builder_def_const(bldr, "lazy?", opi_fn("lazy?", lazy_p, 1));
+  opi_builder_def_const(bldr, "pair?", opi_fn("pair?", pair_p, 1));
+  opi_builder_def_const(bldr, "table?", opi_fn("table?", table_p, 1));
+  opi_builder_def_const(bldr, "string?", opi_fn("string?", string_p, 1));
+  opi_builder_def_const(bldr, "undefined?", opi_fn("undefined?", undefined_p, 1));
+  opi_builder_def_const(bldr, "number?", opi_fn("number?", number_p, 1));
+
   opi_builder_def_const(bldr, "+", opi_fn("+", add, 2));
   opi_builder_def_const(bldr, "-", opi_fn("-", sub, 2));
   opi_builder_def_const(bldr, "*", opi_fn("*", mul, 2));
@@ -678,7 +713,6 @@ opi_builtins(struct opi_builder *bldr)
   opi_builder_def_const(bldr, "cdr", opi_fn("cdr", cdr_, 1));
   opi_builder_def_const(bldr, "list", opi_fn("list", list, -1));
   opi_builder_def_const(bldr, "table", opi_fn("table", table, 1));
-  opi_builder_def_const(bldr, "null?", opi_fn("null?", null_, 1));
   opi_builder_def_const(bldr, "is", opi_fn("is", is_, 2));
   opi_builder_def_const(bldr, "eq", opi_fn("eq", eq_, 2));
   opi_builder_def_const(bldr, "equal", opi_fn("equal", equal_, 2));

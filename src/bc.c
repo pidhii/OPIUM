@@ -29,6 +29,17 @@ opi_bytecode_destroy(struct opi_bytecode *bc)
   free(bc->vinfo);
 }
 
+struct opi_insn*
+opi_bytecode_drain(struct opi_bytecode *bc)
+{
+  struct opi_insn *start = bc->head->next,
+                  *end = bc->tail->prev;
+  start->prev = NULL;
+  end->next = NULL;
+  opi_insn_chain(bc->head, bc->tail, NULL);
+  return start;
+}
+
 int
 opi_bytecode_new_val(struct opi_bytecode *bc, enum opi_val_type vtype)
 {

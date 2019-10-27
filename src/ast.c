@@ -225,11 +225,37 @@ opi_ast_block(struct opi_ast **exprs, size_t n)
 }
 
 void
+opi_ast_block_set_drop(struct opi_ast *block, int drop)
+{
+  opi_assert(block->tag == OPI_AST_BLOCK);
+  block->block.drop = drop;
+}
+
+void
 opi_ast_block_set_namespace(struct opi_ast *block, const char *namespace)
 {
+  opi_assert(block->tag == OPI_AST_BLOCK);
   if (block->block.namespace)
     free(block->block.namespace);
   block->block.namespace = strdup(namespace);
+}
+
+void
+opi_ast_block_prepend(struct opi_ast *block, struct opi_ast *node)
+{
+  opi_assert(block->tag == OPI_AST_BLOCK);
+  block->block.exprs = realloc(block->block.exprs, sizeof(struct opi_ast*) * block->block.n + 1);
+  memmove(block->block.exprs + 1, block->block.exprs, sizeof(struct opi_ast*) * block->block.n);
+  block->block.exprs[0] = node;
+  block->block.n += 1;
+}
+
+void
+opi_ast_block_append(struct opi_ast *block, struct opi_ast *node)
+{
+  opi_assert(block->tag == OPI_AST_BLOCK);
+  block->block.exprs = realloc(block->block.exprs, sizeof(struct opi_ast*) * block->block.n + 1);
+  block->block.exprs[block->block.n++] = node;
 }
 
 struct opi_ast*

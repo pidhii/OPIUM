@@ -9,8 +9,6 @@
 #include <assert.h>
 #include <stdio.h>
 
-#include "jit/jit.h"
-
 #define OPI_DEBUG stderr
 #define opi_debug(fmt, ...)                         \
   do {                                              \
@@ -663,12 +661,17 @@ opi_ast_fix(char **vars, struct opi_ast **lams, size_t n, struct opi_ast *body);
 struct opi_ast*
 opi_ast_block(struct opi_ast **exprs, size_t n);
 
-static void
-opi_ast_block_set_drop(struct opi_ast *block, int drop)
-{ block->block.drop = drop; }
+void
+opi_ast_block_set_drop(struct opi_ast *block, int drop);
 
 void
 opi_ast_block_set_namespace(struct opi_ast *block, const char *namespace);
+
+void
+opi_ast_block_prepend(struct opi_ast *block, struct opi_ast *node);
+
+void
+opi_ast_block_append(struct opi_ast *block, struct opi_ast *node);
 
 struct opi_ast*
 opi_ast_load(const char *path);
@@ -699,6 +702,37 @@ struct opi_ast*
 opi_ast_return(struct opi_ast *val);
 
 /* ==========================================================================
+ * Context
+ */
+struct opi_context {
+  struct opi_ptrvec types;
+  struct opi_ptrvec bc;
+  struct opi_strvec dl_paths;
+  struct opi_ptrvec dls;
+};
+
+void
+opi_context_init(struct opi_context *ctx);
+
+void
+opi_context_destroy(struct opi_context *ctx);
+
+void
+opi_context_add_type(struct opi_context *ctx, opi_type_t type);
+
+void
+opi_context_drain_bytecode(struct opi_context *ctx, struct opi_bytecode *bc);
+
+void
+opi_context_add_dl(struct opi_context *ctx, const char *path, void *dl);
+
+void*
+opi_context_find_dl(struct opi_context *ctx, const char *path);
+
+int
+opi_is_dl(const char *path);
+
+/* ==========================================================================
  * IR
  */
 struct opi_alist {
@@ -723,6 +757,8 @@ opi_alist_pop(struct opi_alist *a, size_t n);
 struct opi_builder {
   int is_derived;
 
+  struct opi_context *ctx;
+
   int frame_offset;
   struct opi_strvec decls;
   struct opi_alist *alist;
@@ -736,14 +772,13 @@ struct opi_builder {
 
   struct opi_strvec *type_names;
   struct opi_ptrvec *types;
-  struct opi_ptrvec *all_types;
 
   struct opi_strvec *trait_names;
   struct opi_ptrvec *traits;
 };
 
 void
-opi_builder_init(struct opi_builder *bldr);
+opi_builder_init(struct opi_builder *bldr, struct opi_context *ctx);
 
 void
 opi_builder_init_derived(struct opi_builder *bldr, struct opi_builder *parent);
@@ -753,6 +788,9 @@ opi_builder_destroy(struct opi_builder *bldr);
 
 void
 opi_builtins(struct opi_builder *bldr);
+
+void
+opi_builder_load_dl(struct opi_builder *bldr, void *dl);
 
 void
 opi_builder_push_decl(struct opi_builder *bldr, const char *var);
@@ -802,7 +840,10 @@ void
 opi_builder_def_type(struct opi_builder *bldr, const char *name, opi_type_t type);
 
 struct opi_ir*
-opi_builder_build(struct opi_builder *bldr, struct opi_ast *ast);
+opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast);
+
+void
+opi_build(struct opi_builder *bldr, struct opi_ast *ast, struct opi_bytecode* bc);
 
 enum opi_ir_tag {
   OPI_IR_CONST,
@@ -1143,6 +1184,9 @@ opi_bytecode_init(struct opi_bytecode *bc);
 
 void
 opi_bytecode_destroy(struct opi_bytecode *bc);
+
+struct opi_insn*
+opi_bytecode_drain(struct opi_bytecode *bc);
 
 void
 opi_bytecode_fix_lifetimes(struct opi_bytecode *bc);

@@ -8,7 +8,7 @@ find_package (BISON REQUIRED)
 find_package (FLEX REQUIRED)
 
 
-set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -Wextra -Wno-unused -Wno-strict-aliasing")
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -Wextra -Wno-unused -Wno-strict-aliasing -rdynamic")
 set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Og -ggdb")
 set (CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3")
 
@@ -85,5 +85,18 @@ add_executable (opium
   ${CMAKE_SOURCE_DIR}/main.c
   $<TARGET_OBJECTS:opium_object_lib>)
 target_include_directories (opium PUBLIC ${LIBJIT_ROOT}/install/include)
-target_link_libraries (opium libjit -lm)
+target_link_libraries (opium libjit -lm -ldl)
 
+set (LIBS_ROOT ${CMAKE_SOURCE_DIR}/libs)
+
+add_library (opium_base_dl SHARED ${LIBS_ROOT}/base/base.c)
+set_target_properties (opium_base_dl
+  PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME base)
+
+install (TARGETS opium DESTINATION bin)
+
+install (TARGETS opium_base_dl DESTINATION lib/opium/baselib)
+install (FILES ${LIBS_ROOT}/base/base.opi DESTINATION lib/opium/baselib)
+install (FILES ${LIBS_ROOT}/base/base DESTINATION lib/opium)

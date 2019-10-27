@@ -1,4 +1,4 @@
-namespace itertools {
+load "base.so";
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Miscelenious functions:
@@ -11,14 +11,20 @@ let rec map f l =
   unless let x:xs = next l then nil
   else @f x : map f xs;
 
-let flip2 f (x, y) = f (y, x);
+let swap f (x, y) = f (y, x);
+
+let flip f =
+  let aux1 xs =
+    let aux2 ys = apply (apply (f, ys), xs)
+    in aux2 . list
+  in aux1 . list;
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Traits:
 #
 trait reverse (self) =
   let rec loop (l, acc) =
-    unless let x:xs = next l then nil
+    unless let x:xs = next l then acc
     else loop (xs, x:acc)
   in loop (self, nil);
 
@@ -36,15 +42,13 @@ trait foldl (self, f, z) =
   in fold (self, z);
 let foldl f z xs = foldl (xs, f, z);
 
-trait foldr (self, f, z) =
-  foldl (flip2 f) z (reverse self);
+trait foldr (self, f, z) = foldl (swap f) z (reverse self);
 let foldr f z l = foldr (l, f, z);
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Consumers:
 #
-
 trait tolist (self) =
-  reverse $ foldl (flip2 (:)) nil self;
+  if null? self || pair? self then self
+  else foldr (:) nil self;
 
-}; # namespace itertools
