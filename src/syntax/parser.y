@@ -102,7 +102,6 @@ binds_push(struct binds *binds, const char *var, struct opi_ast *val)
 %type<ptrvec> block_aux
 %type<ast> fn_aux fn_body
 %type<ast> def_aux def_body
-%type<ast> if_tail
 %type<ast> lambda
 %type<str> refstr
 %type<matches> matches matches_aux matches_key matches_pos
@@ -276,11 +275,11 @@ Expr
     $$ = opi_ast_apply($1, p, 1);
   }
   | '{' block '}' { $$ = $2; }
-  | IF Expr THEN Expr if_tail {
-    $$ = opi_ast_if($2, $4, $5);
+  | IF Expr THEN Expr ELSE Expr {
+    $$ = opi_ast_if($2, $4, $6);
   }
-  | UNLESS Expr THEN Expr if_tail {
-    $$ = opi_ast_if($2, $5, $4);
+  | UNLESS Expr THEN Expr ELSE Expr {
+    $$ = opi_ast_if($2, $6, $4);
   }
   | LET REC fnbinds IN Expr {
     $$ = opi_ast_fix($3->vars.data, (struct opi_ast**)$3->vals.data, $3->vars.size, $5);
@@ -400,14 +399,12 @@ matches_pos
 ;
 
 lambda
-  : '\\' fn_aux {
-    $$ = $2;
+  : '\\' fn_aux { $$ = $2; }
+  | param RARROW Expr {
+    $$ = opi_ast_fn($1->data, $1->size, $3);
+    opi_strvec_destroy($1);
+    free($1);
   }
-;
-
-if_tail
-  : { $$ = opi_ast_const(opi_nil); }
-  | ELSE Expr { $$ = $2; }
 ;
 
 param
@@ -495,6 +492,12 @@ block_aux
 
 block_expr
   : Expr
+  | IF Expr THEN Expr {
+    $$ = opi_ast_if($2, $4, opi_ast_const(opi_nil));
+  }
+  | UNLESS Expr THEN Expr {
+    $$ = opi_ast_if($2, opi_ast_const(opi_nil), $4);
+  }
   | LET REC fnbinds {
     $$ = opi_ast_fix($3->vars.data, (struct opi_ast**)$3->vals.data, $3->vars.size, NULL);
     binds_delete($3);

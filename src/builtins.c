@@ -682,6 +682,7 @@ TYPE_PRED(table_p, opi_table_type)
 TYPE_PRED(string_p, opi_string_type)
 TYPE_PRED(undefined_p, opi_undefined_type)
 TYPE_PRED(number_p, opi_number_type)
+TYPE_PRED(blob_p, opi_blob_type)
 
 void
 opi_builtins(struct opi_builder *bldr)
@@ -695,6 +696,7 @@ opi_builtins(struct opi_builder *bldr)
   opi_builder_def_const(bldr, "string?", opi_fn("string?", string_p, 1));
   opi_builder_def_const(bldr, "undefined?", opi_fn("undefined?", undefined_p, 1));
   opi_builder_def_const(bldr, "number?", opi_fn("number?", number_p, 1));
+  opi_builder_def_const(bldr, "blob?", opi_fn("blob?", blob_p, 1));
 
   opi_builder_def_const(bldr, "+", opi_fn("+", add, 2));
   opi_builder_def_const(bldr, "-", opi_fn("-", sub, 2));
@@ -758,7 +760,7 @@ opi_builtins(struct opi_builder *bldr)
   opi_builder_def_const(bldr, "!!", at_generic);
 
   struct opi_trait *next_trait = opi_trait(opi_fn("next", default_next, 1));
-  opi_trait_impl(next_trait, opi_nil_type, opi_fn("nil_next", id, 1));
+  opi_trait_impl(next_trait, opi_null_type, opi_fn("nil_next", id, 1));
   opi_trait_impl(next_trait, opi_pair_type, opi_fn("pair_next", id, 1));
   opi_trait_impl(next_trait, opi_lazy_type, opi_fn("lazy_next", flush_lazy, 1));
   opi_t next_generic = opi_trait_into_generic(next_trait, "next");

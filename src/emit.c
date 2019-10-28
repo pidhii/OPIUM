@@ -244,12 +244,12 @@ emit(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int tc)
           // declare values
           for (size_t i = 0; i < ir->match.n; ++i)
             stack_push(stack, vals[i]);
-          int then_ret = emit(ir->match.then, bc, stack, FALSE);
+          int then_ret = emit(ir->match.then, bc, stack, TRUE);
           stack_pop(stack, ir->match.n);
           opi_bytecode_ret(bc, then_ret);
           // ELSE
           opi_bytecode_if_else(bc, &iff);
-          int else_ret = emit(ir->match.els, bc, stack, FALSE);
+          int else_ret = emit(ir->match.els, bc, stack, TRUE);
           opi_bytecode_ret(bc, else_ret);
           // END IF
           opi_bytecode_if_end(bc, &iff);
@@ -272,12 +272,12 @@ emit(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int tc)
           // declare values
           for (size_t i = 0; i < ir->match.n; ++i)
             stack_push(stack, vals[i]);
-          int then_ret = emit(ir->match.then, bc, stack, TRUE);
+          int then_ret = emit(ir->match.then, bc, stack, FALSE);
           stack_pop(stack, ir->match.n);
           opi_bytecode_dup(bc, phi, then_ret);
           // ELSE
           opi_bytecode_if_else(bc, &iff);
-          int else_ret = emit(ir->match.els, bc, stack, TRUE);
+          int else_ret = emit(ir->match.els, bc, stack, FALSE);
           opi_bytecode_dup(bc, phi, else_ret);
           // END IF
           opi_bytecode_if_end(bc, &iff);

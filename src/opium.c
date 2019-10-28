@@ -41,6 +41,7 @@ opi_init(void)
   opi_table_init();
   opi_port_init();
   opi_lazy_init();
+  opi_blob_init();
 }
 
 void
@@ -58,6 +59,7 @@ opi_cleanup(void)
   opi_fn_cleanup();
   opi_type_cleanup();
   opi_lazy_cleanup();
+  opi_blob_cleanup();
   opi_allocators_cleanup();
 }
 
@@ -516,7 +518,7 @@ opi_undefined(opi_t what)
 }
 
 /******************************************************************************/
-opi_type_t opi_nil_type;
+opi_type_t opi_null_type;
 
 struct opi_header g_nil;
 opi_t opi_nil;
@@ -528,11 +530,11 @@ nil_write(opi_type_t ty, opi_t x, FILE *out)
 void
 opi_nil_init(void)
 {
-  opi_nil_type = opi_type("nil");
-  opi_type_set_write(opi_nil_type, nil_write);
+  opi_null_type = opi_type("null");
+  opi_type_set_write(opi_null_type, nil_write);
 
   opi_nil = &g_nil;
-  opi_init_cell(opi_nil, opi_nil_type);
+  opi_init_cell(opi_nil, opi_null_type);
   opi_inc_rc(opi_nil);
 }
 
@@ -540,7 +542,7 @@ void
 opi_nil_cleanup(void)
 {
   opi_unref(opi_nil);
-  opi_type_delete(opi_nil_type);
+  opi_type_delete(opi_null_type);
 }
 
 /******************************************************************************/
@@ -595,15 +597,32 @@ void
 opi_string_cleanup(void)
 { opi_type_delete(opi_string_type); }
 
-opi_t
-opi_string(const char *str)
+extern inline opi_t
+opi_string_move2(char *str, size_t len)
 {
   struct opi_string *s = opi_alloc_string();
   opi_init_cell(s, opi_string_type);
-  s->str = strdup(str);
-  s->size = strlen(str);
+  s->str = str;
+  s->size = len;
   return (opi_t)s;
 }
+
+extern inline opi_t
+opi_string_move(char *str)
+{ return opi_string_move2(str, strlen(str)); }
+
+opi_t
+opi_string2(const char *str, size_t len)
+{
+  char *mystr = malloc(len + 1);
+  memcpy(mystr, str, len);
+  mystr[len] = 0;
+  return opi_string_move2(mystr, len);
+}
+
+opi_t
+opi_string(const char *str)
+{ return opi_string_move(strdup(str)); }
 
 opi_t
 opi_string_from_char(char c)
@@ -1018,3 +1037,60 @@ opi_lazy(opi_t x)
   opi_init_cell(lazy, opi_lazy_type);
   return (opi_t)lazy;
 }
+
+/******************************************************************************/
+struct blob {
+  struct opi_header header;
+  void *data;
+  size_t size;
+};
+
+opi_type_t opi_blob_type;
+
+static void
+blob_delete(opi_type_t type, opi_t x)
+{
+  struct blob *blob = opi_as_ptr(x);
+  if (blob->data)
+    free(blob->data);
+  free(blob);
+}
+
+void
+opi_blob_init(void)
+{
+  opi_blob_type = opi_type("blob");
+  opi_type_set_delete_cell(opi_blob_type, blob_delete);
+}
+
+void
+opi_blob_cleanup(void)
+{ opi_type_delete(opi_blob_type); }
+
+opi_t
+opi_blob(void *data, size_t size)
+{
+  struct blob *blob = malloc(sizeof(struct blob));
+  blob->data = data;
+  blob->size = size;
+  opi_init_cell(blob, opi_blob_type);
+  return (opi_t)blob;
+}
+
+const void*
+opi_blob_get_data(opi_t x)
+{ return opi_as(x, struct blob).data; }
+
+size_t
+opi_blob_get_size(opi_t x)
+{ return opi_as(x, struct blob).size; }
+
+void*
+opi_blob_drain(opi_t x)
+{
+  struct blob *blob = opi_as_ptr(x);
+  void *data = blob->data;
+  blob->data = NULL;
+  return data;
+}
+

@@ -1,16 +1,8 @@
 load "base.so";
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Miscelenious functions:
+# Miscelenious
 #
-let rec range from to =
-  if from >= to then nil
-  else @from : range (from + 1) to;
-
-let rec map f l =
-  unless let x:xs = next l then nil
-  else @f x : map f xs;
-
 let swap f (x, y) = f (y, x);
 
 let flip f =
@@ -20,7 +12,7 @@ let flip f =
   in aux1 . list;
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Traits:
+# Iteration
 #
 trait reverse (self) =
   let rec loop (l, acc) =
@@ -45,10 +37,28 @@ let foldl f z xs = foldl (xs, f, z);
 trait foldr (self, f, z) = foldl (swap f) z (reverse self);
 let foldr f z l = foldr (l, f, z);
 
+impl lazy length (self) =
+  let rec loop (it, acc) =
+    unless let x:xs = !it then acc
+    else loop (xs, acc + 1)
+  in loop (self, 0);
+
+let rec range from to =
+  if from >= to then nil
+  else @from : range (from + 1) to;
+
+let rec map f l =
+  unless let x:xs = next l then nil
+  else @f x : map f xs;
+
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Consumers:
+# Consumers
 #
-trait tolist (self) =
-  if null? self || pair? self then self
-  else foldr (:) nil self;
+trait tostring (self) = format ("%d", self);
+impl string tostring (self) = self;
+impl blob tostring (self) = __blob_to_string self;
+
+trait tolist (self) = foldr (:) nil self;
+impl null tolist (self) = nil;
+impl pair tolist (self) = self;
 

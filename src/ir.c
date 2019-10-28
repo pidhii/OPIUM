@@ -73,7 +73,7 @@ opi_builder_init(struct opi_builder *bldr, struct opi_context *ctx)
   opi_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "symbol", opi_symbol_type);
   opi_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "nil", opi_nil_type);
+  opi_builder_def_type(bldr, "null", opi_null_type);
   opi_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "string", opi_string_type);
   opi_ptrvec_pop(&bldr->ctx->types, NULL);
@@ -90,6 +90,8 @@ opi_builder_init(struct opi_builder *bldr, struct opi_context *ctx)
   opi_builder_def_type(bldr, "oport", opi_oport_type);
   opi_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "lazy", opi_lazy_type);
+  opi_ptrvec_pop(&bldr->ctx->types, NULL);
+  opi_builder_def_type(bldr, "blob", opi_blob_type);
   opi_ptrvec_pop(&bldr->ctx->types, NULL);
 }
 
@@ -242,7 +244,10 @@ void
 opi_builder_load_dl(struct opi_builder *bldr, void *dl)
 {
   build_t build = dlsym(dl, "opium_library");
-  opi_assert(build);
+  if (!build) {
+    opi_error(dlerror());
+    exit(EXIT_FAILURE);
+  }
   opi_assert(build(bldr) == 0);
 }
 

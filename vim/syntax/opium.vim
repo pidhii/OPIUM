@@ -20,16 +20,22 @@ syn keyword opiImpl impl
 syn match   opiStructName /\w\+/ contained
 syn match   opiTraitName /\w\+/ contained
 
-syn keyword opiType undefined number symbol string boolean pair table fn lazy
+syn keyword opiType null undefined number symbol string boolean pair table fn lazy blob
 syn region opiList matchgroup=opiType start=/\[/ matchgroup=opiType end=/\]/ skipwhite skipnl contains=TOP
 
 syn keyword Function write display newline print printf fprintf format
-syn keyword Function any? null? boolean? lazy? pair? table? string? undefined? number?
+syn keyword Function any? null? boolean? lazy? pair? table? string? undefined? number? blob?
 syn keyword Function car cdr list
 syn keyword Function apply length
 syn keyword Function next
 syn keyword Function id
 syn keyword Function die error
+
+" Base
+syn keyword Function swap flip
+syn keyword Function reverse foreach foldl foldr
+syn keyword Function range map
+syn keyword Function tostring tolist
 
 syn keyword Statement let rec and or in return
 syn keyword opiWtf wtf

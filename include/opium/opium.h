@@ -341,7 +341,7 @@ opi_undefined(opi_t what);
  * Nil
  */
 extern
-opi_type_t opi_nil_type;
+opi_type_t opi_null_type;
 
 void
 opi_nil_init(void);
@@ -372,6 +372,15 @@ opi_string_cleanup(void);
 
 opi_t
 opi_string(const char *str);
+
+opi_t
+opi_string2(const char *str, size_t len);
+
+opi_t
+opi_string_move(char *str);
+
+opi_t
+opi_string_move2(char *str, size_t len);
 
 opi_t
 opi_string_from_char(char c);
@@ -583,6 +592,30 @@ opi_lazy_get_value(opi_t x)
   }
   return lazy->cell;
 }
+
+/* ==========================================================================
+ * Blob
+ */
+extern
+opi_type_t opi_blob_type;
+
+void
+opi_blob_init(void);
+
+void
+opi_blob_cleanup(void);
+
+opi_t
+opi_blob(void *data, size_t size);
+
+const void*
+opi_blob_get_data(opi_t x);
+
+size_t
+opi_blob_get_size(opi_t x);
+
+void*
+opi_blob_drain(opi_t x);
 
 /* ==========================================================================
  * AST
