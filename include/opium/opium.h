@@ -1,7 +1,7 @@
 #ifndef OPIUM_H
 #define OPIUM_H
 
-#include "opium/utility.h"
+#include "codeine/vec.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -773,10 +773,10 @@ opi_ast_return(struct opi_ast *val);
  * Context
  */
 struct opi_context {
-  struct opi_ptrvec types;
-  struct opi_ptrvec bc;
-  struct opi_strvec dl_paths;
-  struct opi_ptrvec dls;
+  struct cod_ptrvec types;
+  struct cod_ptrvec bc;
+  struct cod_strvec dl_paths;
+  struct cod_ptrvec dls;
 };
 
 void
@@ -804,7 +804,7 @@ opi_is_dl(const char *path);
  * IR
  */
 struct opi_alist {
-  struct opi_strvec keys, vals;
+  struct cod_strvec keys, vals;
 };
 
 void
@@ -828,21 +828,21 @@ struct opi_builder {
   struct opi_context *ctx;
 
   int frame_offset;
-  struct opi_strvec decls;
+  struct cod_strvec decls;
   struct opi_alist *alist;
 
-  struct opi_strvec *srcdirs;
-  struct opi_strvec *loaded;
-  struct opi_strvec *load_state;
+  struct cod_strvec *srcdirs;
+  struct cod_strvec *loaded;
+  struct cod_strvec *load_state;
 
-  struct opi_strvec *const_names;
-  struct opi_ptrvec *const_vals;
+  struct cod_strvec *const_names;
+  struct cod_ptrvec *const_vals;
 
-  struct opi_strvec *type_names;
-  struct opi_ptrvec *types;
+  struct cod_strvec *type_names;
+  struct cod_ptrvec *types;
 
-  struct opi_strvec *trait_names;
-  struct opi_ptrvec *traits;
+  struct cod_strvec *trait_names;
+  struct cod_ptrvec *traits;
 };
 
 void

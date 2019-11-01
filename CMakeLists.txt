@@ -12,12 +12,13 @@ set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -Wextra -Wno-unused -Wno-stri
 set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Og -ggdb")
 set (CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3")
 
-file (GLOB OPIUM_OBJ_LIB_SRC ${CMAKE_SOURCE_DIR}/src/*.c)
+file (GLOB OPIUM_OBJ_LIB_SRC ${CMAKE_SOURCE_DIR}/src/*.c ${CMAKE_SOURCE_DIR}/codeine/src/*.c)
 set (OPIUM_INCLUDE ${CMAKE_SOURCE_DIR}/include)
 
 include_directories (${CMAKE_SOURCE_DIR}/include)
-include_directories (${CMAKE_SOURCE_DIR}/include/opium/generic_vector)
-include_directories (${CMAKE_SOURCE_DIR}/include/opium/uniform_allocator)
+#include_directories (${CMAKE_SOURCE_DIR}/include/opium/generic_vector)
+#include_directories (${CMAKE_SOURCE_DIR}/include/opium/uniform_allocator)
+include_directories (${CMAKE_SOURCE_DIR}/codeine/include)
 
 
 ################################################################################

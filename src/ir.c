@@ -10,15 +10,15 @@
 void
 opi_alist_init(struct opi_alist *a)
 {
-  opi_strvec_init(&a->keys);
-  opi_strvec_init(&a->vals);
+  cod_strvec_init(&a->keys);
+  cod_strvec_init(&a->vals);
 }
 
 void
 opi_alist_destroy(struct opi_alist *a)
 {
-  opi_strvec_destroy(&a->keys);
-  opi_strvec_destroy(&a->vals);
+  cod_strvec_destroy(&a->keys);
+  cod_strvec_destroy(&a->vals);
 }
 
 size_t
@@ -28,8 +28,8 @@ opi_alist_get_size(struct opi_alist *a)
 void
 opi_alist_push(struct opi_alist *a, const char *var, const char *map)
 {
-  opi_strvec_push(&a->keys, var);
-  opi_strvec_push(&a->vals, map ? map : var);
+  cod_strvec_push(&a->keys, var);
+  cod_strvec_push(&a->vals, map ? map : var);
 }
 
 void
@@ -37,8 +37,8 @@ opi_alist_pop(struct opi_alist *a, size_t n)
 {
   opi_assert(n <= opi_alist_get_size(a));
   while (n--) {
-    opi_strvec_pop(&a->keys);
-    opi_strvec_pop(&a->vals);
+    cod_strvec_pop(&a->keys);
+    cod_strvec_pop(&a->vals);
   }
 }
 
@@ -48,53 +48,53 @@ opi_builder_init(struct opi_builder *bldr, struct opi_context *ctx)
   bldr->is_derived = FALSE;
   bldr->ctx = ctx;
 
-  opi_strvec_init(&bldr->decls);
+  cod_strvec_init(&bldr->decls);
   bldr->frame_offset = 0;
 
   opi_alist_init(bldr->alist = malloc(sizeof(struct opi_alist)));
 
-  opi_strvec_init(bldr->const_names = malloc(sizeof(struct opi_strvec)));
-  opi_ptrvec_init(bldr->const_vals = malloc(sizeof(struct opi_ptrvec)));
+  cod_strvec_init(bldr->const_names = malloc(sizeof(struct cod_strvec)));
+  cod_ptrvec_init(bldr->const_vals = malloc(sizeof(struct cod_ptrvec)));
 
-  opi_strvec_init(bldr->srcdirs = malloc(sizeof(struct opi_strvec)));
+  cod_strvec_init(bldr->srcdirs = malloc(sizeof(struct cod_strvec)));
 
-  opi_strvec_init(bldr->loaded = malloc(sizeof(struct opi_strvec)));
-  opi_strvec_init(bldr->load_state = malloc(sizeof(struct opi_strvec)));
+  cod_strvec_init(bldr->loaded = malloc(sizeof(struct cod_strvec)));
+  cod_strvec_init(bldr->load_state = malloc(sizeof(struct cod_strvec)));
 
-  opi_strvec_init(bldr->type_names = malloc(sizeof(struct opi_strvec)));
-  opi_ptrvec_init(bldr->types = malloc(sizeof(struct opi_ptrvec)));
+  cod_strvec_init(bldr->type_names = malloc(sizeof(struct cod_strvec)));
+  cod_ptrvec_init(bldr->types = malloc(sizeof(struct cod_ptrvec)));
 
-  opi_strvec_init(bldr->trait_names = malloc(sizeof(struct opi_strvec)));
-  opi_ptrvec_init(bldr->traits = malloc(sizeof(struct opi_ptrvec)));
+  cod_strvec_init(bldr->trait_names = malloc(sizeof(struct cod_strvec)));
+  cod_ptrvec_init(bldr->traits = malloc(sizeof(struct cod_ptrvec)));
 
   opi_builder_def_type(bldr, "undefined", opi_undefined_type);
-  opi_ptrvec_pop(&bldr->ctx->types, NULL);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "number", opi_number_type);
-  opi_ptrvec_pop(&bldr->ctx->types, NULL);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "symbol", opi_symbol_type);
-  opi_ptrvec_pop(&bldr->ctx->types, NULL);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "null", opi_null_type);
-  opi_ptrvec_pop(&bldr->ctx->types, NULL);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "string", opi_string_type);
-  opi_ptrvec_pop(&bldr->ctx->types, NULL);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "boolean", opi_boolean_type);
-  opi_ptrvec_pop(&bldr->ctx->types, NULL);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "pair", opi_pair_type);
-  opi_ptrvec_pop(&bldr->ctx->types, NULL);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "table", opi_table_type);
-  opi_ptrvec_pop(&bldr->ctx->types, NULL);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "fn", opi_fn_type);
-  opi_ptrvec_pop(&bldr->ctx->types, NULL);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "iport", opi_iport_type);
-  opi_ptrvec_pop(&bldr->ctx->types, NULL);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "oport", opi_oport_type);
-  opi_ptrvec_pop(&bldr->ctx->types, NULL);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "lazy", opi_lazy_type);
-  opi_ptrvec_pop(&bldr->ctx->types, NULL);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "blob", opi_blob_type);
-  opi_ptrvec_pop(&bldr->ctx->types, NULL);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "array", opi_array_type);
-  opi_ptrvec_pop(&bldr->ctx->types, NULL);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
 }
 
 void
@@ -103,7 +103,7 @@ opi_builder_init_derived(struct opi_builder *bldr, struct opi_builder *parent)
   bldr->is_derived = TRUE;
   bldr->ctx = parent->ctx;
 
-  opi_strvec_init(&bldr->decls);
+  cod_strvec_init(&bldr->decls);
   bldr->frame_offset = 0;
 
   bldr->alist = parent->alist;
@@ -126,7 +126,7 @@ opi_builder_init_derived(struct opi_builder *bldr, struct opi_builder *parent)
 void
 opi_builder_destroy(struct opi_builder *bldr)
 {
-  opi_strvec_destroy(&bldr->decls);
+  cod_strvec_destroy(&bldr->decls);
   if (bldr->is_derived) {
     /*opi_alist_pop(bldr->alist, bldr->frame_offset);*/
     return;
@@ -135,26 +135,26 @@ opi_builder_destroy(struct opi_builder *bldr)
   opi_alist_destroy(bldr->alist);
   free(bldr->alist);
 
-  opi_strvec_destroy(bldr->const_names);
+  cod_strvec_destroy(bldr->const_names);
   free(bldr->const_names);
-  opi_ptrvec_destroy(bldr->const_vals, (void*)opi_unref);
+  cod_ptrvec_destroy(bldr->const_vals, (void*)opi_unref);
   free(bldr->const_vals);
 
-  opi_strvec_destroy(bldr->srcdirs);
+  cod_strvec_destroy(bldr->srcdirs);
   free(bldr->srcdirs);
-  opi_strvec_destroy(bldr->loaded);
+  cod_strvec_destroy(bldr->loaded);
   free(bldr->loaded);
-  opi_strvec_destroy(bldr->load_state);
+  cod_strvec_destroy(bldr->load_state);
   free(bldr->load_state);
 
-  opi_strvec_destroy(bldr->type_names);
+  cod_strvec_destroy(bldr->type_names);
   free(bldr->type_names);
-  opi_ptrvec_destroy(bldr->types, NULL);
+  cod_ptrvec_destroy(bldr->types, NULL);
   free(bldr->types);
 
-  opi_strvec_destroy(bldr->trait_names);
+  cod_strvec_destroy(bldr->trait_names);
   free(bldr->trait_names);
-  opi_ptrvec_destroy(bldr->traits, NULL);
+  cod_ptrvec_destroy(bldr->traits, NULL);
   free(bldr->traits);
 }
 
@@ -163,7 +163,7 @@ opi_builder_add_source_directory(struct opi_builder *bldr, const char *path)
 {
   char fullpath[PATH_MAX];
   opi_assert(realpath(path, fullpath));
-  opi_strvec_push(bldr->srcdirs, fullpath);
+  cod_strvec_push(bldr->srcdirs, fullpath);
 }
 
 char*
@@ -188,8 +188,8 @@ opi_builder_add_type(struct opi_builder *bldr, const char *name, opi_type_t type
     opi_error("type named '%s' already present\n", name);
     exit(EXIT_FAILURE);
   }
-  opi_strvec_push(bldr->type_names, name);
-  opi_ptrvec_push(bldr->types, type, NULL);
+  cod_strvec_push(bldr->type_names, name);
+  cod_ptrvec_push(bldr->types, type, NULL);
   opi_context_add_type(bldr->ctx, type);
 }
 
@@ -200,29 +200,29 @@ opi_builder_add_trait(struct opi_builder *bldr, const char *name, struct opi_tra
     opi_error("trait named '%s' already present\n", name);
     exit(EXIT_FAILURE);
   }
-  opi_strvec_push(bldr->trait_names, name);
-  opi_ptrvec_push(bldr->traits, t, NULL);
+  cod_strvec_push(bldr->trait_names, name);
+  cod_ptrvec_push(bldr->traits, t, NULL);
 }
 
 opi_type_t
 opi_builder_find_type(struct opi_builder *bldr, const char *typename)
 {
-  long long int idx = opi_strvec_find(bldr->type_names, typename);
+  long long int idx = cod_strvec_find(bldr->type_names, typename);
   return idx < 0 ? NULL : bldr->types->data[idx];
 }
 
 struct opi_trait*
 opi_builder_find_trait(struct opi_builder *bldr, const char *traitname)
 {
-  long long int idx = opi_strvec_find(bldr->trait_names, traitname);
+  long long int idx = cod_strvec_find(bldr->trait_names, traitname);
   return idx < 0 ? NULL : bldr->traits->data[idx];
 }
 
 void
 opi_builder_def_const(struct opi_builder *bldr, const char *name, opi_t val)
 {
-  opi_strvec_push(bldr->const_names, name);
-  opi_ptrvec_push(bldr->const_vals, val, NULL);
+  cod_strvec_push(bldr->const_names, name);
+  cod_ptrvec_push(bldr->const_vals, val, NULL);
   opi_alist_push(bldr->alist, name, NULL);
   opi_inc_rc(val);
 }
@@ -237,7 +237,7 @@ opi_builder_def_type(struct opi_builder *bldr, const char *name, opi_type_t type
 opi_t
 opi_builder_find_const(struct opi_builder *bldr, const char *name)
 {
-  long long int idx = opi_strvec_rfind(bldr->const_names, name);
+  long long int idx = cod_strvec_rfind(bldr->const_names, name);
   return idx < 0 ? NULL : bldr->const_vals->data[idx];
 }
 
@@ -256,7 +256,7 @@ opi_builder_load_dl(struct opi_builder *bldr, void *dl)
 void
 opi_builder_push_decl(struct opi_builder *bldr, const char *var)
 {
-  opi_strvec_push(&bldr->decls, var);
+  cod_strvec_push(&bldr->decls, var);
   opi_alist_push(bldr->alist, var, NULL);
 }
 
@@ -267,14 +267,14 @@ opi_builder_pop_decl(struct opi_builder *bldr)
   const char *decl = bldr->decls.data[bldr->decls.size - 1];
   /*opi_debug("var = %s, decl = %s\n", var, decl);*/
   opi_assert(strcmp(var, decl) == 0);
-  opi_strvec_pop(&bldr->decls);
+  cod_strvec_pop(&bldr->decls);
   opi_alist_pop(bldr->alist, 1);
 }
 
 void
 opi_builder_capture(struct opi_builder *bldr, const char *var)
 {
-  opi_strvec_insert(&bldr->decls, var, 0);
+  cod_strvec_insert(&bldr->decls, var, 0);
   /*opi_alist_push(bldr->alist, var, NULL);*/
   bldr->frame_offset += 1;
 }
@@ -282,7 +282,7 @@ opi_builder_capture(struct opi_builder *bldr, const char *var)
 const char*
 opi_builder_assoc(struct opi_builder *bldr, const char *var)
 {
-  int idx = opi_strvec_rfind(&bldr->alist->keys, var);
+  int idx = cod_strvec_rfind(&bldr->alist->keys, var);
   if (idx < 0) {
     opi_error("no such variable, '%s'\n", var);
     exit(EXIT_FAILURE);
@@ -293,7 +293,7 @@ opi_builder_assoc(struct opi_builder *bldr, const char *var)
 const char*
 opi_builder_try_assoc(struct opi_builder *bldr, const char *var)
 {
-  int idx = opi_strvec_rfind(&bldr->alist->keys, var);
+  int idx = cod_strvec_rfind(&bldr->alist->keys, var);
   if (idx < 0)
     return NULL;
   return bldr->alist->vals.data[idx];
@@ -329,18 +329,18 @@ opi_builder_drop_scope(struct opi_builder *bldr, struct opi_build_scope *scp)
 
   // pop declarations
   while (nvars--)
-    opi_strvec_pop(&bldr->decls);
+    cod_strvec_pop(&bldr->decls);
   // pop alist
   opi_alist_pop(bldr->alist, vasize);
   // pop types
   while (ntypes--) {
-    opi_strvec_pop(bldr->type_names);
-    opi_ptrvec_pop(bldr->types, NULL);
+    cod_strvec_pop(bldr->type_names);
+    cod_ptrvec_pop(bldr->types, NULL);
   }
   // pop traits
   while (ntraits--) {
-    opi_strvec_pop(bldr->trait_names);
-    opi_ptrvec_pop(bldr->traits, NULL);
+    cod_strvec_pop(bldr->trait_names);
+    cod_ptrvec_pop(bldr->traits, NULL);
   }
 }
 
@@ -509,7 +509,7 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
       if (name0)
         free(name0);
 
-      int var_idx = opi_strvec_rfind(&bldr->decls, varname);
+      int var_idx = cod_strvec_rfind(&bldr->decls, varname);
       if (var_idx >= 0) {
         // # Found in local variables:
         offs = bldr->decls.size - var_idx;
@@ -717,8 +717,8 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
         } else {
           // mark file before building contents
           size_t id = bldr->loaded->size;
-          opi_strvec_push(bldr->loaded, path);
-          opi_strvec_push(bldr->load_state, "loading");
+          cod_strvec_push(bldr->loaded, path);
+          cod_strvec_push(bldr->load_state, "loading");
 
           // load file
           FILE *in = fopen(path, "r");

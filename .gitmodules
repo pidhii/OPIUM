@@ -7,3 +7,6 @@
 [submodule "include/opium/generic_vector"]
 	path = include/opium/generic_vector
 	url = https://gist.github.com/91a86b1c58816d0fa010083967666ed6.git
+[submodule "codeine"]
+	path = codeine
+	url = git@github.com:pidhii/codeine.git

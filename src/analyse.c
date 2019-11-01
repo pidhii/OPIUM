@@ -50,7 +50,7 @@ opi_bytecode_find_creating(struct opi_bytecode *bc, int vid)
 }
 
 int
-opi_bytecode_find_last_users(struct opi_bytecode *bc, int vid, struct opi_ptrvec *vec)
+opi_bytecode_find_last_users(struct opi_bytecode *bc, int vid, struct cod_ptrvec *vec)
 {
   struct opi_insn *buf = NULL;;
   int test(struct opi_insn *insn, void *data) {
@@ -59,7 +59,7 @@ opi_bytecode_find_last_users(struct opi_bytecode *bc, int vid, struct opi_ptrvec
         buf = insn;
     } else {
       if (buf)
-        opi_ptrvec_push(vec, buf, NULL);
+        cod_ptrvec_push(vec, buf, NULL);
     }
     return TRUE;
   }

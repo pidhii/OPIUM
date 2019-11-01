@@ -24,8 +24,8 @@ help_and_exit(char *argv0, int err)
 int
 main(int argc, char **argv)
 {
-  struct opi_strvec srcdirs;
-  opi_strvec_init(&srcdirs);
+  struct cod_strvec srcdirs;
+  cod_strvec_init(&srcdirs);
   int show_bytecode = FALSE;
   int use_base = TRUE;
 
@@ -42,7 +42,7 @@ main(int argc, char **argv)
         help_and_exit(argv[0], EXIT_SUCCESS);
 
       case 'I':
-        opi_strvec_push(&srcdirs, optarg);
+        cod_strvec_push(&srcdirs, optarg);
         break;
 
       case 0x01:
@@ -81,12 +81,12 @@ main(int argc, char **argv)
   opi_builder_init(&builder, &ctx);
 
   opi_debug("add source directories:\n");
-  opi_strvec_push(&srcdirs, dir);
+  cod_strvec_push(&srcdirs, dir);
   for (size_t i = 0; i < srcdirs.size; ++i) {
     opi_builder_add_source_directory(&builder, srcdirs.data[i]);
     opi_debug("  %2.zu. %s\n", i + 1, builder.srcdirs->data[builder.srcdirs->size - 1]);
   }
-  opi_strvec_destroy(&srcdirs);
+  cod_strvec_destroy(&srcdirs);
 
   // change working direcotry to the source location
   opi_debug("chdir \"%s\"\n", dir);

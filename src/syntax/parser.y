@@ -22,32 +22,32 @@ static
 struct opi_ast *g_result;
 
 struct binds {
-  struct opi_strvec vars;
-  struct opi_ptrvec vals;
+  struct cod_strvec vars;
+  struct cod_ptrvec vals;
 };
 
 static inline struct binds*
 binds_new(void)
 {
   struct binds *binds = malloc(sizeof(struct binds));
-  opi_strvec_init(&binds->vars);
-  opi_ptrvec_init(&binds->vals);
+  cod_strvec_init(&binds->vars);
+  cod_ptrvec_init(&binds->vals);
   return binds;
 }
 
 static inline void
 binds_delete(struct binds *binds)
 {
-  opi_strvec_destroy(&binds->vars);
-  opi_ptrvec_destroy(&binds->vals, NULL);
+  cod_strvec_destroy(&binds->vars);
+  cod_ptrvec_destroy(&binds->vals, NULL);
   free(binds);
 }
 
 static inline void
 binds_push(struct binds *binds, const char *var, struct opi_ast *val)
 {
-  opi_strvec_push(&binds->vars, var);
-  opi_ptrvec_push(&binds->vals, val, NULL);
+  cod_strvec_push(&binds->vars, var);
+  cod_ptrvec_push(&binds->vals, val, NULL);
 }
 %}
 
@@ -57,12 +57,12 @@ binds_push(struct binds *binds, const char *var, struct opi_ast *val)
   long double num;
   char *str;
   struct binds *binds;
-  struct opi_strvec *strvec;
-  struct opi_ptrvec *ptrvec;
+  struct cod_strvec *strvec;
+  struct cod_ptrvec *ptrvec;
 
   struct {
-    struct opi_strvec *fields;
-    struct opi_strvec *vars;
+    struct cod_strvec *fields;
+    struct cod_strvec *vars;
   } matches;
 }
 
@@ -135,7 +135,7 @@ Atom
   | WTF { $$ = opi_ast_var("wtf"); }
   | '[' arg_aux ']' {
     $$ = opi_ast_apply(opi_ast_var("list"), (struct opi_ast**)$2->data, $2->size);
-    opi_ptrvec_destroy($2, NULL);
+    cod_ptrvec_destroy($2, NULL);
     free($2);
   }
   | '!' Atom {
@@ -159,7 +159,7 @@ Form
   : Atom
   | Form arg {
     $$ = opi_ast_apply($1, (struct opi_ast**)$2->data, $2->size);
-    opi_ptrvec_destroy($2, NULL);
+    cod_ptrvec_destroy($2, NULL);
     free($2);
   }
 ;
@@ -297,8 +297,8 @@ Expr
     };
     $$ = opi_ast_block(body, 2);
     free($2);
-    opi_strvec_destroy($4.vars);
-    opi_strvec_destroy($4.fields);
+    cod_strvec_destroy($4.vars);
+    cod_strvec_destroy($4.fields);
     free($4.vars);
     free($4.fields);
   }
@@ -316,8 +316,8 @@ Expr
   | IF LET refstr '{' matches '}' '=' Expr THEN Expr ELSE Expr {
     $$ = opi_ast_match($3, $5.vars->data, $5.fields->data, $5.vars->size, $8, $10, $12),
     free($3);
-    opi_strvec_destroy($5.vars);
-    opi_strvec_destroy($5.fields);
+    cod_strvec_destroy($5.vars);
+    cod_strvec_destroy($5.fields);
     free($5.vars);
     free($5.fields);
   }
@@ -331,8 +331,8 @@ Expr
   | UNLESS LET refstr '{' matches '}' '=' Expr THEN Expr ELSE Expr {
     $$ = opi_ast_match($3, $5.vars->data, $5.fields->data, $5.vars->size, $8, $12, $10),
     free($3);
-    opi_strvec_destroy($5.vars);
-    opi_strvec_destroy($5.fields);
+    cod_strvec_destroy($5.vars);
+    cod_strvec_destroy($5.fields);
     free($5.vars);
     free($5.fields);
   }
@@ -353,8 +353,8 @@ Expr
 
 matches
   : {
-    opi_strvec_init($$.fields = malloc(sizeof(struct opi_strvec)));
-    opi_strvec_init($$.vars = malloc(sizeof(struct opi_strvec)));
+    cod_strvec_init($$.fields = malloc(sizeof(struct cod_strvec)));
+    cod_strvec_init($$.vars = malloc(sizeof(struct cod_strvec)));
   }
   | matches_aux
 ;
@@ -363,17 +363,17 @@ matches_aux: matches_pos | matches_key;
 
 matches_key
   : SYMBOL ':' SYMBOL {
-    opi_strvec_init($$.fields = malloc(sizeof(struct opi_strvec)));
-    opi_strvec_init($$.vars = malloc(sizeof(struct opi_strvec)));
-    opi_strvec_push($$.fields, $1);
-    opi_strvec_push($$.vars, $3);
+    cod_strvec_init($$.fields = malloc(sizeof(struct cod_strvec)));
+    cod_strvec_init($$.vars = malloc(sizeof(struct cod_strvec)));
+    cod_strvec_push($$.fields, $1);
+    cod_strvec_push($$.vars, $3);
     free($1);
     free($3);
   }
   | matches_aux ',' SYMBOL ':' SYMBOL {
     $$ = $1;
-    opi_strvec_push($$.fields, $3);
-    opi_strvec_push($$.vars, $5);
+    cod_strvec_push($$.fields, $3);
+    cod_strvec_push($$.vars, $5);
     free($3);
     free($5);
   }
@@ -381,20 +381,20 @@ matches_key
 
 matches_pos
   : SYMBOL {
-    opi_strvec_init($$.fields = malloc(sizeof(struct opi_strvec)));
-    opi_strvec_init($$.vars = malloc(sizeof(struct opi_strvec)));
+    cod_strvec_init($$.fields = malloc(sizeof(struct cod_strvec)));
+    cod_strvec_init($$.vars = malloc(sizeof(struct cod_strvec)));
     char buf[42];
     sprintf(buf, "#%zu", $$.fields->size);
-    opi_strvec_push($$.fields, buf);
-    opi_strvec_push($$.vars, $1);
+    cod_strvec_push($$.fields, buf);
+    cod_strvec_push($$.vars, $1);
     free($1);
   }
   | matches_pos ',' SYMBOL {
     $$ = $1;
     char buf[42];
     sprintf(buf, "#%zu", $$.fields->size);
-    opi_strvec_push($$.fields, buf);
-    opi_strvec_push($$.vars, $3);
+    cod_strvec_push($$.fields, buf);
+    cod_strvec_push($$.vars, $3);
     free($3);
   }
 ;
@@ -403,20 +403,20 @@ lambda
   : '\\' fn_aux { $$ = $2; }
   | param RARROW Expr {
     $$ = opi_ast_fn($1->data, $1->size, $3);
-    opi_strvec_destroy($1);
+    cod_strvec_destroy($1);
     free($1);
   }
 ;
 
 param
   : '(' ')' {
-    $$ = malloc(sizeof(struct opi_strvec));
-    opi_strvec_init($$);
+    $$ = malloc(sizeof(struct cod_strvec));
+    cod_strvec_init($$);
   }
   | SYMBOL {
-    $$ = malloc(sizeof(struct opi_strvec));
-    opi_strvec_init($$);
-    opi_strvec_push($$, $1);
+    $$ = malloc(sizeof(struct cod_strvec));
+    cod_strvec_init($$);
+    cod_strvec_push($$, $1);
     free($1);
   }
   | '(' param_aux ')' {
@@ -425,43 +425,43 @@ param
 ;
 param_aux
   : SYMBOL {
-    $$ = malloc(sizeof(struct opi_strvec));
-    opi_strvec_init($$);
-    opi_strvec_push($$, $1);
+    $$ = malloc(sizeof(struct cod_strvec));
+    cod_strvec_init($$);
+    cod_strvec_push($$, $1);
     free($1);
   }
   | param_aux ',' SYMBOL {
     $$ = $1;
-    opi_strvec_push($$, $3);
+    cod_strvec_push($$, $3);
     free($3);
   }
 ;
 
 arg
   : '(' ')' {
-    $$ = malloc(sizeof(struct opi_ptrvec));
-    opi_ptrvec_init($$);
+    $$ = malloc(sizeof(struct cod_ptrvec));
+    cod_ptrvec_init($$);
   }
   | Atom {
-    $$ = malloc(sizeof(struct opi_ptrvec));
-    opi_ptrvec_init($$);
-    opi_ptrvec_push($$, $1, NULL);
+    $$ = malloc(sizeof(struct cod_ptrvec));
+    cod_ptrvec_init($$);
+    cod_ptrvec_push($$, $1, NULL);
   }
   | '(' arg_aux ',' Expr ')' {
     $$ = $2;
-    opi_ptrvec_push($$, $4, NULL);
+    cod_ptrvec_push($$, $4, NULL);
   }
 ;
 
 arg_aux
   : Expr {
-    $$ = malloc(sizeof(struct opi_ptrvec));
-    opi_ptrvec_init($$);
-    opi_ptrvec_push($$, $1, NULL);
+    $$ = malloc(sizeof(struct cod_ptrvec));
+    cod_ptrvec_init($$);
+    cod_ptrvec_push($$, $1, NULL);
   }
   | arg_aux ',' Expr {
     $$ = $1;
-    opi_ptrvec_push($$, $3, NULL);
+    cod_ptrvec_push($$, $3, NULL);
   }
 ;
 
@@ -469,25 +469,25 @@ block
   : { $$ = opi_ast_block(NULL, 0); }
   | block_aux {
     $$ = opi_ast_block((struct opi_ast**)$1->data, $1->size);
-    opi_ptrvec_destroy($1, NULL);
+    cod_ptrvec_destroy($1, NULL);
     free($1);
   }
   | block_aux ';' {
     $$ = opi_ast_block((struct opi_ast**)$1->data, $1->size);
-    opi_ptrvec_destroy($1, NULL);
+    cod_ptrvec_destroy($1, NULL);
     free($1);
   }
 ;
 
 block_aux
   : block_expr {
-    $$ = malloc(sizeof(struct opi_ptrvec));
-    opi_ptrvec_init($$);
-    opi_ptrvec_push($$, $1, NULL);
+    $$ = malloc(sizeof(struct cod_ptrvec));
+    cod_ptrvec_init($$);
+    cod_ptrvec_push($$, $1, NULL);
   }
   | block_aux ';' block_expr {
     $$ = $1;
-    opi_ptrvec_push($$, $3, NULL);
+    cod_ptrvec_push($$, $3, NULL);
   }
 ;
 
@@ -510,8 +510,8 @@ block_expr
   | LET refstr '{' matches '}' '=' Expr {
     $$ = opi_ast_match($2, $4.vars->data, $4.fields->data, $4.vars->size, $7, NULL, NULL),
     free($2);
-    opi_strvec_destroy($4.vars);
-    opi_strvec_destroy($4.fields);
+    cod_strvec_destroy($4.vars);
+    cod_strvec_destroy($4.fields);
     free($4.vars);
     free($4.fields);
   }
@@ -537,7 +537,7 @@ block_expr
   | STRUCT SYMBOL '{' fields '}' {
     $$ = opi_ast_struct($2, $4->data, $4->size);
     free($2);
-    opi_strvec_destroy($4);
+    cod_strvec_destroy($4);
     free($4);
   }
   | USE refstr AS SYMBOL {
@@ -571,18 +571,18 @@ block_expr
 
 fields
   : {
-    $$ = malloc(sizeof(struct opi_strvec));
-    opi_strvec_init($$);
+    $$ = malloc(sizeof(struct cod_strvec));
+    cod_strvec_init($$);
   }
   | SYMBOL {
-    $$ = malloc(sizeof(struct opi_strvec));
-    opi_strvec_init($$);
-    opi_strvec_push($$, $1);
+    $$ = malloc(sizeof(struct cod_strvec));
+    cod_strvec_init($$);
+    cod_strvec_push($$, $1);
     free($1);
   }
   | fields ',' SYMBOL {
     $$ = $1;
-    opi_strvec_push($$, $3);
+    cod_strvec_push($$, $3);
     free($3);
   }
 ;
@@ -590,12 +590,12 @@ fields
 fn_aux
   : param fn_aux {
     $$ = opi_ast_fn($1->data, $1->size, $2);
-    opi_strvec_destroy($1);
+    cod_strvec_destroy($1);
     free($1);
   }
   | param fn_body {
     $$ = opi_ast_fn($1->data, $1->size, $2);
-    opi_strvec_destroy($1);
+    cod_strvec_destroy($1);
     free($1);
   }
 ;
@@ -607,12 +607,12 @@ fn_body
 def_aux
   : param def_aux {
     $$ = opi_ast_fn($1->data, $1->size, $2);
-    opi_strvec_destroy($1);
+    cod_strvec_destroy($1);
     free($1);
   }
   | param def_body {
     $$ = opi_ast_fn($1->data, $1->size, $2);
-    opi_strvec_destroy($1);
+    cod_strvec_destroy($1);
     free($1);
   }
 ;
