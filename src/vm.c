@@ -45,12 +45,16 @@ opi_vm(struct opi_bytecode *bc)
       case OPI_OPC_APPLY:
       {
         opi_t fn = r[OPI_APPLY_REG_FN(ip)];
+        size_t nargs = OPI_APPLY_ARG_NARGS(ip);
         if (opi_unlikely(fn->type != opi_fn_type)) {
+          while (nargs--)
+            opi_drop(opi_pop());
           r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("type_error"));
           break;
         }
-        size_t nargs = OPI_APPLY_ARG_NARGS(ip);
         if (opi_unlikely(!opi_test_arity(opi_fn_get_arity(fn), nargs))) {
+          while (nargs--)
+            opi_drop(opi_pop());
           r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("arity_error"));
           break;
         }
@@ -61,12 +65,16 @@ opi_vm(struct opi_bytecode *bc)
       case OPI_OPC_APPLYTC:
       {
         opi_t fn = r[OPI_APPLY_REG_FN(ip)];
+        size_t nargs = OPI_APPLY_ARG_NARGS(ip);
         if (opi_unlikely(fn->type != opi_fn_type)) {
+          while (nargs--)
+            opi_drop(opi_pop());
           r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("type_error"));
           break;
         }
-        size_t nargs = OPI_APPLY_ARG_NARGS(ip);
         if (opi_unlikely(!opi_test_arity(opi_fn_get_arity(fn), nargs))) {
+          while (nargs--)
+            opi_drop(opi_pop());
           r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("arity_error"));
           break;
         }
@@ -115,7 +123,7 @@ opi_vm(struct opi_bytecode *bc)
       {
         struct opi_insn_fn_data *data = OPI_FINFN_ARG_DATA(ip);
         size_t ncaps = data->ncaps;
-        struct opi_lambda *lam = malloc(sizeof(struct opi_lambda) + sizeof(opi_t) * ncaps);
+        struct opi_lambda *lam = opi_lambda_allocate(ncaps);
         lam->bc = data->bc;
         lam->ncaps = ncaps;
         for (size_t i = 0; i < ncaps; ++i)

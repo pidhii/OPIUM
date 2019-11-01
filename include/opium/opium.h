@@ -46,6 +46,8 @@ opi_die(const char *fmt, ...);
 # define FALSE 0
 #endif
 
+FILE *opi_error_trace;
+
 typedef struct opi_type *opi_type_t;
 typedef struct opi_header *opi_t;
 
@@ -75,29 +77,22 @@ void
 opi_allocators_cleanup(void);
 
 void*
-opi_alloc_number(void);
+opi_allocate_h2w();
+
+void
+opi_free_h2w(void *ptr);
 
 void*
-opi_alloc_pair(void);
+opi_allocate_h3w();
+
+void
+opi_free_h3w(void *ptr);
 
 void*
-opi_alloc_string(void);
-
-void*
-opi_alloc_lazy(void);
+opi_allocate_h4w();
 
 void
-opi_free_number(void* ptr);
-
-void
-opi_free_pair(void* ptr);
-
-void
-opi_free_string(void* ptr);
-
-void
-opi_free_lazy(void *ptr);
-
+opi_free_h4w(void *ptr);
 
 /* ==========================================================================
  * Type
@@ -289,7 +284,7 @@ opi_number_cleanup(void);
 static inline opi_t
 opi_number(long double x)
 {
-  struct opi_number *num = opi_alloc_number();
+  struct opi_number *num = opi_allocate_h2w();
   opi_init_cell(num, opi_number_type);
   num->val = x;
   return (opi_t)num;
@@ -427,7 +422,7 @@ opi_pair_cleanup(void);
 static inline opi_t
 opi_cons(opi_t car, opi_t cdr)
 {
-  struct opi_pair *p = opi_alloc_pair();
+  struct opi_pair *p = opi_allocate_h3w();
   opi_inc_rc(p->car = car);
   opi_inc_rc(p->cdr = cdr);
   p->len = cdr->type == opi_pair_type ? opi_as(cdr, struct opi_pair).len + 1 : 1;
@@ -512,7 +507,7 @@ struct opi_fn {
   opi_fn_handle_t handle;
   void *data;
   void (*delete)(struct opi_fn *self);
-  int arity;
+  intptr_t arity;
 };
 
 void
@@ -593,6 +588,16 @@ opi_lazy_get_value(opi_t x)
   return lazy->cell;
 }
 
+static inline opi_t
+opi_flush(opi_t x)
+{
+  if (x->type == opi_lazy_type)
+    return opi_lazy_get_value(x);
+  else
+    return x;
+}
+
+
 /* ==========================================================================
  * Blob
  */
@@ -616,6 +621,36 @@ opi_blob_get_size(opi_t x);
 
 void*
 opi_blob_drain(opi_t x);
+
+/* ==========================================================================
+ * Array
+ */
+extern
+opi_type_t opi_array_type;
+
+void
+opi_array_init(void);
+
+void
+opi_array_cleanup(void);
+
+opi_t
+opi_array_move_noinc(opi_t *data, size_t n);
+
+opi_t
+opi_array_move(opi_t *data, size_t n);
+
+opi_t
+opi_array_noinc(const opi_t *data, size_t n);
+
+opi_t
+opi_array(const opi_t *data, size_t n);
+
+const opi_t*
+opi_array_get_data(opi_t x);
+
+size_t
+opi_array_get_length(opi_t x);
 
 /* ==========================================================================
  * AST
@@ -1042,6 +1077,8 @@ enum opi_opc {
 struct opi_insn {
   struct opi_insn *prev;
   struct opi_insn *next;
+
+  int is_end;
 
   enum opi_opc opc;
   union {

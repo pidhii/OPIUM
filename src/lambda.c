@@ -14,7 +14,25 @@ lam_destroy(struct opi_fn *fn)
 static inline void
 lam_free(struct opi_fn *fn)
 {
-  free(fn->data);
+  struct opi_lambda *lam = fn->data;
+  /*switch (lam->ncaps) {*/
+    /*case 0:*/
+    /*case 1:*/
+      /*opi_free_h2w(lam);*/
+      /*break;*/
+    /*case 2:*/
+      /*opi_free_h3w(lam);*/
+      /*break;*/
+    /*case 3:*/
+      /*opi_free_h4w(lam);*/
+      /*break;*/
+    /*default:*/
+      /*free(lam);*/
+  /*}*/
+  if (opi_likely(lam->ncaps & 18446744073709551612UL))
+    free(lam);
+  else
+    opi_free_h4w(lam);
   opi_fn_delete(fn);
 }
 

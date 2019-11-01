@@ -1,9 +1,10 @@
-%glr-parser
+/*%glr-parser*/
 %define parse.error verbose
 
 %{
 #include "opium/opium.h"
 #include <stdio.h>
+#include <string.h>
 
 extern int
 yylex();

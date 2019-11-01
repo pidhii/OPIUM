@@ -420,14 +420,6 @@ not_(void)
 }
 
 static opi_t
-length(void)
-{
-  size_t len = opi_length(opi_get(1));
-  opi_drop(opi_pop());
-  return opi_number(len);
-}
-
-static opi_t
 die(void)
 {
   opi_t x = opi_pop();
@@ -477,6 +469,16 @@ table(void)
   }
   opi_drop(l);
   return tab;
+}
+
+static opi_t
+array(void)
+{
+  size_t nargs = opi_nargs;
+  opi_t *data = malloc(sizeof(opi_t) * nargs);
+  for (size_t i = 0; i < nargs; ++i)
+    opi_inc_rc(data[i] = opi_pop());
+  return opi_array_move_noinc(data, nargs);
 }
 
 static opi_t
@@ -547,6 +549,31 @@ string_at(void)
 
   opi_t ret = opi_string_from_char(opi_string_get_value(str)[k]);
   opi_drop(str);
+  opi_drop(idx);
+  return ret;
+}
+
+static opi_t
+array_at(void)
+{
+  opi_t arr = opi_pop();
+  opi_t idx = opi_pop();
+
+  if (opi_unlikely(idx->type != opi_number_type)) {
+    opi_drop(arr);
+    opi_drop(idx);
+    return opi_undefined(opi_symbol("type_error"));
+  }
+
+  size_t k = opi_number_get_value(idx);
+  if (opi_unlikely(k >= opi_array_get_length(arr))) {
+    opi_drop(arr);
+    opi_drop(idx);
+    return opi_undefined(opi_symbol("out_of_range"));
+  }
+
+  opi_t ret = opi_array_get_data(arr)[k];
+  opi_drop(arr);
   opi_drop(idx);
   return ret;
 }
@@ -652,13 +679,6 @@ flush_lazy(void)
 }
 
 static opi_t
-default_next(void)
-{
-  opi_drop(opi_pop());
-  return opi_undefined(opi_symbol("unimplemented_trait"));
-}
-
-static opi_t
 any(void)
 {
   opi_drop(opi_pop());
@@ -683,6 +703,8 @@ TYPE_PRED(string_p, opi_string_type)
 TYPE_PRED(undefined_p, opi_undefined_type)
 TYPE_PRED(number_p, opi_number_type)
 TYPE_PRED(blob_p, opi_blob_type)
+TYPE_PRED(array_p, opi_array_type)
+TYPE_PRED(symbol_p, opi_symbol_type)
 
 void
 opi_builtins(struct opi_builder *bldr)
@@ -697,6 +719,8 @@ opi_builtins(struct opi_builder *bldr)
   opi_builder_def_const(bldr, "undefined?", opi_fn("undefined?", undefined_p, 1));
   opi_builder_def_const(bldr, "number?", opi_fn("number?", number_p, 1));
   opi_builder_def_const(bldr, "blob?", opi_fn("blob?", blob_p, 1));
+  opi_builder_def_const(bldr, "array?", opi_fn("array?", array_p, 1));
+  opi_builder_def_const(bldr, "symbol?", opi_fn("symbol?", symbol_p, 1));
 
   opi_builder_def_const(bldr, "+", opi_fn("+", add, 2));
   opi_builder_def_const(bldr, "-", opi_fn("-", sub, 2));
@@ -715,6 +739,7 @@ opi_builtins(struct opi_builder *bldr)
   opi_builder_def_const(bldr, "cdr", opi_fn("cdr", cdr_, 1));
   opi_builder_def_const(bldr, "list", opi_fn("list", list, -1));
   opi_builder_def_const(bldr, "table", opi_fn("table", table, 1));
+  opi_builder_def_const(bldr, "array", opi_fn("array", array, -1));
   opi_builder_def_const(bldr, "is", opi_fn("is", is_, 2));
   opi_builder_def_const(bldr, "eq", opi_fn("eq", eq_, 2));
   opi_builder_def_const(bldr, "equal", opi_fn("equal", equal_, 2));
@@ -747,23 +772,11 @@ opi_builtins(struct opi_builder *bldr)
   opi_builder_def_const(bldr, "display", g_generic_display);
   opi_builder_def_const(bldr, "display", opi_fn("display_wrap", display_wrap, -2));
 
-  struct opi_trait *length_trait = opi_trait(opi_fn("length", length, 1));
-  opi_t length_generic = opi_trait_into_generic(length_trait, "length");
-  opi_builder_add_trait(bldr, "length", length_trait);
-  opi_builder_def_const(bldr, "length", length_generic);
-
   struct opi_trait *at_trait = opi_trait(opi_fn("!!", default_at, 2));
   opi_trait_impl(at_trait, opi_table_type, opi_fn("table_at", table_at, 2));
   opi_trait_impl(at_trait, opi_string_type, opi_fn("string_at", string_at, 2));
+  opi_trait_impl(at_trait, opi_array_type, opi_fn("array_at", array_at, 2));
   opi_t at_generic = opi_trait_into_generic(at_trait, "!!");
   opi_builder_add_trait(bldr, "!!", at_trait);
   opi_builder_def_const(bldr, "!!", at_generic);
-
-  struct opi_trait *next_trait = opi_trait(opi_fn("next", default_next, 1));
-  opi_trait_impl(next_trait, opi_null_type, opi_fn("nil_next", id, 1));
-  opi_trait_impl(next_trait, opi_pair_type, opi_fn("pair_next", id, 1));
-  opi_trait_impl(next_trait, opi_lazy_type, opi_fn("lazy_next", flush_lazy, 1));
-  opi_t next_generic = opi_trait_into_generic(next_trait, "next");
-  opi_builder_add_trait(bldr, "next", next_trait);
-  opi_builder_def_const(bldr, "next", next_generic);
 }

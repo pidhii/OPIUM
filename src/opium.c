@@ -29,6 +29,7 @@ void
 opi_init(void)
 {
   opi_allocators_init();
+
   opi_type_init();
   opi_undefined_init();
   opi_nil_init();
@@ -42,6 +43,7 @@ opi_init(void)
   opi_port_init();
   opi_lazy_init();
   opi_blob_init();
+  opi_array_init();
 }
 
 void
@@ -60,6 +62,8 @@ opi_cleanup(void)
   opi_type_cleanup();
   opi_lazy_cleanup();
   opi_blob_cleanup();
+  opi_array_cleanup();
+
   opi_allocators_cleanup();
 }
 
@@ -375,7 +379,7 @@ number_eq(opi_type_t ty, opi_t x, opi_t y)
 
 static void
 number_delete(opi_type_t ty, opi_t cell)
-{ opi_free_number(cell); }
+{ opi_free_h2w(cell); }
 
 static size_t
 number_hash(opi_type_t type, opi_t x)
@@ -561,7 +565,7 @@ string_delete(opi_type_t ty, opi_t x)
 {
   struct opi_string *s = opi_as_ptr(x);
   free(s->str);
-  opi_free_string(s);
+  opi_free_h2w(s);
 }
 
 static int
@@ -600,7 +604,7 @@ opi_string_cleanup(void)
 extern inline opi_t
 opi_string_move2(char *str, size_t len)
 {
-  struct opi_string *s = opi_alloc_string();
+  struct opi_string *s = opi_allocate_h2w();
   opi_init_cell(s, opi_string_type);
   s->str = str;
   s->size = len;
@@ -627,7 +631,7 @@ opi_string(const char *str)
 opi_t
 opi_string_from_char(char c)
 {
-  struct opi_string *s = opi_alloc_string();
+  struct opi_string *s = opi_allocate_h2w();
   opi_init_cell(s, opi_string_type);
   s->str = malloc(2);;
   s->str[0] = c;
@@ -707,7 +711,7 @@ pair_delete(opi_type_t ty, opi_t x) {
   while (x->type == opi_pair_type) {
     opi_t tmp = opi_cdr(x);
     opi_unref(opi_car(x));
-    opi_free_pair(x);
+    opi_free_h3w(x);
     if (opi_dec_rc(x = tmp) > 0)
       return;
   }
@@ -1014,7 +1018,7 @@ lazy_delete(opi_type_t type, opi_t x)
 {
   struct opi_lazy *lazy = opi_as_ptr(x);
   opi_unref(lazy->cell);
-  opi_free_lazy(lazy);
+  opi_free_h2w(lazy);
 }
 
 void
@@ -1031,7 +1035,7 @@ opi_lazy_cleanup(void)
 opi_t
 opi_lazy(opi_t x)
 {
-  struct opi_lazy *lazy = opi_alloc_lazy();
+  struct opi_lazy *lazy = opi_allocate_h2w();
   opi_inc_rc(lazy->cell = x);
   lazy->is_ready = FALSE;
   opi_init_cell(lazy, opi_lazy_type);
@@ -1093,4 +1097,121 @@ opi_blob_drain(opi_t x)
   blob->data = NULL;
   return data;
 }
+
+/******************************************************************************/
+struct array {
+  struct opi_header header;
+  opi_t *data;
+  size_t size;
+};
+
+opi_type_t opi_array_type;
+
+static void
+array_delete(opi_type_t type, opi_t x)
+{
+  struct array *arr = opi_as_ptr(x);
+  for (size_t i = 0; i < arr->size; ++i)
+    opi_unref(arr->data[i]);
+  free(arr->data);
+  opi_free_h2w(arr);
+}
+
+static void
+array_write(opi_type_t type, opi_t x, FILE *out)
+{
+  struct array *arr = opi_as_ptr(x);
+  fputs("array (", out);
+  for (size_t i = 0; i < arr->size; ++i) {
+    if (i > 0)
+      fputs(", ", out);
+    opi_write(arr->data[i], out);
+  }
+  putc(')', out);
+}
+
+static void
+array_display(opi_type_t type, opi_t x, FILE *out)
+{
+  struct array *arr = opi_as_ptr(x);
+  fputs("array (", out);
+  for (size_t i = 0; i < arr->size; ++i) {
+    if (i > 0)
+      fputs(", ", out);
+    opi_display(arr->data[i], out);
+  }
+  putc(')', out);
+}
+
+static int
+array_equal(opi_type_t type, opi_t x, opi_t y)
+{
+  struct array *arr1 = opi_as_ptr(x),
+               *arr2 = opi_as_ptr(y);
+
+  if (arr1->size != arr2->size)
+    return FALSE;
+
+  for (size_t i = 0; i < arr1->size; ++i) {
+    if (!opi_equal(arr1->data[i], arr2->data[i]))
+      return FALSE;
+  }
+  return TRUE;
+}
+
+void
+opi_array_init(void)
+{
+  opi_array_type = opi_type("array");
+  opi_type_set_delete_cell(opi_array_type, array_delete);
+  opi_type_set_write(opi_array_type, array_write);
+  opi_type_set_display(opi_array_type, array_display);
+  opi_type_set_equal(opi_array_type, array_equal);
+}
+
+void
+opi_array_cleanup(void)
+{ opi_type_delete(opi_array_type); }
+
+opi_t
+opi_array_move_noinc(opi_t *data, size_t n)
+{
+  struct array *arr = opi_allocate_h2w();
+  arr->data = data;
+  arr->size = n;
+  opi_init_cell(arr, opi_array_type);
+  return (opi_t)arr;
+}
+
+opi_t
+opi_array_move(opi_t *data, size_t n)
+{
+  for (size_t i = 0; i < n; ++i)
+    opi_inc_rc(data[i]);
+  return opi_array_move_noinc(data, n);
+}
+
+opi_t
+opi_array_noinc(const opi_t *data, size_t n)
+{
+  opi_t *copy = malloc(sizeof(opi_t) * n);
+  memcpy(copy, data, sizeof(opi_t) * n);
+  return opi_array_move_noinc(copy, n);
+}
+
+opi_t
+opi_array(const opi_t *data, size_t n)
+{
+  for (size_t i = 0; i < n; ++i)
+    opi_inc_rc(data[i]);
+  return opi_array_noinc(data, n);
+}
+
+const opi_t*
+opi_array_get_data(opi_t x)
+{ return opi_as(x, struct array).data; }
+
+size_t
+opi_array_get_length(opi_t x)
+{ return opi_as(x, struct array).size; }
 

@@ -104,11 +104,12 @@ emit(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int tc)
         args[i] = emit(ir->apply.args[i], bc, stack, FALSE);
       int fn = emit(ir->apply.fn, bc, stack, FALSE);
 
-      if (tc && opi_bytecode_value_is_global(bc, fn)) {
-        return opi_bytecode_apply_tailcall_arr(bc, fn, ir->apply.nargs, args);
-      } else {
-        return opi_bytecode_apply_arr(bc, fn, ir->apply.nargs, args);
-      }
+      int ret;
+      if (tc && opi_bytecode_value_is_global(bc, fn))
+        ret = opi_bytecode_apply_tailcall_arr(bc, fn, ir->apply.nargs, args);
+      else
+        ret = opi_bytecode_apply_arr(bc, fn, ir->apply.nargs, args);
+      return ret;
     }
 
     case OPI_IR_FN:
@@ -156,44 +157,23 @@ emit(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int tc)
 
     case OPI_IR_IF:
     {
-      if (tc) {
-        // IF
-        int test = opi_bytecode_test(bc, emit(ir->iff.test, bc, stack, FALSE));
-        struct opi_if iff;
-        opi_bytecode_if(bc, test, &iff);
-        // THEN
-        int then_ret = emit(ir->iff.then, bc, stack, TRUE);
-        opi_bytecode_ret(bc, then_ret);
-        // ELSE
-        opi_bytecode_if_else(bc, &iff);
-        int else_ret = emit(ir->iff.els, bc, stack, TRUE);
-        opi_bytecode_ret(bc, else_ret);
-        // END IF
-        opi_bytecode_if_end(bc, &iff);
+      // IF
+      int test = opi_bytecode_test(bc, emit(ir->iff.test, bc, stack, FALSE));
+      struct opi_if iff;
+      // PHI
+      int phi = opi_bytecode_phi(bc);
+      // THEN
+      opi_bytecode_if(bc, test, &iff);
+      int then_ret = emit(ir->iff.then, bc, stack, tc);
+      opi_bytecode_dup(bc, phi, then_ret);
+      // ELSE
+      opi_bytecode_if_else(bc, &iff);
+      int else_ret = emit(ir->iff.els, bc, stack, tc);
+      opi_bytecode_dup(bc, phi, else_ret);
+      // END IF
+      opi_bytecode_if_end(bc, &iff);
 
-        // dummy return-value
-        int dummy_ret = opi_bytecode_new_val(bc, OPI_VAL_GLOBAL);
-        return dummy_ret;
-
-      } else {
-        // IF
-        int test = opi_bytecode_test(bc, emit(ir->iff.test, bc, stack, FALSE));
-        struct opi_if iff;
-        // PHI
-        int phi = opi_bytecode_phi(bc);
-        // THEN
-        opi_bytecode_if(bc, test, &iff);
-        int then_ret = emit(ir->iff.then, bc, stack, FALSE);
-        opi_bytecode_dup(bc, phi, then_ret);
-        // ELSE
-        opi_bytecode_if_else(bc, &iff);
-        int else_ret = emit(ir->iff.els, bc, stack, FALSE);
-        opi_bytecode_dup(bc, phi, else_ret);
-        // END IF
-        opi_bytecode_if_end(bc, &iff);
-
-        return phi;
-      }
+      return phi;
     }
 
     case OPI_IR_BLOCK:
@@ -232,58 +212,30 @@ emit(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int tc)
         return opi_bytecode_const(bc, opi_nil);
 
       } else {
-        if (tc) {
-          // IF
-          struct opi_if iff;
-          // THEN
-          opi_bytecode_if(bc, test, &iff);
-          // load fields
-          int vals[ir->match.n];
-          for (size_t i = 0; i < ir->match.n; ++i)
-            vals[i] = opi_bytecode_ldfld(bc, expr, ir->match.offs[i]);
-          // declare values
-          for (size_t i = 0; i < ir->match.n; ++i)
-            stack_push(stack, vals[i]);
-          int then_ret = emit(ir->match.then, bc, stack, TRUE);
-          stack_pop(stack, ir->match.n);
-          opi_bytecode_ret(bc, then_ret);
-          // ELSE
-          opi_bytecode_if_else(bc, &iff);
-          int else_ret = emit(ir->match.els, bc, stack, TRUE);
-          opi_bytecode_ret(bc, else_ret);
-          // END IF
-          opi_bytecode_if_end(bc, &iff);
+        // IF
+        struct opi_if iff;
+        // PHI
+        int phi = opi_bytecode_phi(bc);
+        // THEN
+        opi_bytecode_if(bc, test, &iff);
+        // load fields
+        int vals[ir->match.n];
+        for (size_t i = 0; i < ir->match.n; ++i)
+          vals[i] = opi_bytecode_ldfld(bc, expr, ir->match.offs[i]);
+        // declare values
+        for (size_t i = 0; i < ir->match.n; ++i)
+          stack_push(stack, vals[i]);
+        int then_ret = emit(ir->match.then, bc, stack, tc);
+        stack_pop(stack, ir->match.n);
+        opi_bytecode_dup(bc, phi, then_ret);
+        // ELSE
+        opi_bytecode_if_else(bc, &iff);
+        int else_ret = emit(ir->match.els, bc, stack, tc);
+        opi_bytecode_dup(bc, phi, else_ret);
+        // END IF
+        opi_bytecode_if_end(bc, &iff);
 
-          // dummy return-value
-          int dummy_ret = opi_bytecode_new_val(bc, OPI_VAL_GLOBAL);
-          return dummy_ret;
-
-        } else {
-          // IF
-          struct opi_if iff;
-          // PHI
-          int phi = opi_bytecode_phi(bc);
-          // THEN
-          opi_bytecode_if(bc, test, &iff);
-          // load fields
-          int vals[ir->match.n];
-          for (size_t i = 0; i < ir->match.n; ++i)
-            vals[i] = opi_bytecode_ldfld(bc, expr, ir->match.offs[i]);
-          // declare values
-          for (size_t i = 0; i < ir->match.n; ++i)
-            stack_push(stack, vals[i]);
-          int then_ret = emit(ir->match.then, bc, stack, FALSE);
-          stack_pop(stack, ir->match.n);
-          opi_bytecode_dup(bc, phi, then_ret);
-          // ELSE
-          opi_bytecode_if_else(bc, &iff);
-          int else_ret = emit(ir->match.els, bc, stack, FALSE);
-          opi_bytecode_dup(bc, phi, else_ret);
-          // END IF
-          opi_bytecode_if_end(bc, &iff);
-
-          return phi;
-        }
+        return phi;
       }
     }
 

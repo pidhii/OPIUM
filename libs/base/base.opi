@@ -11,6 +11,14 @@ let flip f =
     in aux2 . list
   in aux1 . list;
 
+trait length (self) = 
+  let rec loop (it, acc) =
+    unless let x:xs = next it then acc
+    else loop (xs, acc + 1)
+  in loop (self, 0);
+impl string length (self) = __string_length self;
+impl array length (self) = __array_length self;
+
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Iteration
 #
@@ -25,7 +33,7 @@ trait foreach (self, f) =
     unless let x:xs = next l then nil
     else { f x; loop xs }
   in loop self;
-let foreach l f = foreach (l, f);
+let foreach f l = foreach (l, f);
 
 trait foldl (self, f, z) =
   let rec fold (l, acc) =
@@ -37,19 +45,25 @@ let foldl f z xs = foldl (xs, f, z);
 trait foldr (self, f, z) = foldl (swap f) z (reverse self);
 let foldr f z l = foldr (l, f, z);
 
-impl lazy length (self) =
-  let rec loop (it, acc) =
-    unless let x:xs = !it then acc
-    else loop (xs, acc + 1)
-  in loop (self, 0);
-
-let rec range from to =
+let rec range (from, to) =
   if from >= to then nil
-  else @from : range (from + 1) to;
+  else @from : range (from + 1, to);
 
 let rec map f l =
   unless let x:xs = next l then nil
   else @f x : map f xs;
+
+let rec filter f l =
+  unless let x:xs = next l then nil
+  else if f x then @x : filter f xs
+  else filter f xs;
+
+namespace detail {
+  let indexIterator l =
+    map (i -> l !! i) $ range (0, length l);
+};
+impl string next (self) = next $ detail::indexIterator self;
+impl array next (self) = next $ detail::indexIterator self;
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Consumers

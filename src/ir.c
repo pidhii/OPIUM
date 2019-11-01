@@ -93,6 +93,8 @@ opi_builder_init(struct opi_builder *bldr, struct opi_context *ctx)
   opi_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "blob", opi_blob_type);
   opi_ptrvec_pop(&bldr->ctx->types, NULL);
+  opi_builder_def_type(bldr, "array", opi_array_type);
+  opi_ptrvec_pop(&bldr->ctx->types, NULL);
 }
 
 void

@@ -19,6 +19,26 @@ struct opi_lambda {
   opi_t caps[];
 };
 
+static inline struct opi_lambda *
+opi_lambda_allocate(size_t ncaps)
+{
+  /*switch (ncaps) {*/
+    /*case 0:*/
+    /*case 1:*/
+      /*return opi_allocate_h2w();*/
+    /*case 2:*/
+      /*return opi_allocate_h3w();*/
+    /*case 3:*/
+      /*return opi_allocate_h4w();*/
+    /*default:*/
+      /*return malloc(sizeof(struct opi_lambda) + sizeof(opi_t) * ncaps);*/
+  /*}*/
+  if (opi_likely(ncaps & 18446744073709551612UL))
+    return malloc(sizeof(struct opi_lambda) + sizeof(opi_t) * ncaps);
+  else
+    return opi_allocate_h4w();
+}
+
 void
 opi_lambda_delete(struct opi_fn *fn);
 

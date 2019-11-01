@@ -15,6 +15,9 @@ opi_parse_string(const char *str)
 void
 opi_ast_delete(struct opi_ast *node)
 {
+  if (node == NULL)
+    return;
+
   switch (node->tag) {
     case OPI_AST_CONST:
       opi_unref(node->cnst);

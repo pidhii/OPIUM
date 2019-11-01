@@ -1,62 +1,54 @@
 #include "opium/opium.h"
 
-union cell {
-  struct opi_number number;
-  struct opi_pair pair;
-  struct opi_string string;
-};
+#define CELL(n)               \
+  struct h##n##w {            \
+    struct opi_header header; \
+    uintptr_t w[n];           \
+  };
 
-#define UALLOC_NAME cell
-#define UALLOC_TYPE union cell
+#define ALLOCATOR(n)                                     \
+  static                                                 \
+  struct ualloc_h##n##w g_allocator_h##n##w;             \
+                                                         \
+  void*                                                  \
+  opi_allocate_h##n##w()                                 \
+  { return ualloc_h##n##w_alloc(&g_allocator_h##n##w); } \
+                                                         \
+  void                                                   \
+  opi_free_h##n##w(void *ptr)                            \
+  { ualloc_h##n##w_free(&g_allocator_h##n##w, ptr); }
+
+CELL(2)
+#define UALLOC_NAME h2w
+#define UALLOC_TYPE struct h2w
 #include "uniform_allocator.h"
+ALLOCATOR(2)
 
-static
-struct ualloc_cell g_allocator;
+CELL(3)
+#define UALLOC_NAME h3w
+#define UALLOC_TYPE struct h3w
+#include "uniform_allocator.h"
+ALLOCATOR(3)
+
+CELL(4)
+#define UALLOC_NAME h4w
+#define UALLOC_TYPE struct h4w
+#include "uniform_allocator.h"
+ALLOCATOR(4)
 
 void
 opi_allocators_init(void)
-{ ualloc_cell_init(&g_allocator); }
+{
+  ualloc_h2w_init(&g_allocator_h2w);
+  ualloc_h3w_init(&g_allocator_h3w);
+  ualloc_h4w_init(&g_allocator_h4w);
+}
 
 void
 opi_allocators_cleanup(void)
-{ ualloc_cell_destroy(&g_allocator); }
+{
+  ualloc_h2w_destroy(&g_allocator_h2w);
+  ualloc_h3w_destroy(&g_allocator_h3w);
+  ualloc_h4w_destroy(&g_allocator_h4w);
+}
 
-static inline void*
-allocate()
-{ return ualloc_cell_alloc(&g_allocator); }
-
-void*
-opi_alloc_number(void)
-{ return allocate(); }
-
-void*
-opi_alloc_pair(void)
-{ return allocate(); }
-
-void*
-opi_alloc_string(void)
-{ return allocate(); }
-
-void*
-opi_alloc_lazy(void)
-{ return allocate(); }
-
-static inline void
-delete(void *ptr)
-{ ualloc_cell_free(&g_allocator, ptr); }
-
-void
-opi_free_number(void* ptr)
-{ delete(ptr); }
-
-void
-opi_free_pair(void* ptr)
-{ delete(ptr); }
-
-void
-opi_free_string(void* ptr)
-{ delete(ptr); }
-
-void
-opi_free_lazy(void* ptr)
-{ delete(ptr); }
