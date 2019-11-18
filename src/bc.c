@@ -20,6 +20,8 @@ opi_bytecode_init(struct opi_bytecode *bc)
   opi_insn_chain(NULL, bc->head, bc->tail);
 
   bc->point = bc->tail;
+
+  bc->tape = NULL;
 }
 
 void
@@ -27,6 +29,8 @@ opi_bytecode_destroy(struct opi_bytecode *bc)
 {
   opi_insn_delete(bc->head);
   free(bc->vinfo);
+  if (bc->tape)
+    free(bc->tape);
 }
 
 struct opi_insn*
@@ -92,6 +96,7 @@ opi_insn_delete1(struct opi_insn *insn)
     case OPI_OPC_LDFLD:
     case OPI_OPC_TEST:
     case OPI_OPC_GUARD:
+    case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
       break;
 
     case OPI_OPC_ENDSCP:
@@ -280,6 +285,17 @@ opi_insn_dump1(struct opi_insn *insn, FILE *out)
     case OPI_OPC_GUARD:
       fprintf(out, "guard %%%zu", OPI_GUARD_REG(insn));
       break;
+
+    case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
+      fprintf(out, "%%%zu = binop <%d> %%%zu %%%zu",
+          OPI_BINOP_REG_OUT(insn),
+          (int)insn->opc,
+          OPI_BINOP_REG_LHS(insn),
+          OPI_BINOP_REG_RHS(insn));
+      break;
+
+    default:
+      opi_assert(!"unimplemented insn dump");
   }
 }
 
@@ -536,6 +552,17 @@ opi_insn_guard(int in)
   return insn;
 }
 
+struct opi_insn*
+opi_insn_binop(enum opi_opc opc, int out, int lhs, int rhs)
+{
+  struct opi_insn *insn = malloc(sizeof(struct opi_insn));
+  insn->opc = opc;
+  OPI_BINOP_REG_OUT(insn) = out;
+  OPI_BINOP_REG_LHS(insn) = lhs;
+  OPI_BINOP_REG_RHS(insn) = rhs;
+  return insn;
+}
+
 int
 opi_insn_is_using(struct opi_insn *insn, int vid)
 {
@@ -553,6 +580,10 @@ opi_insn_is_using(struct opi_insn *insn, int vid)
     case OPI_OPC_IF:
     case OPI_OPC_GUARD:
       return FALSE;
+
+    case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
+      return (int)OPI_BINOP_REG_LHS(insn) == vid ||
+             (int)OPI_BINOP_REG_RHS(insn) == vid;
 
     // ignore manual RC-management
     case OPI_OPC_INCRC:
@@ -631,6 +662,7 @@ opi_insn_is_killing(struct opi_insn *insn, int vid)
     case OPI_OPC_LDFLD:
     case OPI_OPC_TEST:
     case OPI_OPC_GUARD:
+    case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
       return FALSE;
 
     // ignore manual RC-management
@@ -682,6 +714,9 @@ opi_insn_is_creating(struct opi_insn *insn, int vid)
     case OPI_OPC_TEST:
     case OPI_OPC_GUARD:
       return FALSE;
+
+    case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
+      return (int)OPI_BINOP_REG_OUT(insn) == vid;
 
     // ignore manual RC-management
     case OPI_OPC_INCRC:
@@ -925,4 +960,20 @@ opi_bytecode_ldfld(struct opi_bytecode *bc, int cell, size_t offs)
 void
 opi_bytecode_guard(struct opi_bytecode *bc, int cell)
 { opi_bytecode_write(bc, opi_insn_guard(cell)); }
+
+int
+opi_bytecode_binop(struct opi_bytecode *bc, enum opi_opc opc, int lhs, int rhs)
+{
+  int out;
+  switch (opc) {
+    case OPI_OPC_NUMEQ ... OPI_OPC_GE:
+      out = opi_bytecode_new_val(bc, OPI_VAL_GLOBAL);
+      break;
+    default:
+      out = opi_bytecode_new_val(bc, OPI_VAL_LOCAL);
+      break;
+  }
+  opi_bytecode_write(bc, opi_insn_binop(opc, out, lhs, rhs));
+  return out;
+}
 

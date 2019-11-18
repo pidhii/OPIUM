@@ -1,0 +1,65 @@
+################################################################################
+# File: base/list-base.opi
+#-------------------------------------------------------------------------------
+# Definitions:
+# - reverse l -> list
+# - range from to -> list
+# - any? f l -> boolean
+# - all? f l -> boolean
+# - revmap f l -> list
+# - map f l -> list
+# - foreach f l
+# - foldl f z l -> any
+# - foldr f z l -> any
+# - revfilter f l -> list
+# - filter f l -> list
+################################################################################
+
+load "common.opi";
+
+let reverse l = revappend l nil;
+
+let range from to =
+  let rec loop i acc =
+    if i < from then acc
+    else loop (i - 1) (i:acc)
+  in loop (to - 1) nil;
+
+let rec any? f l =
+  unless let x:xs = l then false
+  else f x || any? f xs;
+
+let rec all? f l =
+  unless let x:xs = l then true
+  else f x && all? f xs;
+
+let revmap f l =
+  let rec loop l acc =
+    unless let x:xs = l then acc
+    else loop xs (f x : acc)
+  in loop l nil;
+
+let map = reverse -| revmap;
+
+let foreach f l =
+  let rec loop l =
+    unless let x:xs = l then nil
+    else { f x; loop xs }
+  in loop l;
+
+let foldl f z l =
+  let rec loop l acc =
+    unless let x:xs = l then acc
+    else loop xs $ f acc x
+  in loop l z;
+
+let foldr f z l = foldl (flip f) z (reverse l);
+
+let revfilter f l =
+  let rec loop l acc =
+    unless let x:xs = l then acc
+    else loop xs $ if f x then x:acc else acc
+  in loop l nil;
+
+let filter = reverse -| revfilter;
+

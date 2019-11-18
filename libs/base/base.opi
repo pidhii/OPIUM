@@ -1,78 +1,17 @@
+# file: base/base.opi
+
 load "base.so";
 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Miscelenious
-#
-let swap f (x, y) = f (y, x);
+let zero? x = x == 0;
+let positive? x = x > 0;
+let negative? x = x < 0;
+let even? x = x % 2 == 0;
+let odd? x = x % 2 /= 0;
 
-let flip f =
-  let aux1 xs =
-    let aux2 ys = apply (apply (f, ys), xs)
-    in aux2 . list
-  in aux1 . list;
+let open path ..mode = __builtin_open path (car mode or "r");
+let popen cmd ..mode = __builtin_popen cmd (car mode or "r");
 
-trait length (self) = 
-  let rec loop (it, acc) =
-    unless let x:xs = next it then acc
-    else loop (xs, acc + 1)
-  in loop (self, 0);
-impl string length (self) = __string_length self;
-impl array length (self) = __array_length self;
+let trim = chomp -| ltrim;
 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Iteration
-#
-trait reverse (self) =
-  let rec loop (l, acc) =
-    unless let x:xs = next l then acc
-    else loop (xs, x:acc)
-  in loop (self, nil);
-
-trait foreach (self, f) =
-  let rec loop l =
-    unless let x:xs = next l then nil
-    else { f x; loop xs }
-  in loop self;
-let foreach f l = foreach (l, f);
-
-trait foldl (self, f, z) =
-  let rec fold (l, acc) =
-    unless let x:xs = next l then acc
-    else fold (xs, f (acc, x))
-  in fold (self, z);
-let foldl f z xs = foldl (xs, f, z);
-
-trait foldr (self, f, z) = foldl (swap f) z (reverse self);
-let foldr f z l = foldr (l, f, z);
-
-let rec range (from, to) =
-  if from >= to then nil
-  else @from : range (from + 1, to);
-
-let rec map f l =
-  unless let x:xs = next l then nil
-  else @f x : map f xs;
-
-let rec filter f l =
-  unless let x:xs = next l then nil
-  else if f x then @x : filter f xs
-  else filter f xs;
-
-namespace detail {
-  let indexIterator l =
-    map (i -> l !! i) $ range (0, length l);
-};
-impl string next (self) = next $ detail::indexIterator self;
-impl array next (self) = next $ detail::indexIterator self;
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Consumers
-#
-trait tostring (self) = format ("%d", self);
-impl string tostring (self) = self;
-impl blob tostring (self) = __blob_to_string self;
-
-trait tolist (self) = foldr (:) nil self;
-impl null tolist (self) = nil;
-impl pair tolist (self) = self;
-
+load "common.opi";
+load "list-base.opi";

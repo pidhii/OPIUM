@@ -30,7 +30,6 @@ opi_init(void)
 {
   opi_allocators_init();
 
-  opi_type_init();
   opi_undefined_init();
   opi_nil_init();
   opi_number_init();
@@ -39,17 +38,15 @@ opi_init(void)
   opi_boolean_init();
   opi_pair_init();
   opi_symbol_init();
-  opi_table_init();
-  opi_port_init();
+  opi_file_init();
   opi_lazy_init();
-  opi_blob_init();
-  opi_array_init();
+  opi_table_init();
 }
 
 void
 opi_cleanup(void)
 {
-  opi_port_cleanup();
+  opi_file_cleanup();
   opi_number_cleanup();
   opi_symbol_cleanup();
   opi_undefined_cleanup();
@@ -57,12 +54,9 @@ opi_cleanup(void)
   opi_string_cleanup();
   opi_boolean_cleanup();
   opi_pair_cleanup();
-  opi_table_cleanup();
   opi_fn_cleanup();
-  opi_type_cleanup();
   opi_lazy_cleanup();
-  opi_blob_cleanup();
-  opi_array_cleanup();
+  opi_table_cleanup();
 
   opi_allocators_cleanup();
 }
@@ -71,8 +65,6 @@ opi_cleanup(void)
 opi_type_t opi_type_type = NULL;
 
 struct opi_type {
-  struct opi_header header;
-
   char name[OPI_TYPE_NAME_MAX + 1];
 
   void (*delete_cell)(opi_type_t ty, opi_t cell);
@@ -133,24 +125,10 @@ new_type(const char *name)
   return ty;
 }
 
-void
-opi_type_init(void)
-{
-  opi_type_type = new_type("type");
-  opi_init_cell(opi_type_type, opi_type_type);
-  opi_inc_rc((opi_t)opi_type_type);
-}
-
-void
-opi_type_cleanup(void)
-{ opi_type_delete(opi_type_type); }
-
 opi_type_t
 opi_type(const char *name)
 {
   opi_type_t type = new_type(name);
-  opi_init_cell(type, opi_type_type);
-  opi_inc_rc((opi_t)type);
   return type;
 }
 
@@ -266,97 +244,6 @@ opi_hashof(opi_t x)
 { return x->type->hash(x->type, x); }
 
 /******************************************************************************/
-struct opi_trait {
-  struct opi_hash_map map;
-  opi_t deflt;
-};
-
-struct opi_trait*
-opi_trait(opi_t deflt)
-{
-  struct opi_trait *g = malloc(sizeof(struct opi_trait));
-  opi_hash_map_init(&g->map);
-  opi_inc_rc(g->deflt = deflt);
-  opi_assert(deflt->type == opi_fn_type);
-  opi_assert(opi_fn_get_arity(deflt) > 0);
-  return g;
-}
-
-void
-opi_trait_delete(struct opi_trait *t)
-{
-  opi_hash_map_destroy(&t->map);
-  opi_unref(t->deflt);
-  free(t);
-}
-
-int
-opi_trait_get_arity(struct opi_trait *t)
-{ return opi_fn_get_arity(t->deflt); }
-
-opi_t
-opi_trait_get_default(struct opi_trait *t)
-{ return t->deflt; }
-
-void
-opi_trait_set_default(struct opi_trait *t, opi_t f)
-{
-  opi_inc_rc(f);
-  opi_unref(t->deflt);
-  t->deflt = f;
-}
-
-void
-opi_trait_impl(struct opi_trait *t, opi_type_t type, opi_t fn)
-{
-  struct opi_hash_map_elt elt;
-  opi_assert(!opi_hash_map_find_is(&t->map, (opi_t)type, (size_t)type, &elt));
-  opi_hash_map_insert(&t->map, (opi_t)type, (size_t)type, fn, &elt);
-}
-
-opi_t
-opi_trait_find(struct opi_trait *t, opi_type_t type)
-{
-  struct opi_hash_map_elt elt;
-  if (opi_hash_map_find_is(&t->map, (opi_t)type, (size_t)type, &elt))
-    return elt.val;
-  else
-    return t->deflt;
-}
-
-static void
-generic_delete(struct opi_fn *self)
-{
-  opi_trait_delete(self->data);
-  opi_fn_delete(self);
-}
-
-static opi_t
-generic(void)
-{
-  opi_t x = opi_get(1);
-  struct opi_trait *trait = opi_fn_get_data(opi_current_fn);
-  opi_t handle = opi_trait_find(trait, x->type);
-  return opi_fn_apply(handle, opi_nargs);
-}
-
-static opi_t
-generic_default(void)
-{
-  opi_assert(!"unimplemented generic");
-  abort();
-}
-
-opi_t
-opi_trait_into_generic(struct opi_trait *trait, const char *name)
-{
-  int arity = opi_trait_get_arity(trait);
-  opi_t generic_fn = opi_fn(name, generic, arity);
-  opi_fn_set_data(generic_fn, trait, generic_delete);
-  return generic_fn;
-}
-
-/******************************************************************************/
 opi_type_t opi_number_type;
 
 static void
@@ -370,7 +257,12 @@ static void
 number_display(opi_type_t ty, opi_t x, FILE *out)
 {
   long double val = opi_as(x, struct opi_number).val;
-  fprintf(out, "%Lg", val);
+  long double i;
+  long double f = modfl(val, &i);
+  if (f == 0)
+    fprintf(out, "%.0Lf", i);
+  else
+    fprintf(out, "%Lg", val);
 }
 
 static int
@@ -379,7 +271,7 @@ number_eq(opi_type_t ty, opi_t x, opi_t y)
 
 static void
 number_delete(opi_type_t ty, opi_t cell)
-{ opi_free_h2w(cell); }
+{ opi_free(cell); }
 
 static size_t
 number_hash(opi_type_t type, opi_t x)
@@ -496,7 +388,23 @@ undefined_delete(opi_type_t ty, opi_t cell)
 {
   struct opi_undefined *undef = opi_as_ptr(cell);
   opi_unref(undef->what);
-  free(cell);
+  opi_free(cell);
+}
+
+static void
+undefined_write(opi_type_t type, opi_t x, FILE *out)
+{
+  fprintf(out, "undefined { ");
+  opi_write(opi_undefined_get_what(x), out);
+  fprintf(out, " }");
+}
+
+static void
+undefined_display(opi_type_t type, opi_t x, FILE *out)
+{
+  fprintf(out, "undefined { ");
+  opi_display(opi_undefined_get_what(x), out);
+  fprintf(out, " }");
 }
 
 void
@@ -506,6 +414,8 @@ opi_undefined_init(void)
   opi_type_set_delete_cell(opi_undefined_type, undefined_delete);
   char *fields[] = { "what" };
   opi_type_set_fields(opi_undefined_type, offsetof(struct opi_undefined, what), fields, 1);
+  opi_type_set_write(opi_undefined_type, undefined_write);
+  opi_type_set_display(opi_undefined_type, undefined_display);
 }
 
 void
@@ -515,7 +425,7 @@ opi_undefined_cleanup(void)
 opi_t
 opi_undefined(opi_t what)
 {
-  struct opi_undefined *undef = malloc(sizeof(struct opi_undefined));
+  struct opi_undefined *undef = opi_allocate();
   opi_inc_rc(undef->what = what);
   opi_init_cell(undef, opi_undefined_type);
   return (opi_t)undef;
@@ -565,7 +475,7 @@ string_delete(opi_type_t ty, opi_t x)
 {
   struct opi_string *s = opi_as_ptr(x);
   free(s->str);
-  opi_free_h2w(s);
+  opi_free(s);
 }
 
 static int
@@ -604,7 +514,7 @@ opi_string_cleanup(void)
 extern inline opi_t
 opi_string_move2(char *str, size_t len)
 {
-  struct opi_string *s = opi_allocate_h2w();
+  struct opi_string *s = opi_allocate();
   opi_init_cell(s, opi_string_type);
   s->str = str;
   s->size = len;
@@ -631,7 +541,7 @@ opi_string(const char *str)
 opi_t
 opi_string_from_char(char c)
 {
-  struct opi_string *s = opi_allocate_h2w();
+  struct opi_string *s = opi_allocate();
   opi_init_cell(s, opi_string_type);
   s->str = malloc(2);;
   s->str[0] = c;
@@ -711,7 +621,7 @@ pair_delete(opi_type_t ty, opi_t x) {
   while (x->type == opi_pair_type) {
     opi_t tmp = opi_cdr(x);
     opi_unref(opi_car(x));
-    opi_free_h3w(x);
+    opi_free(x);
     if (opi_dec_rc(x = tmp) > 0)
       return;
   }
@@ -745,7 +655,7 @@ static void
 table_delete(opi_type_t ty, opi_t x)
 {
   opi_hash_map_destroy(&opi_as(x, struct table).map);
-  free(x);
+  opi_free(x);
 }
 
 void
@@ -762,7 +672,7 @@ opi_table_cleanup(void)
 opi_t
 opi_table(void)
 {
-  struct table *tab = malloc(sizeof(struct table));
+  struct table *tab = opi_allocate();
   opi_hash_map_init(&tab->map);
   opi_init_cell(tab, opi_table_type);
   return (opi_t)tab;
@@ -819,40 +729,38 @@ opi_table_insert(opi_t tab, opi_t key, opi_t val, int replace, opi_t *err)
 }
 
 /******************************************************************************/
-struct port {
+struct file {
   struct opi_header header;
   FILE *fs;
   int (*close)(FILE*);
 };
 
-opi_type_t opi_iport_type, opi_oport_type;
+opi_type_t opi_file_type;
 
 opi_t opi_stdin, opi_stdout, opi_stderr;
 
 static void
-port_delete(opi_type_t type, opi_t x)
+file_delete(opi_type_t type, opi_t x)
 {
-  struct port *p = opi_as_ptr(x);
+  struct file *p = opi_as_ptr(x);
   if (p->close)
     p->close(p->fs);
-  free(p);
+  opi_free(p);
 }
 
 void
-opi_port_init(void)
+opi_file_init(void)
 {
-  opi_iport_type = opi_type("iport");
-  opi_oport_type = opi_type("oport");
+  opi_file_type = opi_type("FILE");
 
-  opi_type_set_delete_cell(opi_iport_type, port_delete);
-  opi_type_set_delete_cell(opi_oport_type, port_delete);
+  opi_type_set_delete_cell(opi_file_type, file_delete);
 
-  static struct port stdin_, stdout_, stderr_;
-  stdin_.fs = stdin;
+  static struct file stdin_, stdout_, stderr_;
+  stdin_.fs  = stdin;
   stdout_.fs = stdout;
   stderr_.fs = stderr;
 
-  stdin_.close = NULL;
+  stdin_.close  = NULL;
   stdout_.close = NULL;
   stderr_.close = NULL;
 
@@ -860,9 +768,9 @@ opi_port_init(void)
   opi_stdout = (opi_t)&stdout_;
   opi_stderr = (opi_t)&stderr_;
 
-  opi_init_cell(opi_stdin, opi_iport_type);
-  opi_init_cell(opi_stdout, opi_oport_type);
-  opi_init_cell(opi_stderr, opi_oport_type);
+  opi_init_cell(opi_stdin,  opi_file_type);
+  opi_init_cell(opi_stdout, opi_file_type);
+  opi_init_cell(opi_stderr, opi_file_type);
 
   opi_inc_rc(opi_stdin);
   opi_inc_rc(opi_stdout);
@@ -870,35 +778,24 @@ opi_port_init(void)
 }
 
 void
-opi_port_cleanup(void)
+opi_file_cleanup(void)
 {
-  opi_type_delete(opi_iport_type);
-  opi_type_delete(opi_oport_type);
+  opi_type_delete(opi_file_type);
 }
 
 opi_t
-opi_oport(FILE *fs, int (*close)(FILE*))
+opi_file(FILE *fs, int (*close)(FILE*))
 {
-  struct port *p = malloc(sizeof(struct port));
+  struct file *p = opi_allocate();
   p->fs = fs;
   p->close = close;
-  opi_init_cell(p, opi_oport_type);
-  return (opi_t)p;
-}
-
-opi_t
-opi_iport(FILE *fs, int (*close)(FILE*))
-{
-  struct port *p = malloc(sizeof(struct port));
-  p->fs = fs;
-  p->close = close;
-  opi_init_cell(p, opi_iport_type);
+  opi_init_cell(p, opi_file_type);
   return (opi_t)p;
 }
 
 FILE*
-opi_port_get_filestream(opi_t x)
-{ return opi_as(x, struct port).fs; }
+opi_file_get_value(opi_t x)
+{ return opi_as(x, struct file).fs; }
 
 /******************************************************************************/
 opi_type_t opi_fn_type;
@@ -1018,7 +915,7 @@ lazy_delete(opi_type_t type, opi_t x)
 {
   struct opi_lazy *lazy = opi_as_ptr(x);
   opi_unref(lazy->cell);
-  opi_free_h2w(lazy);
+  opi_free(lazy);
 }
 
 void
@@ -1035,183 +932,10 @@ opi_lazy_cleanup(void)
 opi_t
 opi_lazy(opi_t x)
 {
-  struct opi_lazy *lazy = opi_allocate_h2w();
+  struct opi_lazy *lazy = opi_allocate();
   opi_inc_rc(lazy->cell = x);
   lazy->is_ready = FALSE;
   opi_init_cell(lazy, opi_lazy_type);
   return (opi_t)lazy;
 }
-
-/******************************************************************************/
-struct blob {
-  struct opi_header header;
-  void *data;
-  size_t size;
-};
-
-opi_type_t opi_blob_type;
-
-static void
-blob_delete(opi_type_t type, opi_t x)
-{
-  struct blob *blob = opi_as_ptr(x);
-  if (blob->data)
-    free(blob->data);
-  free(blob);
-}
-
-void
-opi_blob_init(void)
-{
-  opi_blob_type = opi_type("blob");
-  opi_type_set_delete_cell(opi_blob_type, blob_delete);
-}
-
-void
-opi_blob_cleanup(void)
-{ opi_type_delete(opi_blob_type); }
-
-opi_t
-opi_blob(void *data, size_t size)
-{
-  struct blob *blob = malloc(sizeof(struct blob));
-  blob->data = data;
-  blob->size = size;
-  opi_init_cell(blob, opi_blob_type);
-  return (opi_t)blob;
-}
-
-const void*
-opi_blob_get_data(opi_t x)
-{ return opi_as(x, struct blob).data; }
-
-size_t
-opi_blob_get_size(opi_t x)
-{ return opi_as(x, struct blob).size; }
-
-void*
-opi_blob_drain(opi_t x)
-{
-  struct blob *blob = opi_as_ptr(x);
-  void *data = blob->data;
-  blob->data = NULL;
-  return data;
-}
-
-/******************************************************************************/
-struct array {
-  struct opi_header header;
-  opi_t *data;
-  size_t size;
-};
-
-opi_type_t opi_array_type;
-
-static void
-array_delete(opi_type_t type, opi_t x)
-{
-  struct array *arr = opi_as_ptr(x);
-  for (size_t i = 0; i < arr->size; ++i)
-    opi_unref(arr->data[i]);
-  free(arr->data);
-  opi_free_h2w(arr);
-}
-
-static void
-array_write(opi_type_t type, opi_t x, FILE *out)
-{
-  struct array *arr = opi_as_ptr(x);
-  fputs("array (", out);
-  for (size_t i = 0; i < arr->size; ++i) {
-    if (i > 0)
-      fputs(", ", out);
-    opi_write(arr->data[i], out);
-  }
-  putc(')', out);
-}
-
-static void
-array_display(opi_type_t type, opi_t x, FILE *out)
-{
-  struct array *arr = opi_as_ptr(x);
-  fputs("array (", out);
-  for (size_t i = 0; i < arr->size; ++i) {
-    if (i > 0)
-      fputs(", ", out);
-    opi_display(arr->data[i], out);
-  }
-  putc(')', out);
-}
-
-static int
-array_equal(opi_type_t type, opi_t x, opi_t y)
-{
-  struct array *arr1 = opi_as_ptr(x),
-               *arr2 = opi_as_ptr(y);
-
-  if (arr1->size != arr2->size)
-    return FALSE;
-
-  for (size_t i = 0; i < arr1->size; ++i) {
-    if (!opi_equal(arr1->data[i], arr2->data[i]))
-      return FALSE;
-  }
-  return TRUE;
-}
-
-void
-opi_array_init(void)
-{
-  opi_array_type = opi_type("array");
-  opi_type_set_delete_cell(opi_array_type, array_delete);
-  opi_type_set_write(opi_array_type, array_write);
-  opi_type_set_display(opi_array_type, array_display);
-  opi_type_set_equal(opi_array_type, array_equal);
-}
-
-void
-opi_array_cleanup(void)
-{ opi_type_delete(opi_array_type); }
-
-opi_t
-opi_array_move_noinc(opi_t *data, size_t n)
-{
-  struct array *arr = opi_allocate_h2w();
-  arr->data = data;
-  arr->size = n;
-  opi_init_cell(arr, opi_array_type);
-  return (opi_t)arr;
-}
-
-opi_t
-opi_array_move(opi_t *data, size_t n)
-{
-  for (size_t i = 0; i < n; ++i)
-    opi_inc_rc(data[i]);
-  return opi_array_move_noinc(data, n);
-}
-
-opi_t
-opi_array_noinc(const opi_t *data, size_t n)
-{
-  opi_t *copy = malloc(sizeof(opi_t) * n);
-  memcpy(copy, data, sizeof(opi_t) * n);
-  return opi_array_move_noinc(copy, n);
-}
-
-opi_t
-opi_array(const opi_t *data, size_t n)
-{
-  for (size_t i = 0; i < n; ++i)
-    opi_inc_rc(data[i]);
-  return opi_array_noinc(data, n);
-}
-
-const opi_t*
-opi_array_get_data(opi_t x)
-{ return opi_as(x, struct array).data; }
-
-size_t
-opi_array_get_length(opi_t x)
-{ return opi_as(x, struct array).size; }
 

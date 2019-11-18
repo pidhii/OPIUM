@@ -1,6 +1,8 @@
 #include "opium/opium.h"
 
 #include <math.h>
+#include <string.h>
+#include <errno.h>
 
 #define BINOP(name, op)                                                               \
   static opi_t                                                                        \
@@ -11,7 +13,7 @@
     if (opi_unlikely(lhs->type != opi_number_type || rhs->type != opi_number_type)) { \
       opi_drop(lhs);                                                                  \
       opi_drop(rhs);                                                                  \
-      return opi_undefined(opi_symbol("type_error"));                                 \
+      return opi_undefined(opi_symbol("type-error"));                                 \
     }                                                                                 \
     opi_t ret = opi_number(opi_number_get_value(lhs) op opi_number_get_value(rhs));   \
     opi_drop(lhs);                                                                    \
@@ -28,7 +30,7 @@
     if (opi_unlikely(lhs->type != opi_number_type || rhs->type != opi_number_type)) { \
       opi_drop(lhs);                                                                  \
       opi_drop(rhs);                                                                  \
-      return opi_undefined(opi_symbol("type_error"));                                 \
+      return opi_undefined(opi_symbol("type-error"));                                 \
     }                                                                                 \
     int tmp = opi_number_get_value(lhs) op opi_number_get_value(rhs);                 \
     opi_drop(lhs);                                                                    \
@@ -47,22 +49,6 @@ BINOP_CMP(le, <=)
 BINOP_CMP(ge, >=)
 BINOP_CMP(eq, ==)
 BINOP_CMP(ne, !=)
-
-static opi_t
-mod_(void)
-{
-  opi_t lhs = opi_pop();
-  opi_t rhs = opi_pop();
-  if (opi_unlikely(lhs->type != opi_number_type || rhs->type != opi_number_type)) {
-    opi_drop(lhs);
-    opi_drop(rhs);
-    return opi_undefined(opi_symbol("type_error"));
-  }
-  opi_t ret = opi_number(fmodl(opi_number_get_value(lhs), opi_number_get_value(rhs)));
-  opi_drop(lhs);
-  opi_drop(rhs);
-  return ret;
-}
 
 static opi_t
 is_(void)
@@ -111,7 +97,7 @@ car_(void)
   opi_t x = opi_pop();
   if (opi_unlikely(x->type != opi_pair_type)) {
     opi_drop(x);
-    return opi_undefined(opi_symbol("type_error"));
+    return opi_undefined(opi_symbol("type-error"));
   }
   opi_t ret = opi_car(x);
   opi_inc_rc(ret);
@@ -126,7 +112,7 @@ cdr_(void)
   opi_t x = opi_pop();
   if (opi_unlikely(x->type != opi_pair_type)) {
     opi_drop(x);
-    return opi_undefined(opi_symbol("type_error"));
+    return opi_undefined(opi_symbol("type-error"));
   }
   opi_t ret = opi_cdr(x);
   opi_inc_rc(ret);
@@ -143,102 +129,6 @@ null_(void)
   opi_drop(x);
   return ret;
 }
-
-static
-opi_t g_generic_write, g_generic_display;
-
-static opi_t
-default_write(void)
-{
-  opi_t x = opi_pop();
-  opi_t p = opi_pop();
-  if (opi_unlikely(!opi_is_port(p))) {
-    opi_drop(x);
-    opi_drop(p);
-    return opi_undefined(opi_symbol("type_error"));
-  }
-  if (opi_unlikely(p->type != opi_oport_type)) {
-    opi_drop(x);
-    opi_drop(p);
-    return opi_undefined(opi_symbol("bad_port"));
-  }
-  opi_write(x, opi_port_get_filestream(p));
-  opi_drop(x);
-  opi_drop(p);
-  return opi_nil;
-}
-
-static opi_t
-write_wrap(void)
-{
-  opi_t x = opi_get(1);
-  if (opi_nargs == 2) {
-    opi_t p = opi_get(2);
-    if (opi_unlikely(!opi_is_port(p))) {
-      opi_drop(opi_pop());
-      opi_drop(opi_pop());
-      return opi_undefined(opi_symbol("type_error"));
-    }
-    if (opi_unlikely(p->type != opi_oport_type)) {
-      opi_drop(opi_pop());
-      opi_drop(opi_pop());
-      return opi_undefined(opi_symbol("bad_port"));
-    }
-  } else {
-    // insert port before object
-    opi_pop();
-    opi_push(opi_stdout);
-    opi_push(x);
-  }
-  return opi_fn_apply(g_generic_write, 2);
-}
-
-static opi_t
-default_display(void)
-{
-  opi_t x = opi_pop();
-  opi_t p = opi_pop();
-  if (opi_unlikely(!opi_is_port(p))) {
-    opi_drop(x);
-    opi_drop(p);
-    return opi_undefined(opi_symbol("type_error"));
-  }
-  if (opi_unlikely(p->type != opi_oport_type)) {
-    opi_drop(x);
-    opi_drop(p);
-    return opi_undefined(opi_symbol("bad_port"));
-  }
-  opi_display(x, opi_port_get_filestream(p));
-  opi_drop(x);
-  opi_drop(p);
-  return opi_nil;
-}
-
-static opi_t
-display_wrap(void)
-{
-  opi_t x = opi_get(1);
-  if (opi_nargs == 2) {
-    opi_t p = opi_get(2);
-    if (opi_unlikely(!opi_is_port(p))) {
-      opi_drop(opi_pop());
-      opi_drop(opi_pop());
-      return opi_undefined(opi_symbol("type_error"));
-    }
-    if (opi_unlikely(p->type != opi_oport_type)) {
-      opi_drop(opi_pop());
-      opi_drop(opi_pop());
-      return opi_undefined(opi_symbol("bad_port"));
-    }
-  } else {
-    // insert port before object
-    opi_pop();
-    opi_push(opi_stdout);
-    opi_push(x);
-  }
-  return opi_fn_apply(g_generic_display, 2);
-}
-
 static opi_t
 print(void)
 {
@@ -248,9 +138,8 @@ print(void)
     opi_t x = opi_pop();
     if (!isfirst)
       putc(' ', stdout);
-    opi_push(opi_stdout);
-    opi_push(x);
-    opi_drop(opi_fn_apply(g_generic_display, 2));
+    opi_display(x, stdout);
+    opi_drop(x);
     isfirst = FALSE;
   }
   putc('\n', stdout);
@@ -260,7 +149,7 @@ print(void)
 static opi_t
 format_aux(const char *fmt, size_t offs, opi_t port, size_t nargs)
 {
-  FILE *fs = opi_port_get_filestream(port);
+  FILE *fs = opi_file_get_value(port);
   size_t iarg = 0;
   opi_t x;
   for (const char *p = fmt; *p; ++p) {
@@ -272,32 +161,22 @@ format_aux(const char *fmt, size_t offs, opi_t port, size_t nargs)
 
         case 'w':
           if (opi_unlikely(iarg > nargs))
-            return opi_undefined(opi_symbol("out_of_range"));
+            return opi_undefined(opi_symbol("out-of-range"));
           x = opi_get(offs + iarg++);
-          opi_push(port);
-          opi_push(x);
-          x = opi_fn_apply(g_generic_write, 2);
-          if (opi_unlikely(x->type == opi_undefined_type))
-            return x;
-          else
-            opi_drop(x);
+          opi_write(x, fs);
+          opi_drop(x);
           break;
 
         case 'd':
           if (opi_unlikely(iarg > nargs))
-            return opi_undefined(opi_symbol("out_of_range"));
+            return opi_undefined(opi_symbol("out-of-range"));
           x = opi_get(offs + iarg++);
-          opi_push(port);
-          opi_push(x);
-          x = opi_fn_apply(g_generic_display, 2);
-          if (opi_unlikely(x->type == opi_undefined_type))
-            return x;
-          else
-            opi_drop(x);
+          opi_display(x, fs);
+          opi_drop(x);
           break;
 
         default:
-          return opi_undefined(opi_symbol("format_error"));
+          return opi_undefined(opi_symbol("format-error"));
       }
     } else {
       putc(*p, fs);
@@ -318,16 +197,12 @@ fprintf_(void)
 
   opi_t port = opi_get(1);
   opi_t fmt = opi_get(2);
-  if (opi_unlikely(!opi_is_port(port))) {
-    err = opi_undefined(opi_symbol("type_error"));
-    goto error;
-  }
-  if (opi_unlikely(port->type != opi_oport_type)) {
-    err = opi_undefined(opi_symbol("bad_port"));
+  if (opi_unlikely(port->type != opi_file_type)) {
+    err = opi_undefined(opi_symbol("type-error"));
     goto error;
   }
   if (opi_unlikely(fmt->type != opi_string_type)) {
-    err = opi_undefined(opi_symbol("type_error"));
+    err = opi_undefined(opi_symbol("type-error"));
     goto error;
   }
 
@@ -363,12 +238,12 @@ format(void)
   char *ptr;
   size_t size;
   FILE *fs = open_memstream(&ptr, &size);
-  opi_t port = opi_oport(fs, fclose);
+  opi_t port = opi_file(fs, fclose);
   opi_inc_rc(port);
 
   opi_t fmt = opi_get(1);
   if (opi_unlikely(fmt->type != opi_string_type)) {
-    err = opi_undefined(opi_symbol("type_error"));
+    err = opi_undefined(opi_symbol("type-error"));
     goto error;
   }
 
@@ -393,7 +268,7 @@ static opi_t
 newline_(void)
 {
   opi_t p = opi_nargs == 1 ? opi_pop() : opi_stdout;
-  putc('\n', opi_port_get_filestream(p));
+  putc('\n', opi_file_get_value(p));
   opi_drop(p);
   return opi_nil;
 }
@@ -472,47 +347,7 @@ table(void)
 }
 
 static opi_t
-array(void)
-{
-  size_t nargs = opi_nargs;
-  opi_t *data = malloc(sizeof(opi_t) * nargs);
-  for (size_t i = 0; i < nargs; ++i)
-    opi_inc_rc(data[i] = opi_pop());
-  return opi_array_move_noinc(data, nargs);
-}
-
-static opi_t
-default_at(void)
-{
-  opi_t l = opi_pop();
-  opi_t idx = opi_pop();
-
-  if (opi_unlikely(idx->type != opi_number_type)) {
-    opi_drop(l);
-    opi_drop(idx);
-    return opi_undefined(opi_symbol("type_error"));
-  }
-
-  size_t k = opi_number_get_value(idx);
-  if (opi_unlikely(k >= opi_length(l))) {
-    opi_drop(l);
-    opi_drop(idx);
-    return opi_undefined(opi_symbol("out_of_range"));
-  }
-
-  while (k--)
-    l = opi_cdr(l);
-
-  opi_t ret = opi_car(l);
-  opi_inc_rc(ret);
-  opi_drop(l);
-  opi_drop(idx);
-  opi_dec_rc(ret);
-  return ret;
-}
-
-static opi_t
-table_at(void)
+table_ref(void)
 {
   opi_t tab = opi_pop();
   opi_t key = opi_pop();
@@ -529,6 +364,36 @@ table_at(void)
 }
 
 static opi_t
+default_at(void)
+{
+  opi_t l = opi_pop();
+  opi_t idx = opi_pop();
+
+  if (opi_unlikely(idx->type != opi_number_type)) {
+    opi_drop(l);
+    opi_drop(idx);
+    return opi_undefined(opi_symbol("type-error"));
+  }
+
+  size_t k = opi_number_get_value(idx);
+  if (opi_unlikely(k >= opi_length(l))) {
+    opi_drop(l);
+    opi_drop(idx);
+    return opi_undefined(opi_symbol("out-of-range"));
+  }
+
+  while (k--)
+    l = opi_cdr(l);
+
+  opi_t ret = opi_car(l);
+  opi_inc_rc(ret);
+  opi_drop(l);
+  opi_drop(idx);
+  opi_dec_rc(ret);
+  return ret;
+}
+
+static opi_t
 string_at(void)
 {
   opi_t str = opi_pop();
@@ -537,43 +402,18 @@ string_at(void)
   if (opi_unlikely(idx->type != opi_number_type)) {
     opi_drop(str);
     opi_drop(idx);
-    return opi_undefined(opi_symbol("type_error"));
+    return opi_undefined(opi_symbol("type-error"));
   }
 
   size_t k = opi_number_get_value(idx);
   if (opi_unlikely(k >= opi_string_get_length(str))) {
     opi_drop(str);
     opi_drop(idx);
-    return opi_undefined(opi_symbol("out_of_range"));
+    return opi_undefined(opi_symbol("out-of-range"));
   }
 
   opi_t ret = opi_string_from_char(opi_string_get_value(str)[k]);
   opi_drop(str);
-  opi_drop(idx);
-  return ret;
-}
-
-static opi_t
-array_at(void)
-{
-  opi_t arr = opi_pop();
-  opi_t idx = opi_pop();
-
-  if (opi_unlikely(idx->type != opi_number_type)) {
-    opi_drop(arr);
-    opi_drop(idx);
-    return opi_undefined(opi_symbol("type_error"));
-  }
-
-  size_t k = opi_number_get_value(idx);
-  if (opi_unlikely(k >= opi_array_get_length(arr))) {
-    opi_drop(arr);
-    opi_drop(idx);
-    return opi_undefined(opi_symbol("out_of_range"));
-  }
-
-  opi_t ret = opi_array_get_data(arr)[k];
-  opi_drop(arr);
   opi_drop(idx);
   return ret;
 }
@@ -597,9 +437,13 @@ compose_aux(void)
   if (!opi_test_arity(opi_fn_get_arity(data->g), opi_nargs)) {
     for (size_t i = 1; i <= opi_nargs; ++i)
       opi_drop(opi_pop());
-    return opi_undefined(opi_symbol("arity_error"));
+    return opi_undefined(opi_symbol("arity-error"));
   }
+
   opi_t tmp = opi_fn_apply(data->g, opi_nargs);
+  if (opi_unlikely(tmp->type == opi_undefined_type))
+    return tmp;
+
   opi_push(tmp);
   return opi_fn_apply(data->f, 1);
 }
@@ -626,14 +470,17 @@ apply(void)
   if (f->type != opi_fn_type) {
     opi_drop(f);
     opi_drop(l);
-    return opi_undefined(opi_symbol("type_error"));
+    return opi_undefined(opi_symbol("type-error"));
   }
 
   size_t nargs = opi_length(l);
   if (!opi_test_arity(opi_fn_get_arity(f), nargs)) {
+    opi_debug("arity = %d, nargs = %zu\n", opi_fn_get_arity(f), nargs);
+    opi_write(l, OPI_DEBUG);
+    putc('\n', OPI_DEBUG);
     opi_drop(f);
     opi_drop(l);
-    return opi_undefined(opi_symbol("arity_error"));
+    return opi_undefined(opi_symbol("arity-error"));
   }
 
   opi_sp += nargs;
@@ -656,33 +503,56 @@ lazy(void)
   opi_t x = opi_pop();
   if (opi_unlikely(x->type != opi_fn_type)) {
     opi_drop(x);
-    return opi_undefined(opi_symbol("type_error"));
+    return opi_undefined(opi_symbol("type-error"));
   }
   if (opi_unlikely(!opi_test_arity(opi_fn_get_arity(x), 0))) {
     opi_drop(x);
-    return opi_undefined(opi_symbol("arity_error"));
+    return opi_undefined(opi_symbol("arity-error"));
   }
   return opi_lazy(x);
 }
 
 static opi_t
-flush_lazy(void)
+force(void)
 {
   opi_t lazy = opi_pop();
-  if (opi_unlikely(lazy->type != opi_lazy_type))
-    return lazy;
+  if (opi_unlikely(lazy->type != opi_lazy_type)) {
+    opi_drop(lazy);
+    return opi_undefined(opi_symbol("type-error"));
+  }
   opi_t ret = opi_lazy_get_value(lazy);
-  opi_inc_rc(ret);
-  opi_drop(lazy);
-  opi_dec_rc(ret);
+  // does it optimize?
+  if (lazy->rc == 0) {
+    opi_inc_rc(ret);
+    opi_drop(lazy);
+    opi_dec_rc(ret);
+  }
   return ret;
 }
 
 static opi_t
-any(void)
+concat(void)
 {
-  opi_drop(opi_pop());
-  return opi_true;
+  opi_t s1 = opi_pop();
+  opi_t s2 = opi_pop();
+  if (opi_unlikely(s1->type != opi_string_type
+                || s2->type != opi_string_type))
+  {
+    opi_drop(s1);
+    opi_drop(s2);
+    return opi_undefined(opi_symbol("type-error"));
+  }
+
+  size_t l1 = opi_string_get_length(s1);
+  size_t l2 = opi_string_get_length(s2);
+  char *buf = malloc(l1 + l2 + 1);
+  memcpy(buf, opi_string_get_value(s1), l1);
+  memcpy(buf + l1, opi_string_get_value(s2), l2);
+  buf[l1 + l2] = '\0';
+
+  opi_drop(s1);
+  opi_drop(s2);
+  return opi_string_move2(buf, l1 + l2);
 }
 
 #define TYPE_PRED(name, ty)                          \
@@ -696,55 +566,219 @@ any(void)
   }
 
 TYPE_PRED(boolean_p, opi_boolean_type)
-TYPE_PRED(lazy_p, opi_lazy_type)
 TYPE_PRED(pair_p, opi_pair_type)
-TYPE_PRED(table_p, opi_table_type)
 TYPE_PRED(string_p, opi_string_type)
 TYPE_PRED(undefined_p, opi_undefined_type)
 TYPE_PRED(number_p, opi_number_type)
-TYPE_PRED(blob_p, opi_blob_type)
-TYPE_PRED(array_p, opi_array_type)
 TYPE_PRED(symbol_p, opi_symbol_type)
+TYPE_PRED(fn_p, opi_fn_type)
+
+
+struct vaarg_data {
+  opi_t f;
+  size_t nmin;
+};
+
+static void
+vaarg_delete(struct opi_fn *fn)
+{
+  struct vaarg_data *data = fn->data;
+  opi_unref(data->f);
+  free(data);
+  opi_fn_delete(fn);
+}
+
+static opi_t
+vaarg_aux(void)
+{
+  struct vaarg_data *data = opi_fn_get_data(opi_current_fn);
+
+  if (opi_unlikely(opi_nargs < data->nmin)) {
+    while (opi_nargs--)
+      opi_drop(opi_pop());
+    return opi_undefined(opi_symbol("arity-error"));
+  }
+
+  opi_t args[data->nmin + 1];
+  for (size_t i = 0; i < data->nmin; ++i, --opi_nargs)
+    args[i] = opi_pop();
+  args[data->nmin] = list();
+
+  for (int i = data->nmin; i >= 0; --i)
+    opi_push(args[i]);
+
+  return opi_fn_apply(data->f, data->nmin + 1);
+}
+
+static opi_t
+vaarg(void)
+{
+  opi_t nmin = opi_pop();
+  opi_t f = opi_pop();
+
+  if (opi_unlikely(nmin->type != opi_number_type || f->type != opi_fn_type)) {
+    opi_drop(nmin);
+    opi_drop(f);
+    return opi_undefined(opi_symbol("type-error"));
+  }
+
+  size_t ari = opi_number_get_value(nmin);
+  opi_drop(nmin);
+
+  if (opi_unlikely(!opi_test_arity(opi_fn_get_arity(f), ari + 1))) {
+    opi_drop(f);
+    return opi_undefined(opi_symbol("airty-error"));
+  }
+
+  struct vaarg_data *data = malloc(sizeof(struct vaarg_data));
+  opi_inc_rc(data->f = f);
+  data->nmin = ari;
+
+  opi_t f_va = opi_fn(NULL, vaarg_aux, -(ari + 1));
+  opi_fn_set_data(f_va, data, vaarg_delete);
+  return f_va;
+}
+
+static opi_t
+system_(void)
+{
+  opi_t cmd = opi_pop();
+  if (opi_unlikely(cmd->type != opi_string_type)) {
+    opi_drop(cmd);
+    return opi_undefined(opi_symbol("type-error"));
+  }
+  int err = system(opi_string_get_value(cmd));
+  opi_drop(cmd);
+  return opi_number(err);
+}
+
+static opi_t
+shell(void)
+{
+  opi_t cmd = opi_pop();
+  if (opi_unlikely(cmd->type != opi_string_type)) {
+    opi_drop(cmd);
+    return opi_undefined(opi_symbol("type-error"));
+  }
+
+  FILE *fs = popen(opi_string_get_value(cmd), "r");
+  opi_drop(cmd);
+
+  if (!fs)
+    return opi_undefined(opi_string(strerror(errno)));
+
+  cod_vec(char) buf;
+  cod_vec_init(buf);
+
+  errno = 0;
+  while (TRUE) {
+    int c = fgetc(fs);
+    if (opi_unlikely(c == EOF)) {
+      if (errno) {
+        pclose(fs);
+        cod_vec_destroy(buf);
+        return opi_undefined(opi_string(strerror(errno)));
+
+      } else {
+        errno = 0;
+        int err = pclose(fs);
+        if (err || errno) {
+          cod_vec_destroy(buf);
+          if (err)
+            return opi_undefined(opi_symbol("shell-error"));
+          else
+            return opi_undefined(opi_string(strerror(errno)));
+        }
+        if (buf.data[buf.len - 1] == '\n')
+          buf.data[buf.len - 1] = 0;
+        else
+          cod_vec_push(buf, '\0');
+        return opi_string_move2(buf.data, buf.len - 1);
+      }
+    }
+    cod_vec_push(buf, c);
+  }
+}
+
+static opi_t
+loadfile(void)
+{
+  struct opi_context *ctx = opi_fn_get_data(opi_current_fn);
+
+  opi_t path = opi_pop();
+  opi_t srcd = opi_nargs > 1 ? opi_pop() : opi_nil;
+  if (opi_unlikely(path->type != opi_string_type)) {
+    opi_drop(path);
+    opi_drop(srcd);
+    return opi_undefined(opi_symbol("type-error"));
+  }
+
+  FILE *fs = fopen(opi_string_get_value(path), "r");
+  opi_drop(path);
+  if (!fs) {
+    opi_drop(srcd);
+    return opi_undefined(opi_string(strerror(errno)));
+  }
+
+  struct opi_ast *ast = opi_parse(fs);
+  fclose(fs);
+
+  struct opi_builder bldr;
+  opi_builder_init(&bldr, ctx);
+  opi_builtins(&bldr);
+  for (opi_t it = srcd; it->type == opi_pair_type; it = opi_cdr(it)) {
+    opi_t d = opi_car(it);
+    if (d->type != opi_string_type) {
+      opi_drop(srcd);
+      opi_ast_delete(ast);
+      opi_builder_destroy(&bldr);
+      return opi_undefined(opi_symbol("type-error"));
+    }
+    opi_builder_add_source_directory(&bldr, opi_string_get_value(d));
+  }
+  opi_drop(srcd);
+
+  struct opi_bytecode bc;
+  opi_bytecode_init(&bc);
+  opi_build(&bldr, ast, &bc);
+  opi_ast_delete(ast);
+
+  opi_t ret = opi_vm(&bc);
+  opi_inc_rc(ret);
+
+  opi_context_drain_bytecode(ctx, &bc);
+  opi_bytecode_destroy(&bc);
+  opi_builder_destroy(&bldr);
+
+  opi_dec_rc(ret);
+  return ret;
+}
 
 void
 opi_builtins(struct opi_builder *bldr)
 {
   opi_builder_def_const(bldr, "null?", opi_fn("null?", null_, 1));
-  opi_builder_def_const(bldr, "any?", opi_fn("any?", any, 1));
   opi_builder_def_const(bldr, "boolean?", opi_fn("boolean?", boolean_p, 1));
-  opi_builder_def_const(bldr, "lazy?", opi_fn("lazy?", lazy_p, 1));
   opi_builder_def_const(bldr, "pair?", opi_fn("pair?", pair_p, 1));
-  opi_builder_def_const(bldr, "table?", opi_fn("table?", table_p, 1));
   opi_builder_def_const(bldr, "string?", opi_fn("string?", string_p, 1));
   opi_builder_def_const(bldr, "undefined?", opi_fn("undefined?", undefined_p, 1));
   opi_builder_def_const(bldr, "number?", opi_fn("number?", number_p, 1));
-  opi_builder_def_const(bldr, "blob?", opi_fn("blob?", blob_p, 1));
-  opi_builder_def_const(bldr, "array?", opi_fn("array?", array_p, 1));
   opi_builder_def_const(bldr, "symbol?", opi_fn("symbol?", symbol_p, 1));
+  opi_builder_def_const(bldr, "fn?", opi_fn("fn?", fn_p, 1));
 
-  opi_builder_def_const(bldr, "+", opi_fn("+", add, 2));
-  opi_builder_def_const(bldr, "-", opi_fn("-", sub, 2));
-  opi_builder_def_const(bldr, "*", opi_fn("*", mul, 2));
-  opi_builder_def_const(bldr, "/", opi_fn("/", div_, 2));
-  opi_builder_def_const(bldr, "%", opi_fn("%", mod_, 2));
-  opi_builder_def_const(bldr, "<", opi_fn("<", lt, 2));
-  opi_builder_def_const(bldr, ">", opi_fn(">", gt, 2));
-  opi_builder_def_const(bldr, "<=", opi_fn("<=", le, 2));
-  opi_builder_def_const(bldr, ">=", opi_fn(">=", ge, 2));
-  opi_builder_def_const(bldr, "==", opi_fn("==", eq, 2));
-  opi_builder_def_const(bldr, "/=", opi_fn("/=", ne, 2));
-  opi_builder_def_const(bldr, ":", opi_fn(":", cons_, 2));
-  opi_builder_def_const(bldr, ".", opi_fn(".", compose, 2));
+  opi_builder_def_const(bldr, "-|", opi_fn("-|", compose, 2));
+  opi_builder_def_const(bldr, "++", opi_fn("++", concat, 2));
   opi_builder_def_const(bldr, "car", opi_fn("car", car_, 1));
   opi_builder_def_const(bldr, "cdr", opi_fn("cdr", cdr_, 1));
   opi_builder_def_const(bldr, "list", opi_fn("list", list, -1));
   opi_builder_def_const(bldr, "table", opi_fn("table", table, 1));
-  opi_builder_def_const(bldr, "array", opi_fn("array", array, -1));
+  opi_builder_def_const(bldr, ".", opi_fn(".", table_ref, 2));
   opi_builder_def_const(bldr, "is", opi_fn("is", is_, 2));
   opi_builder_def_const(bldr, "eq", opi_fn("eq", eq_, 2));
   opi_builder_def_const(bldr, "equal", opi_fn("equal", equal_, 2));
   opi_builder_def_const(bldr, "not", opi_fn("not", not_, 1));
   opi_builder_def_const(bldr, "apply", opi_fn("apply", apply, 2));
+  opi_builder_def_const(bldr, "vaarg", opi_fn("vaarg", vaarg, 2));
 
   opi_builder_def_const(bldr, "newline", opi_fn("newline", newline_, -1));
   opi_builder_def_const(bldr, "print", opi_fn("print", print, -1));
@@ -758,25 +792,12 @@ opi_builtins(struct opi_builder *bldr)
   opi_builder_def_const(bldr, "id", opi_fn("id", id, 1));
 
   opi_builder_def_const(bldr, "lazy", opi_fn("lazy", lazy, 1));
-  opi_builder_def_const(bldr, "!", opi_fn("!", flush_lazy, 1));
+  opi_builder_def_const(bldr, "force", opi_fn("force", force, 1));
 
-  struct opi_trait *write_trait = opi_trait(opi_fn("default_write", default_write, 2));
-  g_generic_write = opi_trait_into_generic(write_trait, "write");
-  opi_builder_add_trait(bldr, "write", write_trait);
-  opi_builder_def_const(bldr, "write", g_generic_write);
-  opi_builder_def_const(bldr, "write", opi_fn("write_wrap", write_wrap, -2));
+  opi_builder_def_const(bldr, "system", opi_fn("system", system_, 1));
+  opi_builder_def_const(bldr, "shell", opi_fn("shell", shell, 1));
 
-  struct opi_trait *display_trait = opi_trait(opi_fn("default_display", default_display, 2));
-  g_generic_display = opi_trait_into_generic(display_trait, "display");
-  opi_builder_add_trait(bldr, "display", display_trait);
-  opi_builder_def_const(bldr, "display", g_generic_display);
-  opi_builder_def_const(bldr, "display", opi_fn("display_wrap", display_wrap, -2));
-
-  struct opi_trait *at_trait = opi_trait(opi_fn("!!", default_at, 2));
-  opi_trait_impl(at_trait, opi_table_type, opi_fn("table_at", table_at, 2));
-  opi_trait_impl(at_trait, opi_string_type, opi_fn("string_at", string_at, 2));
-  opi_trait_impl(at_trait, opi_array_type, opi_fn("array_at", array_at, 2));
-  opi_t at_generic = opi_trait_into_generic(at_trait, "!!");
-  opi_builder_add_trait(bldr, "!!", at_trait);
-  opi_builder_def_const(bldr, "!!", at_generic);
+  opi_t loadfile_fn = opi_fn("loadfile", loadfile, -2);
+  opi_fn_set_data(loadfile_fn, bldr->ctx, NULL);
+  opi_builder_def_const(bldr, "loadfile", loadfile_fn);
 }

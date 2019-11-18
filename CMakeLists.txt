@@ -87,6 +87,11 @@ add_executable (opium
   $<TARGET_OBJECTS:opium_object_lib>)
 target_include_directories (opium PUBLIC ${LIBJIT_ROOT}/install/include)
 target_link_libraries (opium libjit -lm -ldl)
+install (
+  TARGETS
+    opium
+  DESTINATION
+    bin)
 
 set (LIBS_ROOT ${CMAKE_SOURCE_DIR}/libs)
 
@@ -95,9 +100,20 @@ set_target_properties (opium_base_dl
   PROPERTIES
     PREFIX ""
     OUTPUT_NAME base)
-
-install (TARGETS opium DESTINATION bin)
-
-install (TARGETS opium_base_dl DESTINATION lib/opium/baselib)
-install (FILES ${LIBS_ROOT}/base/base.opi DESTINATION lib/opium/baselib)
-install (FILES ${LIBS_ROOT}/base/base DESTINATION lib/opium)
+install (
+  TARGETS
+    opium_base_dl
+  DESTINATION
+    lib/opium/baselib)
+install (
+  FILES
+    ${LIBS_ROOT}/base/base.opi
+    ${LIBS_ROOT}/base/common.opi
+    ${LIBS_ROOT}/base/list-base.opi
+  DESTINATION
+    lib/opium/baselib)
+install (
+  FILES
+    ${LIBS_ROOT}/base/base
+  DESTINATION
+    lib/opium)

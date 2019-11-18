@@ -1,54 +1,38 @@
 #include "opium/opium.h"
 
-#define CELL(n)               \
-  struct h##n##w {            \
-    struct opi_header header; \
-    uintptr_t w[n];           \
-  };
+struct cell {
+  struct opi_header header;
+  uintptr_t w[2];
+};
 
-#define ALLOCATOR(n)                                         \
-  static                                                     \
-  struct cod_ualloc_h##n##w g_allocator_h##n##w;             \
-                                                             \
-  void*                                                      \
-  opi_allocate_h##n##w()                                     \
-  { return cod_ualloc_h##n##w_alloc(&g_allocator_h##n##w); } \
-                                                             \
-  void                                                       \
-  opi_free_h##n##w(void *ptr)                                \
-  { cod_ualloc_h##n##w_free(&g_allocator_h##n##w, ptr); }
-
-CELL(2)
-#define UALLOC_NAME h2w
-#define UALLOC_TYPE struct h2w
+#define UALLOC_NAME cell
+#define UALLOC_TYPE struct cell
 #include "codeine/ualloc.h"
-ALLOCATOR(2)
 
-CELL(3)
-#define UALLOC_NAME h3w
-#define UALLOC_TYPE struct h3w
-#include "codeine/ualloc.h"
-ALLOCATOR(3)
+static
+struct cod_ualloc_cell g_allocator;
 
-CELL(4)
-#define UALLOC_NAME h4w
-#define UALLOC_TYPE struct h4w
-#include "codeine/ualloc.h"
-ALLOCATOR(4)
+void*
+opi_allocate()
+{
+  return cod_ualloc_cell_alloc(&g_allocator);
+}
+
+void
+opi_free(void *ptr)
+{
+  cod_ualloc_cell_free(&g_allocator, ptr);
+}
 
 void
 opi_allocators_init(void)
 {
-  cod_ualloc_h2w_init(&g_allocator_h2w);
-  cod_ualloc_h3w_init(&g_allocator_h3w);
-  cod_ualloc_h4w_init(&g_allocator_h4w);
+  cod_ualloc_cell_init(&g_allocator);
 }
 
 void
 opi_allocators_cleanup(void)
 {
-  cod_ualloc_h2w_destroy(&g_allocator_h2w);
-  cod_ualloc_h3w_destroy(&g_allocator_h3w);
-  cod_ualloc_h4w_destroy(&g_allocator_h4w);
+  cod_ualloc_cell_destroy(&g_allocator);
 }
 

@@ -72,7 +72,7 @@ binds_push(struct binds *binds, const char *var, struct opi_ast *val)
 %right '=' RARROW '\\' '@'
 
 %token<num> NUMBER
-%token<str> SYMBOL STRING
+%token<str> SYMBOL STRING SHELL
 %token<opi> CONST
 %left LET REC
 %left DEF
@@ -84,10 +84,9 @@ binds_push(struct binds *binds, const char *var, struct opi_ast *val)
 %token NAMESPACE
 %token STRUCT
 %token USE AS
-%token TRAIT IMPL
 %nonassoc RETURN
 %token WTF
-
+%token DOTDOT
 
 //
 // Patterns
@@ -96,30 +95,32 @@ binds_push(struct binds *binds, const char *var, struct opi_ast *val)
 %type<ast> Form
 %type<ast> Expr
 
-%type<binds> binds fnbinds
+%type<binds> binds recbins
 %type<strvec> param param_aux
 %type<ptrvec> arg arg_aux
 %type<ast> block block_expr
 %type<ptrvec> block_aux
-%type<ast> fn_aux fn_body
-%type<ast> def_aux def_body
-%type<ast> lambda
+%type<ast> fn_aux vafn_aux anyfn_aux
+%type<ast> def_aux vadef_aux anydef_aux
+%type<ast> lambda valambda anylambda
 %type<str> refstr
-%type<matches> matches matches_aux matches_key matches_pos
+%type<matches> matches matches_aux
 %type<strvec> fields
 
 %right OR
-%right '$' LONGFLUSH
+%right '$'
+%left '!'
 %right SCOR
 %right SCAND
 %nonassoc IS ISNOT EQ EQUAL NUMLT NUMGT NUMLE NUMGE NUMEQ NUMNE
-%right ':' // TODO: ++
+%right ':' PLUSPLUS
 %right '+' '-'
 %left '*' '/' '%'
-// TODO: **
-%right '.'
-%left AT
+%right COMPOSE
 %right NOT
+%left '.'
+
+%left UMINUS
 
 %start entry
 %%
@@ -131,6 +132,11 @@ Atom
   | refstr { $$ = opi_ast_var($1); free($1); }
   | CONST { $$ = opi_ast_const($1); }
   | STRING { $$ = opi_ast_const(opi_string($1)); free($1); }
+  | SHELL {
+    struct opi_ast *cmd = opi_ast_const(opi_string($1));
+    $$ = opi_ast_apply(opi_ast_var("shell"), &cmd, 1);
+    free($1);
+  }
   | '(' Expr ')' { $$ = $2; }
   | WTF { $$ = opi_ast_var("wtf"); }
   | '[' arg_aux ']' {
@@ -138,9 +144,11 @@ Atom
     cod_ptrvec_destroy($2, NULL);
     free($2);
   }
-  | '!' Atom {
-    struct opi_ast *p[] = { $2 };
-    $$ = opi_ast_apply(opi_ast_var("!"), p, 1);
+  | '[' ']' { $$ = opi_ast_const(opi_nil); }
+  | Atom '.' SYMBOL {
+    struct opi_ast *p[] = { $1, opi_ast_const(opi_symbol($3)) };
+    $$ = opi_ast_apply(opi_ast_var("."), p, 2);
+    free($3);
   }
 ;
 
@@ -157,10 +165,15 @@ refstr
 
 Form
   : Atom
-  | Form arg {
+  | Atom arg {
     $$ = opi_ast_apply($1, (struct opi_ast**)$2->data, $2->size);
     cod_ptrvec_destroy($2, NULL);
     free($2);
+  }
+  | Expr '!' arg {
+    $$ = opi_ast_apply($1, (struct opi_ast**)$3->data, $3->size);
+    cod_ptrvec_destroy($3, NULL);
+    free($3);
   }
 ;
 
@@ -169,14 +182,10 @@ Expr
   | '(' ')' {
     $$ = opi_ast_apply(opi_ast_var("()"), NULL, 0);
   }
-  | lambda
+  | anylambda
   | '@' Expr {
     struct opi_ast *fn = opi_ast_fn(NULL, 0, $2);
     $$ = opi_ast_apply(opi_ast_var("lazy"), &fn, 1);
-  }
-  | LONGFLUSH Expr {
-    struct opi_ast *p[] = { $2 };
-    $$ = opi_ast_apply(opi_ast_var("!"), p, 1);
   }
   | Expr IS Expr {
     struct opi_ast *p[] = { $1, $3 };
@@ -209,71 +218,38 @@ Expr
     struct opi_ast *x = $2;
     $$ = opi_ast_apply(opi_ast_var("not"), &x, 1);
   }
-  | Expr NUMLT Expr {
+  | Expr NUMLT Expr { $$ = opi_ast_binop(OPI_OPC_LT, $1, $3); }
+  | Expr NUMGT Expr { $$ = opi_ast_binop(OPI_OPC_GT, $1, $3); }
+  | Expr NUMLE Expr { $$ = opi_ast_binop(OPI_OPC_LE, $1, $3); }
+  | Expr NUMGE Expr { $$ = opi_ast_binop(OPI_OPC_GE, $1, $3); }
+  | Expr NUMEQ Expr { $$ = opi_ast_binop(OPI_OPC_NUMEQ, $1, $3); }
+  | Expr NUMNE Expr { $$ = opi_ast_binop(OPI_OPC_NUMNE, $1, $3); }
+  | Expr SCAND Expr { $$ = opi_ast_and($1, $3); }
+  | Expr SCOR Expr { $$ = opi_ast_or($1, $3); }
+  | '-' Expr %prec UMINUS {
+    if ($2->tag == OPI_AST_CONST && $2->cnst->type == opi_number_type) {
+      long double x = opi_number_get_value($2->cnst);
+      opi_as($2->cnst, struct opi_number).val = -x;
+      $$ = $2;
+    } else {
+      struct opi_ast *p[] = { opi_ast_const(opi_number(0)), $2 };
+      $$ = opi_ast_apply(opi_ast_var("-"), p, 2);
+    }
+  }
+  | '+' Expr %prec UMINUS { $$ = $2; }
+  | Expr '+' Expr { $$ = opi_ast_binop(OPI_OPC_ADD, $1, $3); }
+  | Expr '-' Expr { $$ = opi_ast_binop(OPI_OPC_SUB, $1, $3); }
+  | Expr '*' Expr { $$ = opi_ast_binop(OPI_OPC_MUL, $1, $3); }
+  | Expr '/' Expr { $$ = opi_ast_binop(OPI_OPC_DIV, $1, $3); }
+  | Expr '%' Expr { $$ = opi_ast_binop(OPI_OPC_MOD, $1, $3); }
+  | Expr ':' Expr { $$ = opi_ast_binop(OPI_OPC_CONS, $1, $3); }
+  | Expr COMPOSE Expr {
     struct opi_ast *p[] = { $1, $3 };
-    $$ = opi_ast_apply(opi_ast_var("<"), p, 2);
+    $$ = opi_ast_apply(opi_ast_var("-|"), p, 2);
   }
-  | Expr NUMGT Expr {
+  | Expr PLUSPLUS Expr {
     struct opi_ast *p[] = { $1, $3 };
-    $$ = opi_ast_apply(opi_ast_var(">"), p, 2);
-  }
-  | Expr NUMLE Expr {
-    struct opi_ast *p[] = { $1, $3 };
-    $$ = opi_ast_apply(opi_ast_var("<="), p, 2);
-  }
-  | Expr NUMGE Expr {
-    struct opi_ast *p[] = { $1, $3 };
-    $$ = opi_ast_apply(opi_ast_var(">="), p, 2);
-  }
-  | Expr NUMEQ Expr {
-    struct opi_ast *p[] = { $1, $3 };
-    $$ = opi_ast_apply(opi_ast_var("=="), p, 2);
-  }
-  | Expr NUMNE Expr {
-    struct opi_ast *p[] = { $1, $3 };
-    $$ = opi_ast_apply(opi_ast_var("/="), p, 2);
-  }
-  | Expr SCAND Expr {
-    $$ = opi_ast_and($1, $3);
-  }
-  | Expr SCOR Expr {
-    $$ = opi_ast_or($1, $3);
-  }
-  | Expr '-' Expr {
-    struct opi_ast *p[] = { $1, $3 };
-    $$ = opi_ast_apply(opi_ast_var("-"), p, 2);
-  }
-  | Expr '+' Expr {
-    struct opi_ast *p[] = { $1, $3 };
-    $$ = opi_ast_apply(opi_ast_var("+"), p, 2);
-  }
-  | Expr '*' Expr {
-    struct opi_ast *p[] = { $1, $3 };
-    $$ = opi_ast_apply(opi_ast_var("*"), p, 2);
-  }
-  | Expr '/' Expr {
-    struct opi_ast *p[] = { $1, $3 };
-    $$ = opi_ast_apply(opi_ast_var("/"), p, 2);
-  }
-  | Expr '%' Expr {
-    struct opi_ast *p[] = { $1, $3 };
-    $$ = opi_ast_apply(opi_ast_var("%"), p, 2);
-  }
-  | Expr ':' Expr {
-    struct opi_ast *p[] = { $1, $3 };
-    $$ = opi_ast_apply(opi_ast_var(":"), p, 2);
-  }
-  | Expr '.' Expr {
-    struct opi_ast *p[] = { $1, $3 };
-    $$ = opi_ast_apply(opi_ast_var("."), p, 2);
-  }
-  | Expr AT Expr {
-    struct opi_ast *p[] = { $1, $3 };
-    $$ = opi_ast_apply(opi_ast_var("!!"), p, 2);
-  }
-  | Expr '$' Expr {
-    struct opi_ast *p[] = { $3 };
-    $$ = opi_ast_apply($1, p, 1);
+    $$ = opi_ast_apply(opi_ast_var("++"), p, 2);
   }
   | '{' block '}' { $$ = $2; }
   | IF Expr THEN Expr ELSE Expr {
@@ -282,7 +258,7 @@ Expr
   | UNLESS Expr THEN Expr ELSE Expr {
     $$ = opi_ast_if($2, $6, $4);
   }
-  | LET REC fnbinds IN Expr {
+  | LET REC recbins IN Expr {
     $$ = opi_ast_fix($3->vars.data, (struct opi_ast**)$3->vals.data, $3->vars.size, $5);
     binds_delete($3);
   }
@@ -359,9 +335,7 @@ matches
   | matches_aux
 ;
 
-matches_aux: matches_pos | matches_key;
-
-matches_key
+matches_aux
   : SYMBOL ':' SYMBOL {
     cod_strvec_init($$.fields = malloc(sizeof(struct cod_strvec)));
     cod_strvec_init($$.vars = malloc(sizeof(struct cod_strvec)));
@@ -370,6 +344,13 @@ matches_key
     free($1);
     free($3);
   }
+  | SYMBOL {
+    cod_strvec_init($$.fields = malloc(sizeof(struct cod_strvec)));
+    cod_strvec_init($$.vars = malloc(sizeof(struct cod_strvec)));
+    cod_strvec_push($$.fields, $1);
+    cod_strvec_push($$.vars, $1);
+    free($1);
+  }
   | matches_aux ',' SYMBOL ':' SYMBOL {
     $$ = $1;
     cod_strvec_push($$.fields, $3);
@@ -377,35 +358,22 @@ matches_key
     free($3);
     free($5);
   }
-;
-
-matches_pos
-  : SYMBOL {
-    cod_strvec_init($$.fields = malloc(sizeof(struct cod_strvec)));
-    cod_strvec_init($$.vars = malloc(sizeof(struct cod_strvec)));
-    char buf[42];
-    sprintf(buf, "#%zu", $$.fields->size);
-    cod_strvec_push($$.fields, buf);
-    cod_strvec_push($$.vars, $1);
-    free($1);
-  }
-  | matches_pos ',' SYMBOL {
+  | matches_aux ',' SYMBOL {
     $$ = $1;
-    char buf[42];
-    sprintf(buf, "#%zu", $$.fields->size);
-    cod_strvec_push($$.fields, buf);
+    cod_strvec_push($$.fields, $3);
     cod_strvec_push($$.vars, $3);
     free($3);
   }
 ;
 
+anylambda: lambda | valambda;
+
 lambda
   : '\\' fn_aux { $$ = $2; }
-  | param RARROW Expr {
-    $$ = opi_ast_fn($1->data, $1->size, $3);
-    cod_strvec_destroy($1);
-    free($1);
-  }
+;
+
+valambda
+  : '\\' vafn_aux { $$ = $2; }
 ;
 
 param
@@ -413,15 +381,7 @@ param
     $$ = malloc(sizeof(struct cod_strvec));
     cod_strvec_init($$);
   }
-  | SYMBOL {
-    $$ = malloc(sizeof(struct cod_strvec));
-    cod_strvec_init($$);
-    cod_strvec_push($$, $1);
-    free($1);
-  }
-  | '(' param_aux ')' {
-    $$ = $2;
-  }
+  | param_aux
 ;
 param_aux
   : SYMBOL {
@@ -430,10 +390,10 @@ param_aux
     cod_strvec_push($$, $1);
     free($1);
   }
-  | param_aux ',' SYMBOL {
+  | param_aux SYMBOL {
     $$ = $1;
-    cod_strvec_push($$, $3);
-    free($3);
+    cod_strvec_push($$, $2);
+    free($2);
   }
 ;
 
@@ -442,26 +402,30 @@ arg
     $$ = malloc(sizeof(struct cod_ptrvec));
     cod_ptrvec_init($$);
   }
-  | Atom {
+  | arg_aux
+  | '$' Expr {
     $$ = malloc(sizeof(struct cod_ptrvec));
     cod_ptrvec_init($$);
-    cod_ptrvec_push($$, $1, NULL);
+    cod_ptrvec_push($$, $2, NULL);
   }
-  | '(' arg_aux ',' Expr ')' {
-    $$ = $2;
-    cod_ptrvec_push($$, $4, NULL);
+  | arg_aux '$' Expr { $$ = $1; cod_ptrvec_push($$, $3, NULL); }
+  | '\\' anyfn_aux {
+    $$ = malloc(sizeof(struct cod_ptrvec));
+    cod_ptrvec_init($$);
+    cod_ptrvec_push($$, $2, NULL);
   }
+  | arg_aux '\\' anyfn_aux { $$ = $1; cod_ptrvec_push($$, $3, NULL); }
 ;
 
 arg_aux
-  : Expr {
+  : Atom {
     $$ = malloc(sizeof(struct cod_ptrvec));
     cod_ptrvec_init($$);
     cod_ptrvec_push($$, $1, NULL);
   }
-  | arg_aux ',' Expr {
+  | arg_aux Atom {
     $$ = $1;
-    cod_ptrvec_push($$, $3, NULL);
+    cod_ptrvec_push($$, $2, NULL);
   }
 ;
 
@@ -499,7 +463,7 @@ block_expr
   | UNLESS Expr THEN Expr {
     $$ = opi_ast_if($2, opi_ast_const(opi_nil), $4);
   }
-  | LET REC fnbinds {
+  | LET REC recbins {
     $$ = opi_ast_fix($3->vars.data, (struct opi_ast**)$3->vals.data, $3->vars.size, NULL);
     binds_delete($3);
   }
@@ -558,15 +522,6 @@ block_expr
     $$ = opi_ast_use(buf, "*");
     free($2);
   }
-  | TRAIT SYMBOL def_aux {
-    $$ = opi_ast_trait($2, $3);
-    free($2);
-  }
-  | IMPL refstr refstr def_aux {
-    $$ = opi_ast_impl($3, $2, $4);
-    free($2);
-    free($3);
-  }
 ;
 
 fields
@@ -587,38 +542,60 @@ fields
   }
 ;
 
+anyfn_aux: fn_aux | vafn_aux;
+
 fn_aux
-  : param fn_aux {
-    $$ = opi_ast_fn($1->data, $1->size, $2);
-    cod_strvec_destroy($1);
-    free($1);
-  }
-  | param fn_body {
-    $$ = opi_ast_fn($1->data, $1->size, $2);
+  : param RARROW Expr {
+    $$ = opi_ast_fn($1->data, $1->size, $3);
     cod_strvec_destroy($1);
     free($1);
   }
 ;
 
-fn_body
-  : RARROW Expr { $$ = $2; }
+vafn_aux
+  : DOTDOT SYMBOL RARROW Expr {
+    struct opi_ast *fn = opi_ast_fn(&($2), 1, $4);
+    struct opi_ast *param[] = { opi_ast_const(opi_number(0)), fn };
+    $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
+    free($2);
+  }
+  | param DOTDOT SYMBOL RARROW Expr {
+    cod_strvec_push($1, $3);
+    struct opi_ast *fn = opi_ast_fn($1->data, $1->size, $5);
+    struct opi_ast *param[] = { opi_ast_const(opi_number($1->size - 1)), fn };
+    $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
+    cod_strvec_destroy($1);
+    free($1);
+    free($3);
+  }
 ;
+
+anydef_aux: def_aux | vadef_aux;
 
 def_aux
-  : param def_aux {
-    $$ = opi_ast_fn($1->data, $1->size, $2);
-    cod_strvec_destroy($1);
-    free($1);
-  }
-  | param def_body {
-    $$ = opi_ast_fn($1->data, $1->size, $2);
+  : param '=' Expr {
+    $$ = opi_ast_fn($1->data, $1->size, $3);
     cod_strvec_destroy($1);
     free($1);
   }
 ;
 
-def_body
-  : '=' Expr { $$ = $2; }
+vadef_aux
+  : DOTDOT SYMBOL '=' Expr {
+    struct opi_ast *fn = opi_ast_fn(&($2), 1, $4);
+    struct opi_ast *param[] = { opi_ast_const(opi_number(0)), fn };
+    $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
+    free($2);
+  }
+  | param DOTDOT SYMBOL '=' Expr {
+    cod_strvec_push($1, $3);
+    struct opi_ast *fn = opi_ast_fn($1->data, $1->size, $5);
+    struct opi_ast *param[] = { opi_ast_const(opi_number($1->size - 1)), fn };
+    $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
+    cod_strvec_destroy($1);
+    free($1);
+    free($3);
+  }
 ;
 
 binds
@@ -627,7 +604,7 @@ binds
     binds_push($$, $1, $3);
     free($1);
   }
-  | SYMBOL def_aux {
+  | SYMBOL anydef_aux {
     $$ = binds_new();
     binds_push($$, $1, $2);
     free($1);
@@ -637,14 +614,14 @@ binds
     binds_push($$, $3, $5);
     free($3);
   }
-  | binds AND SYMBOL def_aux {
+  | binds AND SYMBOL anydef_aux {
     $$ = $1;
     binds_push($$, $3, $4);
     free($3);
   }
 ;
 
-fnbinds
+recbins
   : SYMBOL '=' lambda {
     $$ = binds_new();
     binds_push($$, $1, $3);
@@ -655,12 +632,12 @@ fnbinds
     binds_push($$, $1, $2);
     free($1);
   }
-  | fnbinds AND SYMBOL '=' lambda {
+  | recbins AND SYMBOL '=' lambda {
     $$ = $1;
     binds_push($$, $3, $5);
     free($3);
   }
-  | fnbinds AND SYMBOL def_aux {
+  | recbins AND SYMBOL def_aux {
     $$ = $1;
     binds_push($$, $3, $4);
     free($3);

@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 opi_t
 opi_vm(struct opi_bytecode *bc)
@@ -12,12 +13,64 @@ opi_vm(struct opi_bytecode *bc)
   struct opi_scope *scp = NULL;
   size_t scpcnt = 0;
 
-  struct opi_insn *ip = bc->head;
+  struct opi_flat_insn *ip = bc->tape;
 
   while (1) {
     switch (ip->opc) {
       case OPI_OPC_NOP:
         break;
+
+#define NUM_BINOP(opc, op)                                                                               \
+      case opc:                                                                                          \
+      {                                                                                                  \
+        opi_t lhs = r[OPI_BINOP_REG_LHS(ip)];                                                            \
+        opi_t rhs = r[OPI_BINOP_REG_RHS(ip)];                                                            \
+        if (opi_unlikely(lhs->type != opi_number_type || rhs->type != opi_number_type))                  \
+          r[OPI_BINOP_REG_OUT(ip)] = opi_undefined(opi_symbol("type-error"));                            \
+        else                                                                                             \
+          r[OPI_BINOP_REG_OUT(ip)] = opi_number(opi_number_get_value(lhs) op opi_number_get_value(rhs)); \
+        break;                                                                                           \
+      }
+      NUM_BINOP(OPI_OPC_ADD, +)
+      NUM_BINOP(OPI_OPC_SUB, -)
+      NUM_BINOP(OPI_OPC_MUL, *)
+      NUM_BINOP(OPI_OPC_DIV, /)
+      case OPI_OPC_MOD:
+      {
+        opi_t lhs = r[OPI_BINOP_REG_LHS(ip)];
+        opi_t rhs = r[OPI_BINOP_REG_RHS(ip)];
+        if (opi_unlikely(lhs->type != opi_number_type || rhs->type != opi_number_type))
+          r[OPI_BINOP_REG_OUT(ip)] = opi_undefined(opi_symbol("type-error"));
+        else
+          r[OPI_BINOP_REG_OUT(ip)] = opi_number(fmodl(opi_number_get_value(lhs), opi_number_get_value(rhs)));
+        break;
+      }
+
+#define NUM_CMPOP(opc, op)                                                                                          \
+      case opc:                                                                                                     \
+      {                                                                                                             \
+        opi_t lhs = r[OPI_BINOP_REG_LHS(ip)];                                                                       \
+        opi_t rhs = r[OPI_BINOP_REG_RHS(ip)];                                                                       \
+        if (opi_unlikely(lhs->type != opi_number_type || rhs->type != opi_number_type))                             \
+          r[OPI_BINOP_REG_OUT(ip)] = opi_undefined(opi_symbol("type-error"));                                       \
+        else                                                                                                        \
+          r[OPI_BINOP_REG_OUT(ip)] = opi_number_get_value(lhs) op opi_number_get_value(rhs) ? opi_true : opi_false; \
+        break;                                                                                                      \
+      }
+      NUM_CMPOP(OPI_OPC_NUMEQ, ==)
+      NUM_CMPOP(OPI_OPC_NUMNE, !=)
+      NUM_CMPOP(OPI_OPC_LT, <)
+      NUM_CMPOP(OPI_OPC_GT, >)
+      NUM_CMPOP(OPI_OPC_LE, <=)
+      NUM_CMPOP(OPI_OPC_GE, >=)
+
+      case OPI_OPC_CONS:
+      {
+        opi_t lhs = r[OPI_BINOP_REG_LHS(ip)];
+        opi_t rhs = r[OPI_BINOP_REG_RHS(ip)];
+        r[OPI_BINOP_REG_OUT(ip)] = opi_cons(lhs, rhs);
+        break;
+      }
 
       case OPI_OPC_PHI:
         r[OPI_PHI_REG(ip)] = opi_nil;
@@ -49,13 +102,13 @@ opi_vm(struct opi_bytecode *bc)
         if (opi_unlikely(fn->type != opi_fn_type)) {
           while (nargs--)
             opi_drop(opi_pop());
-          r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("type_error"));
+          r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("type-error"));
           break;
         }
         if (opi_unlikely(!opi_test_arity(opi_fn_get_arity(fn), nargs))) {
           while (nargs--)
             opi_drop(opi_pop());
-          r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("arity_error"));
+          r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("arity-error"));
           break;
         }
         r[OPI_APPLY_REG_OUT(ip)] = opi_fn_apply(fn, nargs);
@@ -69,13 +122,13 @@ opi_vm(struct opi_bytecode *bc)
         if (opi_unlikely(fn->type != opi_fn_type)) {
           while (nargs--)
             opi_drop(opi_pop());
-          r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("type_error"));
+          r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("type-error"));
           break;
         }
         if (opi_unlikely(!opi_test_arity(opi_fn_get_arity(fn), nargs))) {
           while (nargs--)
             opi_drop(opi_pop());
-          r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("arity_error"));
+          r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("arity-error"));
           break;
         }
         if (opi_is_lambda(fn)) {
@@ -83,7 +136,7 @@ opi_vm(struct opi_bytecode *bc)
           struct opi_lambda *lam = opi_fn_get_data(fn);
           opi_current_fn = fn;
           bc = lam->bc;
-          ip = bc->head;
+          ip = bc->tape;
           opi_assert(bc->nvals <= OPI_VM_REG_MAX);
           continue;
         } else {
@@ -198,9 +251,13 @@ opi_vm(struct opi_bytecode *bc)
         r[OPI_LDFLD_REG_OUT(ip)] = *(opi_t*)(ptr + offs);
         break;
       }
+
+      case OPI_OPC_BINOP_START:
+      case OPI_OPC_BINOP_END:
+        abort();
     }
 
-    ip = ip->next;
+    ip += 1;
   }
 }
 

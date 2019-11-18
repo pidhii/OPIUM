@@ -25,8 +25,8 @@ opi_bytecode_while(struct opi_bytecode *bc, int (*test)(struct opi_insn *insn, v
       continue;
     }
 
-    /*if (opi_insn_is_end(ip))*/
-      /*break;*/
+    if (opi_insn_is_end(ip))
+      break;
   }
 
   test(NULL, data);
@@ -95,7 +95,7 @@ check_end(struct opi_bytecode *bc, struct opi_insn *begin, struct opi_insn *end)
       cont_start = split_if(ip, &then_trace, &else_trace);
 
       int a = check_end(bc, then_trace.start, then_trace.end);
-      int b = check_end(bc, then_trace.start, then_trace.end);
+      int b = check_end(bc, else_trace.start, else_trace.end);
       int c = check_end(bc, cont_start, end);
       return c || (a && b);
     }
@@ -258,3 +258,84 @@ opi_bytecode_fix_lifetimes(struct opi_bytecode *bc)
   }
 }
 
+static int
+will_be_used(struct opi_insn *insn, int vid)
+{
+  while (insn->opc != OPI_OPC_END) {
+    if (opi_insn_is_using(insn, vid))
+      return TRUE;
+    insn = insn->next;
+  }
+  return FALSE;
+}
+
+void
+opi_bytecode_cleanup(struct opi_bytecode *bc)
+{
+  struct opi_insn *insn = bc->head;
+  while (insn->opc != OPI_OPC_END) {
+    if (insn->opc == OPI_OPC_CONST && OPI_CONST_ARG_CELL(insn) == opi_nil) {
+      if (!will_be_used(insn, OPI_CONST_REG_OUT(insn))) {
+        struct opi_insn *tmp = insn->next;
+        insn->prev->next = insn->next;
+        insn->next->prev = insn->prev;
+        opi_insn_delete1(insn);
+        /*opi_debug("erased dummy NIL\n");*/
+        insn = tmp;
+        continue;
+      }
+    } else if (insn->opc == OPI_OPC_INCRC) {
+      int vid = OPI_INCRC_REG_CELL(insn);
+      if (insn->next->opc == OPI_OPC_DECRC &&
+          (int)OPI_DECRC_REG_CELL(insn->next) == vid)
+      {
+        struct opi_insn *tmp = insn->next->next;
+        insn->prev->next = insn->next->next;
+        insn->next->next->prev = insn->prev;
+        opi_insn_delete1(insn->next);
+        opi_insn_delete1(insn);
+        /*opi_debug("erased dummy INC->DEC\n");*/
+        insn = tmp;
+        continue;
+      }
+    }
+    insn = insn->next;
+  }
+}
+
+static size_t
+distance(struct opi_insn *from, struct opi_insn *to)
+{
+  size_t d = 0;
+  while (from != to) {
+    d += 1;
+    from = from->next;
+  }
+  return d;
+}
+
+struct opi_flat_insn*
+opi_bytecode_flatten(struct opi_bytecode *bc)
+{
+  size_t size = distance(bc->head, NULL);
+  struct opi_flat_insn *buf = malloc(sizeof(struct opi_flat_insn) * size);
+  size_t i = 0;
+
+  struct opi_insn *insn = bc->head;
+  while (insn) {
+    struct opi_flat_insn *finsn = buf + i++;
+    *finsn = *(struct opi_flat_insn*)insn;
+
+    if (insn->opc == OPI_OPC_JMP) {
+      size_t d = distance(insn, OPI_JMP_ARG_TO(insn));
+      OPI_JMP_ARG_TO(finsn) = finsn + d;
+    } else if (insn->opc == OPI_OPC_IF) {
+      size_t d = distance(insn, OPI_IF_ARG_ELSE(insn));
+      OPI_IF_ARG_ELSE(finsn) = finsn + d;
+    }
+
+    insn = insn->next;
+  }
+
+  return buf;
+}

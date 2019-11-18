@@ -11,47 +11,59 @@ syn match opiIdentifier /\<[a-zA-Z_][a-zA-Z0-9_]*['?]?\>/
 syn match opiSymbol /'[^ \t\n(){}\[\]'";,:]\+/
 
 syn keyword opiNamespace namespace nextgroup=opiNamespaceName skipwhite skipnl
-syn match   opiNamespaceName /\w\+/ contained
+syn match   opiNamespaceName /\k\+/ contained
 syn keyword opiUse use as
 
-syn keyword opiTrait trait nextgroup=opiTraitName skipwhite skipnl
 syn keyword opiStruct struct nextgroup=opiStructName skipwhite skipnl
-syn keyword opiImpl impl
-syn match   opiStructName /\w\+/ contained
-syn match   opiTraitName /\w\+/ contained
+syn match   opiStructName /\k\+/ contained
 
-syn keyword opiType  null  undefined  number  symbol  string  boolean  lazy  pair  table  blob  array  fn
-syn keyword Function null? undefined? number? symbol? string? boolean? lazy? pair? table? blob? array?
+syn keyword opiType  null  undefined  number  symbol  string  boolean  pair  fn FILE table
+syn keyword Function null? undefined? number? symbol? string? boolean? pair? fn?
 
 syn region opiList matchgroup=opiType start=/\[/ matchgroup=opiType end=/\]/ skipwhite skipnl contains=TOP
 
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""'
+" Builtins:
 syn keyword Function write display newline print printf fprintf format
-syn keyword Function any? 
 syn keyword Function car cdr list
-syn keyword Function apply length
-syn keyword Function next
+syn keyword Function apply applylist vaarg
 syn keyword Function id
 syn keyword Function die error
+syn keyword Function force
+syn keyword Function system shell
+syn keyword Function loadfile
 
-" Base
-syn keyword Function swap flip
-syn keyword Function reverse foreach foldl foldr
-syn keyword Function range map filter
-syn keyword Function tostring tolist
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+" Base:
+syn keyword Function length revappend
+syn keyword Function strlen substr strstr chop chomp ltrim trim
+syn keyword Function open popen
+syn keyword Function getline getdelim
+" base/common.opi
+syn keyword Function flip
+" base/list-base.opi
+syn keyword Function range
+syn keyword Function reverse
+syn keyword Function any? all?
+syn keyword Function revmap map
+syn keyword Function foreach
+syn keyword Function foldl foldr
+syn keyword Function revfilter filter
+" base/base.opi
+syn keyword Function zero? positive? negative? even? odd?
+
 
 syn keyword Statement let rec and or in return
 syn keyword opiWtf wtf
 
 syn keyword opiConditional if unless then else
 
-syn match opiFlush /!/
-syn match opiFlush /!\$/
+syn match Keyword /!\|\$/
 syn match opiLazy /@/
 
-
 syn match opiOperator /[-+=*/%><&|.][-+=*/%><&|.!]*/
-syn match opiOperator /![-+=*/%><&|.!]\+/
-syn match opiOperator /[$:]/
+syn match opiOperator /![-+=*/%><&|!.]\+/
+syn match opiOperator /:/
 syn keyword opiOperator is eq equal not
 
 syn match opiDelimiter /[,;(){}]/
@@ -73,20 +85,19 @@ syn match Comment /#.*$/
 
 " Integer with - + or nothing in front
 syn match Number '\<\d\+'
-syn match Number '\<[-+]\d\+'
 
 " Floating point number with decimal no E or e
-syn match Number '\<[-+]\d\+\.\d*'
+syn match Number '\<\d\+\.\d*'
 
 " Floating point like number with E and no decimal point (+,-)
-syn match Number '\<[-+]\=\d[[:digit:]]*[eE][\-+]\=\d\+'
 syn match Number '\<\d[[:digit:]]*[eE][\-+]\=\d\+'
 
 " Floating point like number with E and decimal point (+,-)
-syn match Number '[-+]\=\d[[:digit:]]*\.\d*[eE][\-+]\=\d\+'
-syn match Number '\d[[:digit:]]*\.\d*[eE][\-+]\=\d\+'
+syn match Number '\<\d[[:digit:]]*\.\d*[eE][\-+]\=\d\+'
 
-syn match String /"\(\\.\|[^"\\]\)*"/
+syn match String /"\(\\.\|\s\|\n\|[^"\\]\)*"/ skipwhite skipnl
+syn match String /`\(\\.\|[^`\\]\)*`/hs=s+1,he=e-1 skipwhite skipnl
+syn match Operator /`/ contained containedin=String
 
 
 hi link opiNamespace     Define
@@ -99,14 +110,10 @@ hi link opiUse Define
 "hi link opiStructName Type
 
 hi link opiStruct     Structure
-hi link opiTrait      Structure
-hi link opiImpl       Structure
 hi link opiStructName StorageClass
-hi link opiTraitName  StorageClass
 
 hi link opiWtf Special
 
-hi link opiFlush Keyword
 hi link opiLazy Keyword
 
 hi link opiType Type

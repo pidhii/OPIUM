@@ -104,11 +104,43 @@ emit(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int tc)
         args[i] = emit(ir->apply.args[i], bc, stack, FALSE);
       int fn = emit(ir->apply.fn, bc, stack, FALSE);
 
-      int ret;
-      if (tc && opi_bytecode_value_is_global(bc, fn))
-        ret = opi_bytecode_apply_tailcall_arr(bc, fn, ir->apply.nargs, args);
-      else
-        ret = opi_bytecode_apply_arr(bc, fn, ir->apply.nargs, args);
+      if (tc && opi_bytecode_value_is_global(bc, fn)) {
+        return opi_bytecode_apply_tailcall_arr(bc, fn, ir->apply.nargs, args);
+      } else {
+        int ret = opi_bytecode_apply_arr(bc, fn, ir->apply.nargs, args);
+        if (ir->apply.eflag) {
+          // Implicit error-test:
+          // if
+          int test = opi_bytecode_testty(bc, ret, opi_undefined_type);
+          struct opi_if iff;
+          opi_bytecode_if(bc, test, &iff);
+          // then
+          opi_bytecode_ret(bc, ret);
+          // else
+          opi_bytecode_if_else(bc, &iff);
+          opi_bytecode_if_end(bc, &iff);
+        }
+        return ret;
+      }
+    }
+
+    case OPI_IR_BINOP:
+    {
+      int lhs = emit(ir->binop.lhs, bc, stack, FALSE);
+      int rhs = emit(ir->binop.rhs, bc, stack, FALSE);
+      int ret = opi_bytecode_binop(bc, ir->binop.opc, lhs, rhs);
+      if (ir->binop.opc != OPI_OPC_CONS) {
+        // Implicit error-test:
+        // if
+        int test = opi_bytecode_testty(bc, ret, opi_undefined_type);
+        struct opi_if iff;
+        opi_bytecode_if(bc, test, &iff);
+        // then
+        opi_bytecode_ret(bc, ret);
+        // else
+        opi_bytecode_if_else(bc, &iff);
+        opi_bytecode_if_end(bc, &iff);
+      }
       return ret;
     }
 

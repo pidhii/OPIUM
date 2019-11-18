@@ -98,19 +98,13 @@ opi_ast_delete(struct opi_ast *node)
       free(node->strct.fields);
       break;
 
-    case OPI_AST_TRAIT:
-      free(node->trait.name);
-      opi_ast_delete(node->trait.deflt);
-      break;
-
-    case OPI_AST_IMPL:
-      free(node->impl.typename);
-      free(node->impl.traitname);
-      opi_ast_delete(node->impl.fn);
-      break;
-
     case OPI_AST_RETURN:
       opi_ast_delete(node->ret);
+      break;
+
+    case OPI_AST_BINOP:
+      opi_ast_delete(node->binop.lhs);
+      opi_ast_delete(node->binop.rhs);
       break;
   }
 
@@ -154,6 +148,7 @@ opi_ast_apply(struct opi_ast *fn, struct opi_ast **args, size_t nargs)
   node->apply.args = malloc(sizeof(struct opi_ast*) * nargs);
   memcpy(node->apply.args, args, sizeof(struct opi_ast*) * nargs);
   node->apply.nargs = nargs;
+  node->apply.eflag = TRUE;
   return node;
 }
 
@@ -304,29 +299,6 @@ opi_ast_struct(const char *typename, char** fields, size_t nfields)
 }
 
 struct opi_ast*
-opi_ast_trait(const char *name, struct opi_ast *deflt)
-{
-  opi_assert(deflt->tag == OPI_AST_FN);
-  struct opi_ast *node = malloc(sizeof(struct opi_ast));
-  node->tag = OPI_AST_TRAIT;
-  node->trait.name = strdup(name);
-  node->trait.deflt = deflt;
-  return node;
-}
-
-struct opi_ast*
-opi_ast_impl(const char *traitname, const char *typename, struct opi_ast *fn)
-{
-  opi_assert(fn->tag == OPI_AST_FN);
-  struct opi_ast *node = malloc(sizeof(struct opi_ast));
-  node->tag = OPI_AST_IMPL;
-  node->impl.typename = strdup(typename);
-  node->impl.traitname = strdup(traitname);
-  node->impl.fn = fn;
-  return node;
-}
-
-struct opi_ast*
 opi_ast_and(struct opi_ast *x, struct opi_ast *y)
 { return opi_ast_if(x, y, opi_ast_const(opi_false)); }
 
@@ -353,9 +325,22 @@ opi_ast_eor(struct opi_ast *try, struct opi_ast *els)
   char *var = " eor tmp ";
   char *vars[] = { "wtf" };
   char *fields[] = { "what" };
+  if (try->tag == OPI_AST_APPLY)
+    try->apply.eflag = FALSE;
   return
     opi_ast_let(&var, &try, 1,
       opi_ast_match("undefined", vars, fields, 1, opi_ast_var(" eor tmp "),
         els, opi_ast_var(" eor tmp ")));
+}
+
+struct opi_ast*
+opi_ast_binop(int opc, struct opi_ast *lhs, struct opi_ast *rhs)
+{
+  struct opi_ast *node = malloc(sizeof(struct opi_ast));
+  node->tag = OPI_AST_BINOP;
+  node->binop.opc = opc;
+  node->binop.lhs = lhs;
+  node->binop.rhs = rhs;
+  return node;
 }
 
