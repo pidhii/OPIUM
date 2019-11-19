@@ -83,6 +83,25 @@ emit_fn(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int cel
   return fn;
 }
 
+static void
+trace_delete(struct opi_fn *fn)
+{
+  struct opi_location *loc = fn->data;
+  opi_location_delete(loc);
+  opi_fn_delete(fn);
+}
+
+static opi_t
+trace(void)
+{
+  struct opi_location *loc = opi_fn_get_data(opi_current_fn);
+  opi_t err = opi_pop();
+  opi_assert(err->type == opi_undefined_type);
+  struct opi_undefined *u = (void*)err;
+  cod_vec_push(*u->trace, opi_location_copy(loc));
+  return err;
+}
+
 static int
 emit(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int tc)
 {
@@ -93,6 +112,7 @@ emit(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int tc)
     case OPI_IR_VAR:
       if (stack->size < ir->var) {
         opi_error("[ir:emit:var] try reference %zu/%zu\n", ir->var, stack->size);
+        abort();
       }
       return stack->vals[stack->size - ir->var];
 
@@ -106,6 +126,7 @@ emit(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int tc)
       if (tc && opi_bytecode_value_is_global(bc, fn)) {
         return opi_bytecode_apply_tailcall_arr(bc, fn, ir->apply.nargs, args);
       } else {
+
         int ret = opi_bytecode_apply_arr(bc, fn, ir->apply.nargs, args);
         if (ir->apply.eflag) {
           // Implicit error-test:
@@ -114,7 +135,14 @@ emit(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int tc)
           struct opi_if iff;
           opi_bytecode_if(bc, test, &iff);
           // then
-          opi_bytecode_ret(bc, ret);
+          if (ir->apply.loc) {
+            opi_t trace_fn = opi_fn("__trace", trace, 1);
+            opi_fn_set_data(trace_fn, opi_location_copy(ir->apply.loc), trace_delete);
+            int trace_var = opi_bytecode_const(bc, trace_fn);
+            opi_bytecode_ret(bc, opi_bytecode_apply_arr(bc, trace_var, 1, &ret));
+          } else {
+            opi_bytecode_ret(bc, ret);
+          }
           // else
           opi_bytecode_if_else(bc, &iff);
           opi_bytecode_if_end(bc, &iff);

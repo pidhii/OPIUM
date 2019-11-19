@@ -5,10 +5,14 @@
 #include <math.h>
 #include <float.h>
 #include <stdarg.h>
+#include <errno.h>
 
 opi_t opi_current_fn = NULL;
 opi_t *opi_sp = NULL;
 size_t opi_nargs;
+
+int opi_error = 0;
+opi_trace_t oip_trace;
 
 __attribute__((noreturn)) void
 opi_die(const char *fmt, ...)
@@ -20,6 +24,62 @@ opi_die(const char *fmt, ...)
   va_end(arg);
   putc('\n', stderr);
   exit(EXIT_FAILURE);
+}
+
+int
+opi_show_location(FILE *out, const char *path, int first_col, int first_line,
+    int last_col, int last_line)
+{
+  FILE *fs = fopen(path, "r");
+  if (fs == NULL) {
+    opi_error = 1;
+    return OPI_ERR;
+  }
+
+  int line = 1;
+  int col = 1;
+  while (TRUE) {
+    errno = 0;
+    int c = fgetc(fs);
+    if (errno) {
+      opi_error("print location: %s\n", strerror(errno));
+      opi_error = 1;
+      opi_assert(fclose(fs) == 0);
+      return OPI_ERR;
+    }
+    if (c == EOF) {
+      opi_error("print location: unexpected end of file\n");
+      opi_error = 1;
+      opi_assert(fclose(fs) == 0);
+      return OPI_ERR;
+    }
+
+    if (line >= first_line && line <= last_line) {
+      if (col == 1)
+        fprintf(out, "%4d\t", line);
+
+      if (line == first_line && col == first_col)
+        fputs("\e[38;5;9;1m", out);
+
+      putc(c, out);
+
+      if (line == last_line && col == last_col - 1)
+        fputs("\e[0m", out);
+    }
+
+    if (c == '\n') {
+      line += 1;
+      col = 1;
+    } else {
+      col += 1;
+    }
+
+    if (line > last_line)
+      break;
+  }
+
+  opi_assert(fclose(fs) == 0);
+  return OPI_OK;
 }
 
 void
@@ -385,6 +445,10 @@ undefined_delete(opi_type_t ty, opi_t cell)
 {
   struct opi_undefined *undef = opi_as_ptr(cell);
   opi_unref(undef->what);
+  for (size_t i = 0; i < undef->trace->len; ++i)
+    opi_location_delete(undef->trace->data[i]);
+  cod_vec_destroy(*undef->trace);
+  free(undef->trace);
   opi_free(cell);
 }
 
@@ -425,6 +489,8 @@ opi_undefined(opi_t what)
   struct opi_undefined *undef = opi_allocate();
   opi_inc_rc(undef->what = what);
   opi_init_cell(undef, opi_undefined_type);
+  undef->trace = malloc(sizeof(opi_trace_t));
+  cod_vec_init(*undef->trace);
   return (opi_t)undef;
 }
 
@@ -997,6 +1063,9 @@ yylex_destroy(struct opi_scanner *scanner);
 extern void
 yyset_in(FILE *in, struct opi_scanner *scanner);
 
+extern FILE*
+yyget_in(struct opi_scanner *scanner);
+
 int
 opi_scanner_init(struct opi_scanner **scanner)
 {
@@ -1013,5 +1082,32 @@ void
 opi_scanner_set_in(struct opi_scanner *scanner, FILE *in)
 {
   yyset_in(in, scanner);
+}
+
+FILE*
+opi_scanner_get_in(struct opi_scanner *scanner)
+{
+  return yyget_in(scanner);
+}
+
+struct opi_location*
+opi_location(const char *path, int fl, int fc, int ll, int lc)
+{
+  struct opi_location *loc = malloc(sizeof(struct opi_location));
+  *loc = (struct opi_location) { strdup(path), fl, fc, ll, lc };
+  return loc;
+}
+
+void
+opi_location_delete(struct opi_location *loc)
+{
+  free(loc->path);
+  free(loc);
+}
+
+struct opi_location*
+opi_location_copy(const struct opi_location *loc)
+{
+  return opi_location(loc->path, loc->fl, loc->fc, loc->ll, loc->lc);
 }
 

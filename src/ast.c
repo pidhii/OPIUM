@@ -34,6 +34,8 @@ opi_ast_delete(struct opi_ast *node)
 
     case OPI_AST_APPLY:
       opi_ast_delete(node->apply.fn);
+      if (node->apply.loc)
+        opi_location_delete(node->apply.loc);
       for (size_t i = 0; i < node->apply.nargs; ++i)
         opi_ast_delete(node->apply.args[i]);
       free(node->apply.args);
@@ -149,6 +151,7 @@ opi_ast_apply(struct opi_ast *fn, struct opi_ast **args, size_t nargs)
   memcpy(node->apply.args, args, sizeof(struct opi_ast*) * nargs);
   node->apply.nargs = nargs;
   node->apply.eflag = TRUE;
+  node->apply.loc = NULL;
   return node;
 }
 

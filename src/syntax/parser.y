@@ -8,6 +8,8 @@
 #include "opium/opium.h"
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
+#include <limits.h>
 
 extern
 int opi_start_token;
@@ -21,11 +23,17 @@ yylex_destroy(void);
 extern
 FILE* yyin;
 
-void
-yyerror(void *locp, struct opi_scanner *yyscanner, const char *what);
-
 static
 struct opi_ast *g_result;
+
+static
+char g_filename[PATH_MAX];
+
+static struct opi_location*
+location(void *locp);
+
+void
+yyerror(void *locp, struct opi_scanner *yyscanner, const char *what);
 
 struct binds {
   struct cod_strvec vars;
@@ -75,6 +83,24 @@ int opi_start_token;
   } matches;
 }
 
+%destructor { opi_drop($$); } <opi>
+%destructor { opi_ast_delete($$); } <ast>
+%destructor { free($$); } <str>
+%destructor { binds_delete($$); } <binds>
+%destructor { cod_strvec_destroy($$); free($$); } <strvec>
+%destructor {
+  for (size_t i = 0; i < $$->size; ++i)
+    opi_ast_delete($$->data[i]);
+  cod_ptrvec_destroy($$, NULL);
+  free($$);
+} <ptrvec>
+%destructor { 
+  cod_strvec_destroy($$.vars);
+  cod_strvec_destroy($$.fields);
+  free($$.vars);
+  free($$.fields);
+} <matches>
+
 //
 // Tokens
 //
@@ -84,7 +110,6 @@ int opi_start_token;
 %token<str> SYMBOL STRING SHELL
 %token<opi> CONST
 %left LET REC
-%left DEF
 %left IF UNLESS THEN ELSE
 %right IN
 %token AND
@@ -98,6 +123,7 @@ int opi_start_token;
 %token DOTDOT
 %token START_FILE
 %token START_REPL
+%token FLEX_ERROR
 
 //
 // Patterns
@@ -138,7 +164,8 @@ int opi_start_token;
 entry
   : START_FILE block { @$; g_result = $2; }
   | START_REPL block_expr ';' { g_result = $2; opi_start_token = 0; }
-  | START_REPL { g_result = NULL; }
+  | START_REPL { g_result = NULL; opi_start_token = 0; }
+  | error { g_result = NULL; opi_start_token = 0; }
 ;
 
 Atom
@@ -149,12 +176,14 @@ Atom
   | SHELL {
     struct opi_ast *cmd = opi_ast_const(opi_string($1));
     $$ = opi_ast_apply(opi_ast_var("shell"), &cmd, 1);
+    $$->apply.loc = location(&@$);
     free($1);
   }
   | '(' Expr ')' { $$ = $2; }
   | WTF { $$ = opi_ast_var("wtf"); }
   | '[' arg_aux ']' {
     $$ = opi_ast_apply(opi_ast_var("list"), (struct opi_ast**)$2->data, $2->size);
+    $$->apply.loc = location(&@$);
     cod_ptrvec_destroy($2, NULL);
     free($2);
   }
@@ -162,6 +191,7 @@ Atom
   | Atom '.' SYMBOL {
     struct opi_ast *p[] = { $1, opi_ast_const(opi_symbol($3)) };
     $$ = opi_ast_apply(opi_ast_var("."), p, 2);
+    $$->apply.loc = location(&@$);
     free($3);
   }
 ;
@@ -181,6 +211,7 @@ Form
   : Atom
   | Atom arg {
     $$ = opi_ast_apply($1, (struct opi_ast**)$2->data, $2->size);
+    $$->apply.loc = location(&@$);
     cod_ptrvec_destroy($2, NULL);
     free($2);
   }
@@ -190,42 +221,54 @@ Expr
   : Form
   | '(' ')' {
     $$ = opi_ast_apply(opi_ast_var("()"), NULL, 0);
+    $$->apply.loc = location(&@$);
   }
   | anylambda
   | '@' Expr {
     struct opi_ast *fn = opi_ast_fn(NULL, 0, $2);
     $$ = opi_ast_apply(opi_ast_var("lazy"), &fn, 1);
+    $$->apply.loc = location(&@$);
   }
   | Expr IS Expr {
     struct opi_ast *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("is"), p, 2);
+    $$->apply.loc = location(&@$);
   }
   | Expr EQ Expr {
     struct opi_ast *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("eq"), p, 2);
+    $$->apply.loc = location(&@$);
   }
   | Expr EQUAL Expr {
     struct opi_ast *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("equal"), p, 2);
+    $$->apply.loc = location(&@$);
   }
   | Expr ISNOT Expr {
     struct opi_ast *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("is"), p, 2);
+    $$->apply.loc = location(&@$);
     $$ = opi_ast_apply(opi_ast_var("not"), &$$, 1);
+    $$->apply.loc = location(&@$);
   }
   | Expr NOT EQ Expr {
     struct opi_ast *p[] = { $1, $4 };
     $$ = opi_ast_apply(opi_ast_var("eq"), p, 2);
+    $$->apply.loc = location(&@$);
     $$ = opi_ast_apply(opi_ast_var("not"), &$$, 1);
+    $$->apply.loc = location(&@$);
   }
   | Expr NOT EQUAL Expr {
     struct opi_ast *p[] = { $1, $4 };
     $$ = opi_ast_apply(opi_ast_var("equal"), p, 2);
+    $$->apply.loc = location(&@$);
     $$ = opi_ast_apply(opi_ast_var("not"), &$$, 1);
+    $$->apply.loc = location(&@$);
   }
   | NOT Expr {
     struct opi_ast *x = $2;
     $$ = opi_ast_apply(opi_ast_var("not"), &x, 1);
+    $$->apply.loc = location(&@$);
   }
   | Expr NUMLT Expr { $$ = opi_ast_binop(OPI_OPC_LT, $1, $3); }
   | Expr NUMGT Expr { $$ = opi_ast_binop(OPI_OPC_GT, $1, $3); }
@@ -243,6 +286,7 @@ Expr
     } else {
       struct opi_ast *p[] = { opi_ast_const(opi_number(0)), $2 };
       $$ = opi_ast_apply(opi_ast_var("-"), p, 2);
+      $$->apply.loc = location(&@$);
     }
   }
   | '+' Expr %prec UMINUS { $$ = $2; }
@@ -255,10 +299,12 @@ Expr
   | Expr COMPOSE Expr {
     struct opi_ast *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("-|"), p, 2);
+    $$->apply.loc = location(&@$);
   }
   | Expr PLUSPLUS Expr {
     struct opi_ast *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("++"), p, 2);
+    $$->apply.loc = location(&@$);
   }
   | '{' block '}' { $$ = $2; }
   | IF Expr THEN Expr ELSE Expr {
@@ -566,6 +612,7 @@ vafn_aux
     struct opi_ast *fn = opi_ast_fn(&($2), 1, $4);
     struct opi_ast *param[] = { opi_ast_const(opi_number(0)), fn };
     $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
+    $$->apply.loc = location(&@$);
     free($2);
   }
   | param DOTDOT SYMBOL RARROW Expr {
@@ -573,6 +620,7 @@ vafn_aux
     struct opi_ast *fn = opi_ast_fn($1->data, $1->size, $5);
     struct opi_ast *param[] = { opi_ast_const(opi_number($1->size - 1)), fn };
     $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
+    $$->apply.loc = location(&@$);
     cod_strvec_destroy($1);
     free($1);
     free($3);
@@ -594,6 +642,7 @@ vadef_aux
     struct opi_ast *fn = opi_ast_fn(&($2), 1, $4);
     struct opi_ast *param[] = { opi_ast_const(opi_number(0)), fn };
     $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
+    $$->apply.loc = location(&@$);
     free($2);
   }
   | param DOTDOT SYMBOL '=' Expr {
@@ -601,6 +650,7 @@ vadef_aux
     struct opi_ast *fn = opi_ast_fn($1->data, $1->size, $5);
     struct opi_ast *param[] = { opi_ast_const(opi_number($1->size - 1)), fn };
     $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
+    $$->apply.loc = location(&@$);
     cod_strvec_destroy($1);
     free($1);
     free($3);
@@ -657,10 +707,32 @@ recbins
 
 int opi_start_token = -1;
 
+static const char*
+filename(FILE *fp)
+{
+  char proclnk[0xFFF];
+  static char filename[PATH_MAX];
+  int fno;
+  ssize_t r;
+
+  fno = fileno(fp);
+  sprintf(proclnk, "/proc/self/fd/%d", fno);
+  r = readlink(proclnk, filename, PATH_MAX);
+  if (r < 0)
+    return NULL;
+  filename[r] = '\0';
+  return filename;
+}
+
 struct opi_ast*
 opi_parse(FILE *in)
 {
   opi_start_token = START_FILE;
+  const char *path = filename(in);
+  if (path)
+    strcpy(g_filename, path);
+  else
+    g_filename[0] = 0;
 
   struct opi_scanner *scanner;
   opi_scanner_init(&scanner);
@@ -674,6 +746,8 @@ struct opi_ast*
 opi_parse_expr(struct opi_scanner *scanner)
 {
   opi_start_token = START_REPL;
+  g_filename[0] = 0;
+
   yyparse(scanner);
   return g_result;
 }
@@ -682,7 +756,26 @@ void
 yyerror(void *locp_ptr, struct opi_scanner *yyscanner, const char *what)
 {
   YYLTYPE *locp = locp_ptr;
-  fprintf(stderr, "parse error: %s\n", what);
-  abort();
+  opi_error("parse error: %s\n", what);
+  opi_error = 1;
+
+  const char *path = filename(opi_scanner_get_in(yyscanner));
+  if (path) {
+    opi_error("%s:%d:%d\n", path, locp->first_line, locp->first_column);
+    opi_assert(opi_show_location(OPI_ERROR, path, locp->first_column,
+        locp->first_line, locp->last_column, locp->last_line) == OPI_OK);
+  }
+}
+
+static struct opi_location*
+location(void *locp_ptr)
+{
+  YYLTYPE *locp = locp_ptr;
+  if (g_filename[0]) {
+    return opi_location(g_filename, locp->first_line, locp->first_column,
+                        locp->last_line, locp->last_column);
+  } else {
+    return NULL;
+  }
 }
 

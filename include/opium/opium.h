@@ -23,6 +23,13 @@
     fprintf(OPI_ERROR, fmt, ##__VA_ARGS__);                \
   } while (0)
 
+#define OPI_TRACE stderr
+#define opi_trace(fmt, ...)                              \
+  do {                                                   \
+    fprintf(OPI_TRACE, "[\x1b[38;5;9m opium \x1b[0m] "); \
+    fprintf(OPI_TRACE, fmt, ##__VA_ARGS__);              \
+  } while (0)
+
 __attribute__((noreturn)) void
 opi_die(const char *fmt, ...);
 
@@ -46,12 +53,19 @@ opi_die(const char *fmt, ...);
 # define FALSE 0
 #endif
 
-FILE *opi_error_trace;
+#define OPI_OK (0)
+#define OPI_ERR (-1)
+extern
+int opi_error;
 
 typedef struct opi_type *opi_type_t;
 typedef struct opi_header *opi_t;
 
 typedef uintptr_t opi_rc_t;
+
+int
+opi_show_location(FILE *out, const char *path, int first_col, int first_line,
+    int last_col, int last_line);
 
 void
 opi_init(void);
@@ -268,9 +282,11 @@ opi_symbol_get_string(opi_t x);
 /* ==========================================================================
  * Undefined
  */
+typedef cod_vec(struct opi_location*) opi_trace_t;
 struct opi_undefined {
   struct opi_header header;
   opi_t what;
+  opi_trace_t* trace;
 };
 
 extern
@@ -288,6 +304,10 @@ opi_undefined(opi_t what);
 static inline opi_t
 opi_undefined_get_what(opi_t x)
 { return opi_as(x, struct opi_undefined).what; }
+
+static inline opi_trace_t*
+opi_undefined_get_trace(opi_t x)
+{ return opi_as(x, struct opi_undefined).trace; }
 
 /* ==========================================================================
  * Nil
@@ -592,12 +612,26 @@ enum opi_ast_tag {
   OPI_AST_BINOP,
 };
 
+struct opi_location {
+  char *path;
+  int fl, fc, ll, lc;
+};
+
+struct opi_location*
+opi_location(const char *path, int fl, int fc, int ll, int lc);
+
+void
+opi_location_delete(struct opi_location *loc);
+
+struct opi_location*
+opi_location_copy(const struct opi_location *loc);
+
 struct opi_ast {
   enum opi_ast_tag tag;
   union {
     opi_t cnst;
     char *var;
-    struct { struct opi_ast *fn, **args; size_t nargs; char eflag; } apply;
+    struct { struct opi_ast *fn, **args; size_t nargs; char eflag; struct opi_location *loc; } apply;
     struct { char **args; size_t nargs; struct opi_ast *body; } fn;
     struct { char **vars; struct opi_ast **vals; size_t n; struct opi_ast *body; } let;
     struct { struct opi_ast *test, *then, *els; } iff;
@@ -621,6 +655,9 @@ opi_scanner_destroy(struct opi_scanner *scanner);
 
 void
 opi_scanner_set_in(struct opi_scanner *scanner, FILE *in);
+
+FILE*
+opi_scanner_get_in(struct opi_scanner *scanner);
 
 struct opi_ast*
 opi_parse(FILE *in);
@@ -783,7 +820,7 @@ opi_builder_destroy(struct opi_builder *bldr);
 void
 opi_builtins(struct opi_builder *bldr);
 
-void
+int
 opi_builder_load_dl(struct opi_builder *bldr, void *dl);
 
 void
@@ -815,7 +852,7 @@ opi_builder_add_source_directory(struct opi_builder *bldr, const char *path);
 char*
 opi_builder_find_path(struct opi_builder *bldr, const char *path, char *fullpath);
 
-void
+int
 opi_builder_add_type(struct opi_builder *bldr, const char *name, opi_type_t type);
 
 opi_type_t
@@ -824,7 +861,7 @@ opi_builder_find_type(struct opi_builder *bldr, const char *typename);
 void
 opi_builder_def_const(struct opi_builder *bldr, const char *name, opi_t val);
 
-void
+int
 opi_builder_def_type(struct opi_builder *bldr, const char *name, opi_type_t type);
 
 struct opi_ir*
@@ -857,7 +894,7 @@ struct opi_ir {
   union {
     opi_t cnst;
     size_t var;
-    struct { struct opi_ir *fn, **args; size_t nargs; char eflag; } apply;
+    struct { struct opi_ir *fn, **args; size_t nargs; char eflag; struct opi_location *loc; } apply;
     struct { struct opi_ir **caps; size_t ncaps, nargs; struct opi_ir *body; } fn;
     struct { struct opi_ir **vals; size_t n; struct opi_ir *body; } let;
     struct { struct opi_ir *test, *then, *els; } iff;

@@ -3,13 +3,20 @@
 #include "opium/opium.h"
 
 #define YY_DECL \
-  int yylex(YYSTYPE *yylval, YYLTYPE *llocp, struct opi_scanner *yyscanner)
+  int yylex(YYSTYPE *yylval, YYLTYPE *yylloc, struct opi_scanner *yyscanner)
 
-/*#define YY_INPUT(buf,result,max_size)              \*/
-  /*{                                                \*/
-  /*int c = getchar();                               \*/
-  /*result = (c == EOF) ? YY_NULL : (buf[0] = c, 1); \*/
-  /*}*/
+#define YY_USER_ACTION                          \
+    yylloc->first_line = yylloc->last_line;     \
+    yylloc->first_column = yylloc->last_column; \
+    for(int i = 0; yytext[i] != '\0'; i++) {    \
+        if(yytext[i] == '\n') {                 \
+            yylloc->last_line++;                \
+            yylloc->last_column = 1;            \
+        }                                       \
+        else {                                  \
+            yylloc->last_column++;              \
+        }                                       \
+    }
 
 #include "parser.h"
 
@@ -41,7 +48,6 @@ int opi_start_token;
 
 let { return LET; }
 rec { return REC; }
-def { return DEF; }
 if { return IF; }
 unless { return UNLESS; }
 then { return THEN; }
@@ -159,6 +165,10 @@ wtf { return WTF; }
 "'"[^ \t\n(){}\[\]'\";,:]+ { yylval->opi = opi_symbol(yytext+1); return CONST; }
 [a-zA-Z_][0-9a-zA-Z_]*['?]? { yylval->str = strdup(yytext); return SYMBOL; }
 
-. { fprintf(stderr, "unexpected symbol: %s\n", yytext); exit(1); }
+. {
+  opi_error("parse error: unexpected symbols, %s\n", yytext);
+  opi_error = 1;
+  return FLEX_ERROR;
+}
 
 %%

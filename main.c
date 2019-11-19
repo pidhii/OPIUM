@@ -68,6 +68,8 @@ main(int argc, char **argv)
   if (optind < argc) {
     if (!(in = fopen(argv[optind], "r"))) {
       opi_error("%s\n", strerror(errno));
+      free(stack);
+      cod_strvec_destroy(&srcdirs);
       exit(EXIT_FAILURE);
     }
     strcpy(path, argv[optind]);
@@ -103,11 +105,13 @@ main(int argc, char **argv)
   if (in == stdin) {
     // REPL
     struct opi_scanner *scan;
+    struct opi_ast *ast;
+    struct opi_bytecode *bc;
+
     opi_scanner_init(&scan);
     opi_scanner_set_in(scan, stdin);
 
     size_t cnt = 0;
-    puts("");
     puts("\e[1mOpium REPL\e[0m");
     puts("press <C-d> to exit");
     puts("");
@@ -115,12 +119,18 @@ main(int argc, char **argv)
       printf("opium [%zu] ", cnt++);
       fflush(stdout);
 
-      struct opi_ast *ast = opi_parse_expr(scan);
-      if (!ast)
-        break;
+      opi_error = 0;
+      if (!(ast = opi_parse_expr(scan))) {
+        if (opi_error)
+          continue;
+        else
+          break;
+      }
 
-      struct opi_bytecode *bc = opi_build(&builder, ast, OPI_BUILD_EXPORT);
+      bc = opi_build(&builder, ast, OPI_BUILD_EXPORT);
       opi_ast_delete(ast);
+      if (bc == NULL)
+        continue;
 
       if (show_bytecode) {
         opi_debug("bytecode:\n");
@@ -132,6 +142,14 @@ main(int argc, char **argv)
         opi_error("unhandled error: ");
         opi_display(opi_undefined_get_what(ret), OPI_ERROR);
         putc('\n', OPI_ERROR);
+        opi_trace_t *trace = opi_undefined_get_trace(ret);
+        if (trace->len > 0) {
+          for (size_t i = 0; i < trace->len; ++i) {
+            struct opi_location *loc = trace->data[i];
+            opi_trace("%s:%d:%d:\n", loc->path, loc->fl, loc->fc);
+            opi_show_location(OPI_ERROR, loc->path, loc->fc, loc->fl, loc->lc, loc->ll);
+          }
+        }
       } else if (ret != opi_nil) {
         opi_display(ret, stdout);
         putc('\n', stdout);
@@ -147,9 +165,13 @@ main(int argc, char **argv)
   } else {
     struct opi_ast *ast = opi_parse(in);
     fclose(in);
+    if (ast == NULL)
+      goto cleanup;
 
     struct opi_bytecode *bc = opi_build(&builder, ast, OPI_BUILD_DEFAULT);
     opi_ast_delete(ast);
+    if (bc == NULL)
+      goto cleanup;
 
     if (show_bytecode) {
       opi_debug("bytecode:\n");
@@ -161,11 +183,20 @@ main(int argc, char **argv)
       opi_error("unhandled error: ");
       opi_display(opi_undefined_get_what(ret), OPI_ERROR);
       putc('\n', OPI_ERROR);
+      opi_trace_t *trace = opi_undefined_get_trace(ret);
+      if (trace->len > 0) {
+        for (size_t i = 0; i < trace->len; ++i) {
+          struct opi_location *loc = trace->data[i];
+          opi_trace("%s:%d:%d:\n", loc->path, loc->fl, loc->fc);
+          opi_show_location(OPI_ERROR, loc->path, loc->fc, loc->fl, loc->lc, loc->ll);
+        }
+      }
     }
     opi_drop(ret);
     opi_bytecode_delete(bc);
   }
 
+cleanup:
   opi_builder_destroy(&builder);
   opi_context_destroy(&ctx);
   opi_cleanup();

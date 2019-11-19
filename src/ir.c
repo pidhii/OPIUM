@@ -162,16 +162,18 @@ opi_builder_find_path(struct opi_builder *bldr, const char *path, char *fullpath
   return NULL;
 }
 
-void
+int
 opi_builder_add_type(struct opi_builder *bldr, const char *name, opi_type_t type)
 {
   if (opi_builder_find_type(bldr, name)) {
     opi_error("type named '%s' already present\n", name);
-    exit(EXIT_FAILURE);
+    opi_error = 1;
+    return OPI_ERR;
   }
   cod_strvec_push(bldr->type_names, name);
   cod_ptrvec_push(bldr->types, type, NULL);
   opi_context_add_type(bldr->ctx, type);
+  return OPI_OK;
 }
 
 opi_type_t
@@ -190,11 +192,13 @@ opi_builder_def_const(struct opi_builder *bldr, const char *name, opi_t val)
   opi_inc_rc(val);
 }
 
-void
+int
 opi_builder_def_type(struct opi_builder *bldr, const char *name, opi_type_t type)
 {
-  opi_builder_add_type(bldr, name, type);
+  if (opi_builder_add_type(bldr, name, type) == OPI_ERR)
+    return OPI_ERR;
   opi_alist_push(bldr->alist, name, NULL);
+  return OPI_OK;
 }
 
 opi_t
@@ -205,15 +209,17 @@ opi_builder_find_const(struct opi_builder *bldr, const char *name)
 }
 
 typedef int (*build_t)(struct opi_builder*);
-void
+int
 opi_builder_load_dl(struct opi_builder *bldr, void *dl)
 {
   build_t build = dlsym(dl, "opium_library");
   if (!build) {
     opi_error(dlerror());
-    exit(EXIT_FAILURE);
+    opi_error = 1;
+    return OPI_ERR;
   }
   opi_assert(build(bldr) == 0);
+  return OPI_OK;
 }
 
 void
@@ -248,7 +254,8 @@ opi_builder_assoc(struct opi_builder *bldr, const char *var)
   int idx = cod_strvec_rfind(&bldr->alist->keys, var);
   if (idx < 0) {
     opi_error("no such variable, '%s'\n", var);
-    exit(EXIT_FAILURE);
+    opi_error = 1;
+    return NULL;
   }
   return bldr->alist->vals.data[idx];
 }
@@ -384,6 +391,13 @@ make_struct(void)
   return (opi_t)s;
 }
 
+static struct opi_ir*
+build_error()
+{
+  opi_error = 1;
+  return opi_ir_return(opi_ir_const(opi_symbol("build-error")));
+}
+
 struct opi_ir*
 opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
 {
@@ -412,6 +426,9 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
       }
 
       const char *varname = opi_builder_assoc(bldr, name0 ? name0 : ast->var);
+      if (!varname)
+        return build_error();
+
       if (name0)
         free(name0);
 
@@ -458,6 +475,8 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
         args[i] = opi_builder_build_ir(bldr, ast->apply.args[i]);
       struct opi_ir *ret = opi_ir_apply(fn, args, ast->apply.nargs);
       ret->apply.eflag = ast->apply.eflag;
+      if (ast->apply.loc)
+        ret->apply.loc = opi_location_copy(ast->apply.loc);
       return ret;
     }
 
@@ -577,7 +596,7 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
         opi_error("source directories:\n");
         for (size_t i = 0; i < bldr->srcdirs->size; ++i)
           opi_error("  %2.zu. %s\n", i + 1, bldr->srcdirs->data[i]);
-        exit(EXIT_FAILURE);
+        return build_error();
       }
 
       // check if already loaded
@@ -587,7 +606,7 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
           // file already visited, test for cyclic dependence
           if (strcmp(bldr->load_state->data[i], "loading") == 0) {
             opi_error("cyclic dependence detected while loading \"%s\"\n", path);
-            exit(EXIT_FAILURE);
+            return build_error();
           }
 
           found = TRUE;
@@ -615,11 +634,17 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
             dl = dlopen(path, RTLD_NOW | RTLD_LOCAL);
             if (!dl) {
               opi_error(dlerror());
-              exit(EXIT_FAILURE);
+              opi_assert(chdir(cwd) == 0);
+              return build_error();
             }
             opi_context_add_dl(bldr->ctx, path, dl);
           }
-          opi_builder_load_dl(bldr, dl);
+
+          if (opi_builder_load_dl(bldr, dl) == OPI_ERR) {
+            opi_assert(chdir(cwd) == 0);
+            return build_error();
+          }
+
           ret = opi_ir_const(opi_nil);
 
         } else {
@@ -633,6 +658,11 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
           opi_assert(in);
           struct opi_ast *subast = opi_parse(in);
           fclose(in);
+          if (subast == NULL) {
+            opi_assert(chdir(cwd) == 0);
+            return build_error();
+          }
+
           opi_assert(subast->tag == OPI_AST_BLOCK);
           opi_ast_block_set_drop(subast, FALSE);
           struct opi_ir *ir = opi_builder_build_ir(bldr, subast);
@@ -660,10 +690,13 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
     {
       // find type
       const char *typename = opi_builder_assoc(bldr, ast->match.type);
+      if (!typename)
+        return build_error();
+
       opi_type_t type = opi_builder_find_type(bldr, typename);
       if (type == NULL) {
         opi_error("no such type, '%s'\n", ast->match.type);
-        exit(EXIT_FAILURE);
+        return build_error();
       }
 
       // load fields
@@ -715,7 +748,11 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
       opi_fn_set_data(ctor, type, NULL);
 
       // declare type
-      opi_builder_add_type(bldr, ast->strct.typename, type);
+      if (opi_builder_add_type(bldr, ast->strct.typename, type) == OPI_ERR) {
+        opi_drop(ctor);
+        opi_type_delete(type);
+        return build_error();
+      }
 
       // declare constructor
       opi_builder_push_decl(bldr, ast->strct.typename);
@@ -754,9 +791,15 @@ _export(void)
 struct opi_bytecode*
 opi_build(struct opi_builder *bldr, struct opi_ast *ast, int mode)
 {
-  struct opi_bytecode *bc = opi_bytecode();
+  opi_error = 0;
   struct opi_ir *ir = opi_builder_build_ir(bldr, ast);
+  if (opi_error) {
+    opi_ir_delete(ir);
+    return NULL;
+  }
   opi_assert(bldr->frame_offset == 0);
+
+  struct opi_bytecode *bc = opi_bytecode();
 
   switch (mode) {
     case OPI_BUILD_DEFAULT:
@@ -815,6 +858,8 @@ opi_ir_delete(struct opi_ir *node)
 
     case OPI_IR_APPLY:
       opi_ir_delete(node->apply.fn);
+      if (node->apply.loc)
+        opi_location_delete(node->apply.loc);
       for (size_t i = 0; i < node->apply.nargs; ++i)
         opi_ir_delete(node->apply.args[i]);
       free(node->apply.args);
@@ -898,6 +943,7 @@ opi_ir_apply(struct opi_ir *fn, struct opi_ir **args, size_t nargs)
   memcpy(node->apply.args, args, sizeof(struct opi_ir*) * nargs);
   node->apply.nargs = nargs;
   node->apply.eflag = TRUE;
+  node->apply.loc = NULL;
   return node;
 }
 

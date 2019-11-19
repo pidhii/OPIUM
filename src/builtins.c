@@ -707,8 +707,13 @@ loadfile(void)
     return opi_undefined(opi_string(strerror(errno)));
   }
 
+  opi_error = 0;
   struct opi_ast *ast = opi_parse(fs);
   fclose(fs);
+  if (opi_error) {
+    opi_drop(srcd);
+    return opi_undefined(opi_symbol("parse-error"));
+  }
 
   struct opi_builder bldr;
   opi_builder_init(&bldr, ctx);
@@ -727,6 +732,10 @@ loadfile(void)
 
   struct opi_bytecode *bc = opi_build(&bldr, ast, OPI_BUILD_DEFAULT);
   opi_ast_delete(ast);
+  if (bc == NULL) {
+    opi_builder_destroy(&bldr);
+    return opi_undefined(opi_symbol("build-error"));
+  }
 
   opi_t ret = opi_vm(bc);
   opi_inc_rc(ret);
