@@ -725,16 +725,14 @@ loadfile(void)
   }
   opi_drop(srcd);
 
-  struct opi_bytecode bc;
-  opi_bytecode_init(&bc);
-  opi_build(&bldr, ast, &bc);
+  struct opi_bytecode *bc = opi_build(&bldr, ast, OPI_BUILD_DEFAULT);
   opi_ast_delete(ast);
 
-  opi_t ret = opi_vm(&bc);
+  opi_t ret = opi_vm(bc);
   opi_inc_rc(ret);
 
-  opi_context_drain_bytecode(ctx, &bc);
-  opi_bytecode_destroy(&bc);
+  opi_context_drain_bytecode(ctx, bc);
+  opi_bytecode_delete(bc);
   opi_builder_destroy(&bldr);
 
   opi_dec_rc(ret);

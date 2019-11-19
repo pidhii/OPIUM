@@ -50,8 +50,7 @@ emit_fn(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int cel
     caps[i] = emit(ir->fn.caps[i], bc, stack, FALSE);
 
   // create body
-  struct opi_bytecode *body = malloc(sizeof(struct opi_bytecode));
-  opi_bytecode_init(body);
+  struct opi_bytecode *body = opi_bytecode();
 
   // create separate stack
   struct stack body_stack;

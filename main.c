@@ -7,6 +7,9 @@
 #include <libgen.h>
 #include <unistd.h>
 
+static
+opi_t *stack;
+
  __attribute__((noreturn)) void
 help_and_exit(char *argv0, int err)
 {
@@ -23,6 +26,9 @@ help_and_exit(char *argv0, int err)
 int
 main(int argc, char **argv)
 {
+  stack = malloc(sizeof(opi_t) * 0x1000);
+  opi_sp = stack;
+
   struct cod_strvec srcdirs;
   cod_strvec_init(&srcdirs);
   int show_bytecode = FALSE;
@@ -94,41 +100,74 @@ main(int argc, char **argv)
   /*opi_debug("define builtins\n");*/
   opi_builtins(&builder);
 
-  /*opi_debug("parse\n");*/
-  struct opi_ast *ast = opi_parse(in);
-  if (in != stdin)
+  if (in == stdin) {
+    // REPL
+    struct opi_scanner *scan;
+    opi_scanner_init(&scan);
+    opi_scanner_set_in(scan, stdin);
+
+    size_t cnt = 0;
+    puts("");
+    puts("\e[1mOpium REPL\e[0m");
+    puts("press <C-d> to exit");
+    puts("");
+    while (TRUE) {
+      printf("opium [%zu] ", cnt++);
+      fflush(stdout);
+
+      struct opi_ast *ast = opi_parse_expr(scan);
+      if (!ast)
+        break;
+
+      struct opi_bytecode *bc = opi_build(&builder, ast, OPI_BUILD_EXPORT);
+      opi_ast_delete(ast);
+
+      if (show_bytecode) {
+        opi_debug("bytecode:\n");
+        opi_insn_dump(bc->head, stdout);
+      }
+
+      opi_t ret = opi_vm(bc);
+      if (ret->type == opi_undefined_type) {
+        opi_error("unhandled error: ");
+        opi_display(opi_undefined_get_what(ret), OPI_ERROR);
+        putc('\n', OPI_ERROR);
+      } else if (ret != opi_nil) {
+        opi_display(ret, stdout);
+        putc('\n', stdout);
+      }
+      opi_drop(ret);
+      opi_context_drain_bytecode(&ctx, bc);
+      opi_bytecode_delete(bc);
+    }
+
+    opi_scanner_destroy(scan);
+    printf("End of input reached.\n");
+
+  } else {
+    struct opi_ast *ast = opi_parse(in);
     fclose(in);
 
-  /*opi_debug("translate AST\n");*/
-  struct opi_bytecode bc;
-  opi_bytecode_init(&bc);
-  opi_build(&builder, ast, &bc);
-  opi_ast_delete(ast);
+    struct opi_bytecode *bc = opi_build(&builder, ast, OPI_BUILD_DEFAULT);
+    opi_ast_delete(ast);
 
-  if (show_bytecode) {
-    opi_debug("bytecode:\n");
-    opi_insn_dump(bc.head, stdout);
-  }
+    if (show_bytecode) {
+      opi_debug("bytecode:\n");
+      opi_insn_dump(bc->head, stdout);
+    }
 
-  {
-    // Evaluate:
-    // initialize stack
-    opi_t *stack = malloc(sizeof(opi_t) * 0x1000);
-    opi_sp = stack;
-
-    opi_t ret = opi_vm(&bc);
+    opi_t ret = opi_vm(bc);
     if (ret->type == opi_undefined_type) {
       opi_error("unhandled error: ");
       opi_display(opi_undefined_get_what(ret), OPI_ERROR);
       putc('\n', OPI_ERROR);
     }
     opi_drop(ret);
-
-    free(stack);
+    opi_bytecode_delete(bc);
   }
-  opi_bytecode_destroy(&bc);
 
   opi_builder_destroy(&builder);
   opi_context_destroy(&ctx);
   opi_cleanup();
+  free(stack);
 }

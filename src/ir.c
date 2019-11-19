@@ -736,14 +736,70 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
   abort();
 }
 
-void
-opi_build(struct opi_builder *bldr, struct opi_ast *ast, struct opi_bytecode* bc)
+static opi_t
+_export(void)
 {
+  struct opi_builder *bldr = opi_fn_get_data(opi_current_fn);
+  opi_t l = opi_pop();
+  for (opi_t it = l; it != opi_nil; it = opi_cdr(it)) {
+    opi_t elt = opi_car(it);
+    opi_t nam = opi_car(elt);
+    opi_t val = opi_cdr(elt);
+    opi_builder_def_const(bldr, opi_string_get_value(nam), val);
+  }
+  opi_drop(l);
+  return opi_nil;
+}
+
+struct opi_bytecode*
+opi_build(struct opi_builder *bldr, struct opi_ast *ast, int mode)
+{
+  struct opi_bytecode *bc = opi_bytecode();
   struct opi_ir *ir = opi_builder_build_ir(bldr, ast);
   opi_assert(bldr->frame_offset == 0);
+
+  switch (mode) {
+    case OPI_BUILD_DEFAULT:
+      break;
+
+    case OPI_BUILD_EXPORT:
+    {
+      size_t ndecls = bldr->decls.size;
+      if (ndecls == 0)
+        break;
+
+      struct cod_strvec *decls = &bldr->decls;
+      struct opi_ir *list = opi_ir_const(opi_nil);
+      for (size_t i = 0; i < ndecls; ++i) {
+        struct opi_ast *var_ast = opi_ast_var(decls->data[i]);
+        struct opi_ir *var_ir = opi_builder_build_ir(bldr, var_ast);
+        opi_ast_delete(var_ast);
+        struct opi_ir *nam_ir = opi_ir_const(opi_string(decls->data[i]));
+        struct opi_ir *pair = opi_ir_binop(OPI_OPC_CONS, nam_ir, var_ir);
+        list = opi_ir_binop(OPI_OPC_CONS, pair, list);
+      }
+      opi_t export_fn = opi_fn("__export", _export, 1);
+      opi_fn_set_data(export_fn, bldr, NULL);
+      struct opi_ir *export_ir = opi_ir_const(export_fn);
+      struct opi_ir *call = opi_ir_apply(export_ir, &list, 1);
+
+      struct opi_ir *block[] = { ir, call };
+      ir = opi_ir_block(block, 2);
+
+      while (decls->size)
+        cod_strvec_pop(decls);
+      break;
+    }
+
+    default:
+      opi_assert(!"undefined build mode");
+  }
+
   opi_ir_emit(ir, bc);
   opi_ir_delete(ir);
   opi_bytecode_finalize(bc);
+
+  return bc;
 }
 
 void

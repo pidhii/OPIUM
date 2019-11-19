@@ -2,7 +2,14 @@
 #include <string.h>
 #include "opium/opium.h"
 
-#define YY_DECL int yylex(YYSTYPE *yylval, YYLTYPE *llocp)
+#define YY_DECL \
+  int yylex(YYSTYPE *yylval, YYLTYPE *llocp, struct opi_scanner *yyscanner)
+
+/*#define YY_INPUT(buf,result,max_size)              \*/
+  /*{                                                \*/
+  /*int c = getchar();                               \*/
+  /*result = (c == EOF) ? YY_NULL : (buf[0] = c, 1); \*/
+  /*}*/
 
 #include "parser.h"
 
@@ -11,14 +18,15 @@ int opi_start_token;
 %}
 
 %option noyywrap
-/*%option reentrant*/
+%option reentrant
+%option interactive
 
 %%
 
 %{
-  if (opi_start_token) {
+  if (opi_start_token >= 0) {
     int tok = opi_start_token;
-    opi_start_token = 0;
+    opi_start_token = -1;
     if (tok == START_REPL)
       yy_set_interactive(TRUE);
     return tok;

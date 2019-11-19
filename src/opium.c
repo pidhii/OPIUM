@@ -22,9 +22,6 @@ opi_die(const char *fmt, ...)
   exit(EXIT_FAILURE);
 }
 
-extern int
-yylex_destroy(void);
-
 void
 opi_init(void)
 {
@@ -989,5 +986,32 @@ opi_lazy(opi_t x)
   lazy->is_ready = FALSE;
   opi_init_cell(lazy, opi_lazy_type);
   return (opi_t)lazy;
+}
+
+extern int
+yylex_init(struct opi_scanner **scanner);
+
+extern int
+yylex_destroy(struct opi_scanner *scanner);
+
+extern void
+yyset_in(FILE *in, struct opi_scanner *scanner);
+
+int
+opi_scanner_init(struct opi_scanner **scanner)
+{
+  return yylex_init(scanner);
+}
+
+int
+opi_scanner_destroy(struct opi_scanner *scanner)
+{
+  return yylex_destroy(scanner);
+}
+
+void
+opi_scanner_set_in(struct opi_scanner *scanner, FILE *in)
+{
+  yyset_in(in, scanner);
 }
 

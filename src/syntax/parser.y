@@ -1,11 +1,16 @@
 /*%glr-parser*/
 %define parse.error verbose
 %define api.pure full
+%param {struct opi_scanner *yyscanner}
+%locations
 
 %{
 #include "opium/opium.h"
 #include <stdio.h>
 #include <string.h>
+
+extern
+int opi_start_token;
 
 extern int
 yylex();
@@ -17,7 +22,7 @@ extern
 FILE* yyin;
 
 void
-yyerror(void *locp, const char *what);
+yyerror(void *locp, struct opi_scanner *yyscanner, const char *what);
 
 static
 struct opi_ast *g_result;
@@ -132,7 +137,9 @@ int opi_start_token;
 
 entry
   : START_FILE block { @$; g_result = $2; }
-  | START_REPL block_expr { g_result = $2; }
+  | START_REPL block_expr ';' { g_result = $2; opi_start_token = 0; }
+  | START_REPL { g_result = NULL; }
+;
 
 Atom
   : NUMBER { $$ = opi_ast_const(opi_number($1)); }
@@ -648,20 +655,31 @@ recbins
 
 %%
 
-int opi_start_token = 0;
+int opi_start_token = -1;
 
 struct opi_ast*
 opi_parse(FILE *in)
 {
   opi_start_token = START_FILE;
-  yyin = in;
-  yyparse();
-  yylex_destroy();
+
+  struct opi_scanner *scanner;
+  opi_scanner_init(&scanner);
+  opi_scanner_set_in(scanner, in);
+  yyparse(scanner);
+  opi_scanner_destroy(scanner);
+  return g_result;
+}
+
+struct opi_ast*
+opi_parse_expr(struct opi_scanner *scanner)
+{
+  opi_start_token = START_REPL;
+  yyparse(scanner);
   return g_result;
 }
 
 void
-yyerror(void *locp_ptr, const char *what)
+yyerror(void *locp_ptr, struct opi_scanner *yyscanner, const char *what)
 {
   YYLTYPE *locp = locp_ptr;
   fprintf(stderr, "parse error: %s\n", what);

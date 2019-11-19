@@ -611,8 +611,22 @@ struct opi_ast {
   };
 };
 
+struct opi_scanner;
+
+int
+opi_scanner_init(struct opi_scanner **scanner);
+
+int
+opi_scanner_destroy(struct opi_scanner *scanner);
+
+void
+opi_scanner_set_in(struct opi_scanner *scanner, FILE *in);
+
 struct opi_ast*
 opi_parse(FILE *in);
+
+struct opi_ast*
+opi_parse_expr(struct opi_scanner *scanner);
 
 struct opi_ast*
 opi_parse_string(const char *str);
@@ -816,8 +830,13 @@ opi_builder_def_type(struct opi_builder *bldr, const char *name, opi_type_t type
 struct opi_ir*
 opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast);
 
-void
-opi_build(struct opi_builder *bldr, struct opi_ast *ast, struct opi_bytecode* bc);
+enum {
+  OPI_BUILD_DEFAULT,
+  OPI_BUILD_EXPORT,
+};
+
+struct opi_bytecode*
+opi_build(struct opi_builder *bldr, struct opi_ast *ast, int mode);
 
 enum opi_ir_tag {
   OPI_IR_CONST,
@@ -1180,11 +1199,11 @@ struct opi_bytecode {
   struct opi_flat_insn *tape;
 };
 
-void
-opi_bytecode_init(struct opi_bytecode *bc);
+struct opi_bytecode*
+opi_bytecode();
 
 void
-opi_bytecode_destroy(struct opi_bytecode *bc);
+opi_bytecode_delete(struct opi_bytecode *bc);
 
 struct opi_insn*
 opi_bytecode_drain(struct opi_bytecode *bc);

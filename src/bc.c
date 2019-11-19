@@ -4,9 +4,11 @@
 #include <string.h>
 #include <stdarg.h>
 
-void
-opi_bytecode_init(struct opi_bytecode *bc)
+struct opi_bytecode*
+opi_bytecode()
 {
+  struct opi_bytecode *bc = malloc(sizeof(struct opi_bytecode));
+
   bc->nvals = 0;
   bc->vinfo_cap = 0x10;
   bc->nvals = 0;
@@ -22,15 +24,18 @@ opi_bytecode_init(struct opi_bytecode *bc)
   bc->point = bc->tail;
 
   bc->tape = NULL;
+
+  return bc;
 }
 
 void
-opi_bytecode_destroy(struct opi_bytecode *bc)
+opi_bytecode_delete(struct opi_bytecode *bc)
 {
   opi_insn_delete(bc->head);
   free(bc->vinfo);
   if (bc->tape)
     free(bc->tape);
+  free(bc);
 }
 
 struct opi_insn*
@@ -108,8 +113,7 @@ opi_insn_delete1(struct opi_insn *insn)
       break;
 
     case OPI_OPC_FINFN:
-      opi_bytecode_destroy(OPI_FINFN_ARG_DATA(insn)->bc);
-      free(OPI_FINFN_ARG_DATA(insn)->bc);
+      opi_bytecode_delete(OPI_FINFN_ARG_DATA(insn)->bc);
       free(OPI_FINFN_ARG_DATA(insn));
   }
 
