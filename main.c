@@ -82,9 +82,10 @@ main(int argc, char **argv)
   /*opi_debug("initialize environment\n");*/
   opi_init();
 
-  struct opi_context ctx;
+  OpiContext ctx;
   opi_context_init(&ctx);
-  struct opi_builder builder;
+
+  OpiBuilder builder;
   opi_builder_init(&builder, &ctx);
 
   /*opi_debug("add source directories:\n");*/
@@ -105,8 +106,8 @@ main(int argc, char **argv)
   if (in == stdin) {
     // REPL
     struct opi_scanner *scan;
-    struct opi_ast *ast;
-    struct opi_bytecode *bc;
+    OpiAst *ast;
+    OpiBytecode *bc;
 
     opi_scanner_init(&scan);
     opi_scanner_set_in(scan, stdin);
@@ -145,7 +146,7 @@ main(int argc, char **argv)
         opi_trace_t *trace = opi_undefined_get_trace(ret);
         if (trace->len > 0) {
           for (size_t i = 0; i < trace->len; ++i) {
-            struct opi_location *loc = trace->data[i];
+            OpiLocation *loc = trace->data[i];
             opi_trace("%s:%d:%d:\n", loc->path, loc->fl, loc->fc);
             opi_show_location(OPI_ERROR, loc->path, loc->fc, loc->fl, loc->lc, loc->ll);
           }
@@ -163,12 +164,12 @@ main(int argc, char **argv)
     printf("End of input reached.\n");
 
   } else {
-    struct opi_ast *ast = opi_parse(in);
+    OpiAst *ast = opi_parse(in);
     fclose(in);
     if (ast == NULL)
       goto cleanup;
 
-    struct opi_bytecode *bc = opi_build(&builder, ast, OPI_BUILD_DEFAULT);
+    OpiBytecode *bc = opi_build(&builder, ast, OPI_BUILD_DEFAULT);
     opi_ast_delete(ast);
     if (bc == NULL)
       goto cleanup;
@@ -186,7 +187,7 @@ main(int argc, char **argv)
       opi_trace_t *trace = opi_undefined_get_trace(ret);
       if (trace->len > 0) {
         for (size_t i = 0; i < trace->len; ++i) {
-          struct opi_location *loc = trace->data[i];
+          OpiLocation *loc = trace->data[i];
           opi_trace("%s:%d:%d:\n", loc->path, loc->fl, loc->fc);
           opi_show_location(OPI_ERROR, loc->path, loc->fc, loc->fl, loc->lc, loc->ll);
         }

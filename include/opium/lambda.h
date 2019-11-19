@@ -6,14 +6,14 @@
 struct opi_scope {
   size_t rc;
   size_t nlams;
-  struct opi_fn *lams[];
+  OpiFn *lams[];
 };
 
 void
 opi_scope_dropout(struct opi_scope *scp);
 
 struct opi_lambda {
-  struct opi_bytecode *bc;
+  OpiBytecode *bc;
   struct opi_scope *scp;
   size_t ncaps;
   opi_t caps[];
@@ -26,7 +26,7 @@ opi_lambda_allocate(size_t ncaps)
 }
 
 void
-opi_lambda_delete(struct opi_fn *fn);
+opi_lambda_delete(OpiFn *fn);
 
 opi_t
 opi_lambda_fn(void);

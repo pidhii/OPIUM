@@ -101,7 +101,7 @@ chop(void)
   if (isspace(s[len - 1])) {
     if (str->rc == 0) {
       *(char*)(s + len - 1) = 0;
-      opi_as(str, struct opi_string).size -= 1;
+      opi_as(str, OpiString).size -= 1;
       return str;
     } else {
       return opi_string2(s, len - 1);
@@ -129,7 +129,7 @@ chomp(void)
   if (newlen != len) {
     if (str->rc == 0) {
       *(char*)(s + newlen) = 0;
-      opi_as(str, struct opi_string).size = newlen;
+      opi_as(str, OpiString).size = newlen;
       return str;
     } else {
       return opi_string2(s, newlen);
@@ -320,7 +320,7 @@ getdelim_(void)
 }
 
 int
-opium_library(struct opi_builder *bldr)
+opium_library(OpiBuilder *bldr)
 {
   opi_builder_def_const(bldr, "length", opi_fn("length", length , 1));
   opi_builder_def_const(bldr, "strlen", opi_fn("strlen", strlen_, 1));

@@ -24,12 +24,12 @@ extern
 FILE* yyin;
 
 static
-struct opi_ast *g_result;
+OpiAst *g_result;
 
 static
 char g_filename[PATH_MAX];
 
-static struct opi_location*
+static OpiLocation*
 location(void *locp);
 
 void
@@ -58,7 +58,7 @@ binds_delete(struct binds *binds)
 }
 
 static inline void
-binds_push(struct binds *binds, const char *var, struct opi_ast *val)
+binds_push(struct binds *binds, const char *var, OpiAst *val)
 {
   cod_strvec_push(&binds->vars, var);
   cod_ptrvec_push(&binds->vals, val, NULL);
@@ -70,7 +70,7 @@ int opi_start_token;
 
 %union {
   opi_t opi;
-  struct opi_ast *ast;
+  OpiAst *ast;
   long double num;
   char *str;
   struct binds *binds;
@@ -94,7 +94,7 @@ int opi_start_token;
   cod_ptrvec_destroy($$, NULL);
   free($$);
 } <ptrvec>
-%destructor { 
+%destructor {
   cod_strvec_destroy($$.vars);
   cod_strvec_destroy($$.fields);
   free($$.vars);
@@ -174,7 +174,7 @@ Atom
   | CONST { $$ = opi_ast_const($1); }
   | STRING { $$ = opi_ast_const(opi_string($1)); free($1); }
   | SHELL {
-    struct opi_ast *cmd = opi_ast_const(opi_string($1));
+    OpiAst *cmd = opi_ast_const(opi_string($1));
     $$ = opi_ast_apply(opi_ast_var("shell"), &cmd, 1);
     $$->apply.loc = location(&@$);
     free($1);
@@ -182,14 +182,14 @@ Atom
   | '(' Expr ')' { $$ = $2; }
   | WTF { $$ = opi_ast_var("wtf"); }
   | '[' arg_aux ']' {
-    $$ = opi_ast_apply(opi_ast_var("list"), (struct opi_ast**)$2->data, $2->size);
+    $$ = opi_ast_apply(opi_ast_var("list"), (OpiAst**)$2->data, $2->size);
     $$->apply.loc = location(&@$);
     cod_ptrvec_destroy($2, NULL);
     free($2);
   }
   | '[' ']' { $$ = opi_ast_const(opi_nil); }
   | Atom '.' SYMBOL {
-    struct opi_ast *p[] = { $1, opi_ast_const(opi_symbol($3)) };
+    OpiAst *p[] = { $1, opi_ast_const(opi_symbol($3)) };
     $$ = opi_ast_apply(opi_ast_var("."), p, 2);
     $$->apply.loc = location(&@$);
     free($3);
@@ -210,7 +210,7 @@ refstr
 Form
   : Atom
   | Atom arg {
-    $$ = opi_ast_apply($1, (struct opi_ast**)$2->data, $2->size);
+    $$ = opi_ast_apply($1, (OpiAst**)$2->data, $2->size);
     $$->apply.loc = location(&@$);
     cod_ptrvec_destroy($2, NULL);
     free($2);
@@ -225,48 +225,48 @@ Expr
   }
   | anylambda
   | '@' Expr {
-    struct opi_ast *fn = opi_ast_fn(NULL, 0, $2);
+    OpiAst *fn = opi_ast_fn(NULL, 0, $2);
     $$ = opi_ast_apply(opi_ast_var("lazy"), &fn, 1);
     $$->apply.loc = location(&@$);
   }
   | Expr IS Expr {
-    struct opi_ast *p[] = { $1, $3 };
+    OpiAst *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("is"), p, 2);
     $$->apply.loc = location(&@$);
   }
   | Expr EQ Expr {
-    struct opi_ast *p[] = { $1, $3 };
+    OpiAst *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("eq"), p, 2);
     $$->apply.loc = location(&@$);
   }
   | Expr EQUAL Expr {
-    struct opi_ast *p[] = { $1, $3 };
+    OpiAst *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("equal"), p, 2);
     $$->apply.loc = location(&@$);
   }
   | Expr ISNOT Expr {
-    struct opi_ast *p[] = { $1, $3 };
+    OpiAst *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("is"), p, 2);
     $$->apply.loc = location(&@$);
     $$ = opi_ast_apply(opi_ast_var("not"), &$$, 1);
     $$->apply.loc = location(&@$);
   }
   | Expr NOT EQ Expr {
-    struct opi_ast *p[] = { $1, $4 };
+    OpiAst *p[] = { $1, $4 };
     $$ = opi_ast_apply(opi_ast_var("eq"), p, 2);
     $$->apply.loc = location(&@$);
     $$ = opi_ast_apply(opi_ast_var("not"), &$$, 1);
     $$->apply.loc = location(&@$);
   }
   | Expr NOT EQUAL Expr {
-    struct opi_ast *p[] = { $1, $4 };
+    OpiAst *p[] = { $1, $4 };
     $$ = opi_ast_apply(opi_ast_var("equal"), p, 2);
     $$->apply.loc = location(&@$);
     $$ = opi_ast_apply(opi_ast_var("not"), &$$, 1);
     $$->apply.loc = location(&@$);
   }
   | NOT Expr {
-    struct opi_ast *x = $2;
+    OpiAst *x = $2;
     $$ = opi_ast_apply(opi_ast_var("not"), &x, 1);
     $$->apply.loc = location(&@$);
   }
@@ -281,10 +281,10 @@ Expr
   | '-' Expr %prec UMINUS {
     if ($2->tag == OPI_AST_CONST && $2->cnst->type == opi_number_type) {
       long double x = opi_number_get_value($2->cnst);
-      opi_as($2->cnst, struct opi_number).val = -x;
+      opi_as($2->cnst, OpiNumber).val = -x;
       $$ = $2;
     } else {
-      struct opi_ast *p[] = { opi_ast_const(opi_number(0)), $2 };
+      OpiAst *p[] = { opi_ast_const(opi_number(0)), $2 };
       $$ = opi_ast_apply(opi_ast_var("-"), p, 2);
       $$->apply.loc = location(&@$);
     }
@@ -297,12 +297,12 @@ Expr
   | Expr '%' Expr { $$ = opi_ast_binop(OPI_OPC_MOD, $1, $3); }
   | Expr ':' Expr { $$ = opi_ast_binop(OPI_OPC_CONS, $1, $3); }
   | Expr COMPOSE Expr {
-    struct opi_ast *p[] = { $1, $3 };
+    OpiAst *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("-|"), p, 2);
     $$->apply.loc = location(&@$);
   }
   | Expr PLUSPLUS Expr {
-    struct opi_ast *p[] = { $1, $3 };
+    OpiAst *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("++"), p, 2);
     $$->apply.loc = location(&@$);
   }
@@ -314,15 +314,15 @@ Expr
     $$ = opi_ast_if($2, $6, $4);
   }
   | LET REC recbins IN Expr {
-    $$ = opi_ast_fix($3->vars.data, (struct opi_ast**)$3->vals.data, $3->vars.size, $5);
+    $$ = opi_ast_fix($3->vars.data, (OpiAst**)$3->vals.data, $3->vars.size, $5);
     binds_delete($3);
   }
   | LET binds IN Expr {
-    $$ = opi_ast_let($2->vars.data, (struct opi_ast**)$2->vals.data, $2->vars.size, $4);
+    $$ = opi_ast_let($2->vars.data, (OpiAst**)$2->vals.data, $2->vars.size, $4);
     binds_delete($2);
   }
   | LET refstr '{' matches '}' '=' Expr IN Expr {
-    struct opi_ast *body[] = {
+    OpiAst *body[] = {
       opi_ast_match($2, $4.vars->data, $4.fields->data, $4.vars->size, $7, NULL, NULL),
       $9
     };
@@ -336,7 +336,7 @@ Expr
   | LET SYMBOL ':' SYMBOL '=' Expr IN Expr {
     char *flds[] = { "car", "cdr" };
     char *vars[] = { $2, $4 };
-    struct opi_ast *body[] = {
+    OpiAst *body[] = {
       opi_ast_match("pair", vars, flds, 2, $6, NULL, NULL),
       $8
     };
@@ -487,12 +487,12 @@ arg_aux
 block
   : { $$ = opi_ast_block(NULL, 0); }
   | block_aux {
-    $$ = opi_ast_block((struct opi_ast**)$1->data, $1->size);
+    $$ = opi_ast_block((OpiAst**)$1->data, $1->size);
     cod_ptrvec_destroy($1, NULL);
     free($1);
   }
   | block_aux ';' {
-    $$ = opi_ast_block((struct opi_ast**)$1->data, $1->size);
+    $$ = opi_ast_block((OpiAst**)$1->data, $1->size);
     cod_ptrvec_destroy($1, NULL);
     free($1);
   }
@@ -519,11 +519,11 @@ block_expr
     $$ = opi_ast_if($2, opi_ast_const(opi_nil), $4);
   }
   | LET REC recbins {
-    $$ = opi_ast_fix($3->vars.data, (struct opi_ast**)$3->vals.data, $3->vars.size, NULL);
+    $$ = opi_ast_fix($3->vars.data, (OpiAst**)$3->vals.data, $3->vars.size, NULL);
     binds_delete($3);
   }
   | LET binds {
-    $$ = opi_ast_let($2->vars.data, (struct opi_ast**)$2->vals.data, $2->vars.size, NULL);
+    $$ = opi_ast_let($2->vars.data, (OpiAst**)$2->vals.data, $2->vars.size, NULL);
     binds_delete($2);
   }
   | LET refstr '{' matches '}' '=' Expr {
@@ -609,16 +609,16 @@ fn_aux
 
 vafn_aux
   : DOTDOT SYMBOL RARROW Expr {
-    struct opi_ast *fn = opi_ast_fn(&($2), 1, $4);
-    struct opi_ast *param[] = { opi_ast_const(opi_number(0)), fn };
+    OpiAst *fn = opi_ast_fn(&($2), 1, $4);
+    OpiAst *param[] = { opi_ast_const(opi_number(0)), fn };
     $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
     $$->apply.loc = location(&@$);
     free($2);
   }
   | param DOTDOT SYMBOL RARROW Expr {
     cod_strvec_push($1, $3);
-    struct opi_ast *fn = opi_ast_fn($1->data, $1->size, $5);
-    struct opi_ast *param[] = { opi_ast_const(opi_number($1->size - 1)), fn };
+    OpiAst *fn = opi_ast_fn($1->data, $1->size, $5);
+    OpiAst *param[] = { opi_ast_const(opi_number($1->size - 1)), fn };
     $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
     $$->apply.loc = location(&@$);
     cod_strvec_destroy($1);
@@ -639,16 +639,16 @@ def_aux
 
 vadef_aux
   : DOTDOT SYMBOL '=' Expr {
-    struct opi_ast *fn = opi_ast_fn(&($2), 1, $4);
-    struct opi_ast *param[] = { opi_ast_const(opi_number(0)), fn };
+    OpiAst *fn = opi_ast_fn(&($2), 1, $4);
+    OpiAst *param[] = { opi_ast_const(opi_number(0)), fn };
     $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
     $$->apply.loc = location(&@$);
     free($2);
   }
   | param DOTDOT SYMBOL '=' Expr {
     cod_strvec_push($1, $3);
-    struct opi_ast *fn = opi_ast_fn($1->data, $1->size, $5);
-    struct opi_ast *param[] = { opi_ast_const(opi_number($1->size - 1)), fn };
+    OpiAst *fn = opi_ast_fn($1->data, $1->size, $5);
+    OpiAst *param[] = { opi_ast_const(opi_number($1->size - 1)), fn };
     $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
     $$->apply.loc = location(&@$);
     cod_strvec_destroy($1);
@@ -724,7 +724,7 @@ filename(FILE *fp)
   return filename;
 }
 
-struct opi_ast*
+OpiAst*
 opi_parse(FILE *in)
 {
   opi_start_token = START_FILE;
@@ -742,7 +742,7 @@ opi_parse(FILE *in)
   return g_result;
 }
 
-struct opi_ast*
+OpiAst*
 opi_parse_expr(struct opi_scanner *scanner)
 {
   opi_start_token = START_REPL;
@@ -767,7 +767,7 @@ yyerror(void *locp_ptr, struct opi_scanner *yyscanner, const char *what)
   }
 }
 
-static struct opi_location*
+static OpiLocation*
 location(void *locp_ptr)
 {
   YYLTYPE *locp = locp_ptr;

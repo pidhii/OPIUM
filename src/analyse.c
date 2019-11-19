@@ -4,9 +4,9 @@
 #include <string.h>
 
 int
-opi_bytecode_while(struct opi_bytecode *bc, int (*test)(struct opi_insn *insn, void *data), void *data)
+opi_bytecode_while(OpiBytecode *bc, int (*test)(OpiInsn *insn, void *data), void *data)
 {
-  for (struct opi_insn *ip = bc->point; ip; ip = ip->next) {
+  for (OpiInsn *ip = bc->point; ip; ip = ip->next) {
     if (!test(ip, data))
       return TRUE;
 
@@ -14,7 +14,7 @@ opi_bytecode_while(struct opi_bytecode *bc, int (*test)(struct opi_insn *insn, v
       bc->point = ip->next;
       int then_ret = opi_bytecode_while(bc, test, data);
 
-      bc->point = ((struct opi_insn*)OPI_IF_ARG_ELSE(ip))->next;
+      bc->point = ((OpiInsn*)OPI_IF_ARG_ELSE(ip))->next;
       int else_ret = opi_bytecode_while(bc, test, data);
 
       return then_ret || else_ret;
@@ -33,11 +33,11 @@ opi_bytecode_while(struct opi_bytecode *bc, int (*test)(struct opi_insn *insn, v
   return FALSE;
 }
 
-struct opi_insn*
-opi_bytecode_find_creating(struct opi_bytecode *bc, int vid)
+OpiInsn*
+opi_bytecode_find_creating(OpiBytecode *bc, int vid)
 {
-  struct opi_insn *ret = NULL;
-  int test(struct opi_insn *insn, void *data) {
+  OpiInsn *ret = NULL;
+  int test(OpiInsn *insn, void *data) {
     if (insn && opi_insn_is_creating(insn, vid)) {
       ret = insn;
       return FALSE;
@@ -50,10 +50,10 @@ opi_bytecode_find_creating(struct opi_bytecode *bc, int vid)
 }
 
 int
-opi_bytecode_find_last_users(struct opi_bytecode *bc, int vid, struct cod_ptrvec *vec)
+opi_bytecode_find_last_users(OpiBytecode *bc, int vid, struct cod_ptrvec *vec)
 {
-  struct opi_insn *buf = NULL;;
-  int test(struct opi_insn *insn, void *data) {
+  OpiInsn *buf = NULL;;
+  int test(OpiInsn *insn, void *data) {
     if (insn) {
       if (opi_insn_is_using(insn, vid))
         buf = insn;
@@ -66,13 +66,13 @@ opi_bytecode_find_last_users(struct opi_bytecode *bc, int vid, struct cod_ptrvec
   return opi_bytecode_while(bc, test, NULL);
 }
 
-struct trace { struct opi_insn *start, *end; };
+struct trace { OpiInsn *start, *end; };
 
-static struct opi_insn*
-split_if(struct opi_insn *if_insn, struct trace *then, struct trace *els)
+static OpiInsn*
+split_if(OpiInsn *if_insn, struct trace *then, struct trace *els)
 {
-  struct opi_insn *else_label = OPI_IF_ARG_ELSE(if_insn);
-  struct opi_insn *jmp = else_label->prev;
+  OpiInsn *else_label = OPI_IF_ARG_ELSE(if_insn);
+  OpiInsn *jmp = else_label->prev;
   opi_assert(jmp->opc == OPI_OPC_JMP);
 
   then->start = if_insn->next;
@@ -85,12 +85,12 @@ split_if(struct opi_insn *if_insn, struct trace *then, struct trace *els)
 }
 
 static int
-check_end(struct opi_bytecode *bc, struct opi_insn *begin, struct opi_insn *end)
+check_end(OpiBytecode *bc, OpiInsn *begin, OpiInsn *end)
 {
-  for (struct opi_insn *ip = begin; ip != end; ip = ip->next) {
+  for (OpiInsn *ip = begin; ip != end; ip = ip->next) {
     if (ip->opc == OPI_OPC_IF) {
       struct trace then_trace, else_trace;
-      struct opi_insn *cont_start;
+      OpiInsn *cont_start;
 
       cont_start = split_if(ip, &then_trace, &else_trace);
 
@@ -114,12 +114,12 @@ check_end(struct opi_bytecode *bc, struct opi_insn *begin, struct opi_insn *end)
 
 
 static int
-kill_end(struct opi_bytecode *bc, struct opi_insn *begin, struct opi_insn *end, int vid)
+kill_end(OpiBytecode *bc, OpiInsn *begin, OpiInsn *end, int vid)
 {
-  for (struct opi_insn *ip = begin; ip != end; ip = ip->next) {
+  for (OpiInsn *ip = begin; ip != end; ip = ip->next) {
     if (ip->opc == OPI_OPC_IF) {
       struct trace then_trace, else_trace;
-      struct opi_insn *cont_start;
+      OpiInsn *cont_start;
 
       cont_start = split_if(ip, &then_trace, &else_trace);
 
@@ -142,17 +142,17 @@ kill_end(struct opi_bytecode *bc, struct opi_insn *begin, struct opi_insn *end, 
 }
 
 static int
-kill_value_aux(struct opi_bytecode *bc, struct opi_insn *begin, struct opi_insn *end, int vid)
+kill_value_aux(OpiBytecode *bc, OpiInsn *begin, OpiInsn *end, int vid)
 {
-  struct opi_insn *last_user = NULL;
+  OpiInsn *last_user = NULL;
 
-  for (struct opi_insn *ip = begin; ip != end; ip = ip->next) {
+  for (OpiInsn *ip = begin; ip != end; ip = ip->next) {
     if (opi_insn_is_using(ip, vid))
       last_user = ip;
 
     if (ip->opc == OPI_OPC_IF) {
       struct trace then_trace, else_trace;
-      struct opi_insn *cont_start;
+      OpiInsn *cont_start;
 
       cont_start = split_if(ip, &then_trace, &else_trace);
 
@@ -222,9 +222,9 @@ kill_value_aux(struct opi_bytecode *bc, struct opi_insn *begin, struct opi_insn 
 }
 
 static void
-kill_value_local(struct opi_bytecode *bc, int vid)
+kill_value_local(OpiBytecode *bc, int vid)
 {
-  struct opi_insn *start = opi_bytecode_find_creating(bc, vid);
+  OpiInsn *start = opi_bytecode_find_creating(bc, vid);
   opi_assert(start);
 
   if (kill_value_aux(bc, start, bc->tail, vid)) {
@@ -237,9 +237,9 @@ kill_value_local(struct opi_bytecode *bc, int vid)
 }
 
 static void
-kill_value_phi(struct opi_bytecode *bc, int vid)
+kill_value_phi(OpiBytecode *bc, int vid)
 {
-  struct opi_insn *start = opi_bytecode_find_creating(bc, vid);
+  OpiInsn *start = opi_bytecode_find_creating(bc, vid);
   opi_assert(start);
   if (!kill_value_aux(bc, start, bc->tail, vid)) {
     opi_error("failed to kill %%%d\n", vid);
@@ -248,7 +248,7 @@ kill_value_phi(struct opi_bytecode *bc, int vid)
 }
 
 void
-opi_bytecode_fix_lifetimes(struct opi_bytecode *bc)
+opi_bytecode_fix_lifetimes(OpiBytecode *bc)
 {
   for (size_t vid = 0; vid < bc->nvals; ++vid) {
     if (bc->vinfo[vid].type == OPI_VAL_LOCAL)
@@ -259,7 +259,7 @@ opi_bytecode_fix_lifetimes(struct opi_bytecode *bc)
 }
 
 static int
-will_be_used(struct opi_insn *insn, int vid)
+will_be_used(OpiInsn *insn, int vid)
 {
   while (insn->opc != OPI_OPC_END) {
     if (opi_insn_is_using(insn, vid))
@@ -270,13 +270,13 @@ will_be_used(struct opi_insn *insn, int vid)
 }
 
 void
-opi_bytecode_cleanup(struct opi_bytecode *bc)
+opi_bytecode_cleanup(OpiBytecode *bc)
 {
-  struct opi_insn *insn = bc->head;
+  OpiInsn *insn = bc->head;
   while (insn->opc != OPI_OPC_END) {
     if (insn->opc == OPI_OPC_CONST && OPI_CONST_ARG_CELL(insn) == opi_nil) {
       if (!will_be_used(insn, OPI_CONST_REG_OUT(insn))) {
-        struct opi_insn *tmp = insn->next;
+        OpiInsn *tmp = insn->next;
         insn->prev->next = insn->next;
         insn->next->prev = insn->prev;
         opi_insn_delete1(insn);
@@ -289,7 +289,7 @@ opi_bytecode_cleanup(struct opi_bytecode *bc)
       if (insn->next->opc == OPI_OPC_DECRC &&
           (int)OPI_DECRC_REG_CELL(insn->next) == vid)
       {
-        struct opi_insn *tmp = insn->next->next;
+        OpiInsn *tmp = insn->next->next;
         insn->prev->next = insn->next->next;
         insn->next->next->prev = insn->prev;
         opi_insn_delete1(insn->next);
@@ -304,7 +304,7 @@ opi_bytecode_cleanup(struct opi_bytecode *bc)
 }
 
 static size_t
-distance(struct opi_insn *from, struct opi_insn *to)
+distance(OpiInsn *from, OpiInsn *to)
 {
   size_t d = 0;
   while (from != to) {
@@ -314,17 +314,17 @@ distance(struct opi_insn *from, struct opi_insn *to)
   return d;
 }
 
-struct opi_flat_insn*
-opi_bytecode_flatten(struct opi_bytecode *bc)
+OpiFlatInsn*
+opi_bytecode_flatten(OpiBytecode *bc)
 {
   size_t size = distance(bc->head, NULL);
-  struct opi_flat_insn *buf = malloc(sizeof(struct opi_flat_insn) * size);
+  OpiFlatInsn *buf = malloc(sizeof(OpiFlatInsn) * size);
   size_t i = 0;
 
-  struct opi_insn *insn = bc->head;
+  OpiInsn *insn = bc->head;
   while (insn) {
-    struct opi_flat_insn *finsn = buf + i++;
-    *finsn = *(struct opi_flat_insn*)insn;
+    OpiFlatInsn *finsn = buf + i++;
+    *finsn = *(OpiFlatInsn*)insn;
 
     if (insn->opc == OPI_OPC_JMP) {
       size_t d = distance(insn, OPI_JMP_ARG_TO(insn));

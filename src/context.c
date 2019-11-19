@@ -4,7 +4,7 @@
 #include <dlfcn.h>
 
 void
-opi_context_init(struct opi_context *ctx)
+opi_context_init(OpiContext *ctx)
 {
   cod_ptrvec_init(&ctx->types);
   cod_ptrvec_init(&ctx->bc);
@@ -17,7 +17,7 @@ delete_dl(void *dl)
 { dlclose(dl); }
 
 void
-opi_context_destroy(struct opi_context *ctx)
+opi_context_destroy(OpiContext *ctx)
 {
   cod_ptrvec_destroy(&ctx->types, (void*)opi_type_delete);
   cod_ptrvec_destroy(&ctx->bc, (void*)opi_insn_delete);
@@ -26,22 +26,22 @@ opi_context_destroy(struct opi_context *ctx)
 }
 
 void
-opi_context_add_type(struct opi_context *ctx, opi_type_t type)
+opi_context_add_type(OpiContext *ctx, opi_type_t type)
 { cod_ptrvec_push(&ctx->types, type, NULL); }
 
 void
-opi_context_drain_bytecode(struct opi_context *ctx, struct opi_bytecode *bc)
+opi_context_drain_bytecode(OpiContext *ctx, OpiBytecode *bc)
 { cod_ptrvec_push(&ctx->bc, opi_bytecode_drain(bc), NULL); }
 
 void
-opi_context_add_dl(struct opi_context *ctx, const char *path, void *dl)
+opi_context_add_dl(OpiContext *ctx, const char *path, void *dl)
 {
   cod_strvec_push(&ctx->dl_paths, path);
   cod_ptrvec_push(&ctx->dls, dl, NULL);
 }
 
 void*
-opi_context_find_dl(struct opi_context *ctx, const char *path)
+opi_context_find_dl(OpiContext *ctx, const char *path)
 {
   int idx = cod_strvec_find(&ctx->dl_paths, path);
   return idx < 0 ? NULL : ctx->dls.data[idx];

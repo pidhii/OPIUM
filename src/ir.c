@@ -8,32 +8,32 @@
 #include <libgen.h>
 
 void
-opi_alist_init(struct opi_alist *a)
+opi_alist_init(OpiAlist *a)
 {
   cod_strvec_init(&a->keys);
   cod_strvec_init(&a->vals);
 }
 
 void
-opi_alist_destroy(struct opi_alist *a)
+opi_alist_destroy(OpiAlist *a)
 {
   cod_strvec_destroy(&a->keys);
   cod_strvec_destroy(&a->vals);
 }
 
 size_t
-opi_alist_get_size(struct opi_alist *a)
+opi_alist_get_size(OpiAlist *a)
 { return a->keys.size; }
 
 void
-opi_alist_push(struct opi_alist *a, const char *var, const char *map)
+opi_alist_push(OpiAlist *a, const char *var, const char *map)
 {
   cod_strvec_push(&a->keys, var);
   cod_strvec_push(&a->vals, map ? map : var);
 }
 
 void
-opi_alist_pop(struct opi_alist *a, size_t n)
+opi_alist_pop(OpiAlist *a, size_t n)
 {
   opi_assert(n <= opi_alist_get_size(a));
   while (n--) {
@@ -43,7 +43,7 @@ opi_alist_pop(struct opi_alist *a, size_t n)
 }
 
 void
-opi_builder_init(struct opi_builder *bldr, struct opi_context *ctx)
+opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
 {
   bldr->is_derived = FALSE;
   bldr->ctx = ctx;
@@ -51,7 +51,7 @@ opi_builder_init(struct opi_builder *bldr, struct opi_context *ctx)
   cod_strvec_init(&bldr->decls);
   bldr->frame_offset = 0;
 
-  opi_alist_init(bldr->alist = malloc(sizeof(struct opi_alist)));
+  opi_alist_init(bldr->alist = malloc(sizeof(OpiAlist)));
 
   cod_strvec_init(bldr->const_names = malloc(sizeof(struct cod_strvec)));
   cod_ptrvec_init(bldr->const_vals = malloc(sizeof(struct cod_ptrvec)));
@@ -87,7 +87,7 @@ opi_builder_init(struct opi_builder *bldr, struct opi_context *ctx)
 }
 
 void
-opi_builder_init_derived(struct opi_builder *bldr, struct opi_builder *parent)
+opi_builder_init_derived(OpiBuilder *bldr, OpiBuilder *parent)
 {
   bldr->is_derived = TRUE;
   bldr->ctx = parent->ctx;
@@ -110,7 +110,7 @@ opi_builder_init_derived(struct opi_builder *bldr, struct opi_builder *parent)
 }
 
 void
-opi_builder_destroy(struct opi_builder *bldr)
+opi_builder_destroy(OpiBuilder *bldr)
 {
   cod_strvec_destroy(&bldr->decls);
   if (bldr->is_derived) {
@@ -140,7 +140,7 @@ opi_builder_destroy(struct opi_builder *bldr)
 }
 
 void
-opi_builder_add_source_directory(struct opi_builder *bldr, const char *path)
+opi_builder_add_source_directory(OpiBuilder *bldr, const char *path)
 {
   char fullpath[PATH_MAX];
   opi_assert(realpath(path, fullpath));
@@ -148,7 +148,7 @@ opi_builder_add_source_directory(struct opi_builder *bldr, const char *path)
 }
 
 char*
-opi_builder_find_path(struct opi_builder *bldr, const char *path, char *fullpath)
+opi_builder_find_path(OpiBuilder *bldr, const char *path, char *fullpath)
 {
   if (realpath(path, fullpath))
     return fullpath;
@@ -163,7 +163,7 @@ opi_builder_find_path(struct opi_builder *bldr, const char *path, char *fullpath
 }
 
 int
-opi_builder_add_type(struct opi_builder *bldr, const char *name, opi_type_t type)
+opi_builder_add_type(OpiBuilder *bldr, const char *name, opi_type_t type)
 {
   if (opi_builder_find_type(bldr, name)) {
     opi_error("type named '%s' already present\n", name);
@@ -177,14 +177,14 @@ opi_builder_add_type(struct opi_builder *bldr, const char *name, opi_type_t type
 }
 
 opi_type_t
-opi_builder_find_type(struct opi_builder *bldr, const char *typename)
+opi_builder_find_type(OpiBuilder *bldr, const char *typename)
 {
   long long int idx = cod_strvec_find(bldr->type_names, typename);
   return idx < 0 ? NULL : bldr->types->data[idx];
 }
 
 void
-opi_builder_def_const(struct opi_builder *bldr, const char *name, opi_t val)
+opi_builder_def_const(OpiBuilder *bldr, const char *name, opi_t val)
 {
   cod_strvec_push(bldr->const_names, name);
   cod_ptrvec_push(bldr->const_vals, val, NULL);
@@ -193,7 +193,7 @@ opi_builder_def_const(struct opi_builder *bldr, const char *name, opi_t val)
 }
 
 int
-opi_builder_def_type(struct opi_builder *bldr, const char *name, opi_type_t type)
+opi_builder_def_type(OpiBuilder *bldr, const char *name, opi_type_t type)
 {
   if (opi_builder_add_type(bldr, name, type) == OPI_ERR)
     return OPI_ERR;
@@ -202,15 +202,15 @@ opi_builder_def_type(struct opi_builder *bldr, const char *name, opi_type_t type
 }
 
 opi_t
-opi_builder_find_const(struct opi_builder *bldr, const char *name)
+opi_builder_find_const(OpiBuilder *bldr, const char *name)
 {
   long long int idx = cod_strvec_rfind(bldr->const_names, name);
   return idx < 0 ? NULL : bldr->const_vals->data[idx];
 }
 
-typedef int (*build_t)(struct opi_builder*);
+typedef int (*build_t)(OpiBuilder*);
 int
-opi_builder_load_dl(struct opi_builder *bldr, void *dl)
+opi_builder_load_dl(OpiBuilder *bldr, void *dl)
 {
   build_t build = dlsym(dl, "opium_library");
   if (!build) {
@@ -223,14 +223,14 @@ opi_builder_load_dl(struct opi_builder *bldr, void *dl)
 }
 
 void
-opi_builder_push_decl(struct opi_builder *bldr, const char *var)
+opi_builder_push_decl(OpiBuilder *bldr, const char *var)
 {
   cod_strvec_push(&bldr->decls, var);
   opi_alist_push(bldr->alist, var, NULL);
 }
 
 void
-opi_builder_pop_decl(struct opi_builder *bldr)
+opi_builder_pop_decl(OpiBuilder *bldr)
 {
   const char *var = bldr->alist->keys.data[bldr->alist->keys.size-1];
   const char *decl = bldr->decls.data[bldr->decls.size - 1];
@@ -241,7 +241,7 @@ opi_builder_pop_decl(struct opi_builder *bldr)
 }
 
 void
-opi_builder_capture(struct opi_builder *bldr, const char *var)
+opi_builder_capture(OpiBuilder *bldr, const char *var)
 {
   cod_strvec_insert(&bldr->decls, var, 0);
   /*opi_alist_push(bldr->alist, var, NULL);*/
@@ -249,7 +249,7 @@ opi_builder_capture(struct opi_builder *bldr, const char *var)
 }
 
 const char*
-opi_builder_assoc(struct opi_builder *bldr, const char *var)
+opi_builder_assoc(OpiBuilder *bldr, const char *var)
 {
   int idx = cod_strvec_rfind(&bldr->alist->keys, var);
   if (idx < 0) {
@@ -261,7 +261,7 @@ opi_builder_assoc(struct opi_builder *bldr, const char *var)
 }
 
 const char*
-opi_builder_try_assoc(struct opi_builder *bldr, const char *var)
+opi_builder_try_assoc(OpiBuilder *bldr, const char *var)
 {
   int idx = cod_strvec_rfind(&bldr->alist->keys, var);
   if (idx < 0)
@@ -270,7 +270,7 @@ opi_builder_try_assoc(struct opi_builder *bldr, const char *var)
 }
 
 void
-opi_builder_begin_scope(struct opi_builder *bldr, struct opi_build_scope *scp)
+opi_builder_begin_scope(OpiBuilder *bldr, struct opi_build_scope *scp)
 {
   scp->nvars1 = bldr->decls.size - bldr->frame_offset;
   scp->ntypes1 = bldr->types->size;
@@ -278,7 +278,7 @@ opi_builder_begin_scope(struct opi_builder *bldr, struct opi_build_scope *scp)
 }
 
 void
-opi_builder_drop_scope(struct opi_builder *bldr, struct opi_build_scope *scp)
+opi_builder_drop_scope(OpiBuilder *bldr, struct opi_build_scope *scp)
 {
   size_t nvars1 = scp->nvars1;
   size_t nvars2 = bldr->decls.size - bldr->frame_offset;
@@ -305,7 +305,7 @@ opi_builder_drop_scope(struct opi_builder *bldr, struct opi_build_scope *scp)
 }
 
 void
-opi_builder_make_namespace(struct opi_builder *bldr, struct opi_build_scope *scp, const char *prefix)
+opi_builder_make_namespace(OpiBuilder *bldr, struct opi_build_scope *scp, const char *prefix)
 {
   size_t nvars1 = scp->nvars1;
   size_t nvars2 = bldr->decls.size - bldr->frame_offset;
@@ -359,7 +359,7 @@ opi_struct_data_delete(opi_type_t type)
 { free(opi_type_get_data(type)); }
 
 struct opi_struct {
-  struct opi_header header;
+  OpiHeader header;
   opi_t data[];
 };
 
@@ -391,15 +391,15 @@ make_struct(void)
   return (opi_t)s;
 }
 
-static struct opi_ir*
+static OpiIr*
 build_error()
 {
   opi_error = 1;
   return opi_ir_return(opi_ir_const(opi_symbol("build-error")));
 }
 
-struct opi_ir*
-opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
+OpiIr*
+opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
 {
   switch (ast->tag) {
     case OPI_AST_CONST:
@@ -469,11 +469,11 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
 
     case OPI_AST_APPLY:
     {
-      struct opi_ir *fn = opi_builder_build_ir(bldr, ast->apply.fn);
-      struct opi_ir *args[ast->apply.nargs];
+      OpiIr *fn = opi_builder_build_ir(bldr, ast->apply.fn);
+      OpiIr *args[ast->apply.nargs];
       for (size_t i = 0; i < ast->apply.nargs; ++i)
         args[i] = opi_builder_build_ir(bldr, ast->apply.args[i]);
-      struct opi_ir *ret = opi_ir_apply(fn, args, ast->apply.nargs);
+      OpiIr *ret = opi_ir_apply(fn, args, ast->apply.nargs);
       ret->apply.eflag = ast->apply.eflag;
       if (ast->apply.loc)
         ret->apply.loc = opi_location_copy(ast->apply.loc);
@@ -483,7 +483,7 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
     case OPI_AST_FN:
     {
       // create separate builder for function body
-      struct opi_builder fn_bldr;
+      OpiBuilder fn_bldr;
       opi_builder_init_derived(&fn_bldr, bldr);
 
       // declare parameters as fn-local variables
@@ -491,14 +491,14 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
         opi_builder_push_decl(&fn_bldr, ast->fn.args[i]);
 
       // build body (with local builder)
-      struct opi_ir *body = opi_builder_build_ir(&fn_bldr, ast->fn.body);
+      OpiIr *body = opi_builder_build_ir(&fn_bldr, ast->fn.body);
 
       // process captures
       size_t ncaps = fn_bldr.frame_offset;
-      struct opi_ir *caps[ncaps];
+      OpiIr *caps[ncaps];
       for (size_t i = 0; i < ncaps; ++i) {
         // build expression to get captured variable
-        struct opi_ast *tmp_var = opi_ast_var(fn_bldr.decls.data[i]);
+        OpiAst *tmp_var = opi_ast_var(fn_bldr.decls.data[i]);
         caps[i] = opi_builder_build_ir(bldr, tmp_var);
         opi_ast_delete(tmp_var);
       }
@@ -512,7 +512,7 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
 
     case OPI_AST_LET:
     {
-      struct opi_ir *vals[ast->let.n];
+      OpiIr *vals[ast->let.n];
 
       // evaluate values
       for (size_t i = 0; i < ast->let.n; ++i)
@@ -523,7 +523,7 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
 
       if (ast->let.body) {
         // evaluate body
-        struct opi_ir *body = opi_builder_build_ir(bldr, ast->let.body);
+        OpiIr *body = opi_builder_build_ir(bldr, ast->let.body);
         // hide variables
         for (size_t i = 0; i < ast->let.n; ++i)
           opi_builder_pop_decl(bldr);
@@ -537,7 +537,7 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
 
     case OPI_AST_FIX:
     {
-      struct opi_ir *vals[ast->let.n];
+      OpiIr *vals[ast->let.n];
 
       // declare functions
       for (size_t i = 0; i < ast->let.n; ++i)
@@ -548,7 +548,7 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
 
       if (ast->let.body) {
         // evaluate body
-        struct opi_ir *body = opi_builder_build_ir(bldr, ast->let.body);
+        OpiIr *body = opi_builder_build_ir(bldr, ast->let.body);
         // hide functions
         for (size_t i = 0; i < ast->let.n; ++i)
           opi_builder_pop_decl(bldr);
@@ -571,7 +571,7 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
       struct opi_build_scope scp;
       opi_builder_begin_scope(bldr, &scp);
 
-      struct opi_ir *exprs[ast->block.n];
+      OpiIr *exprs[ast->block.n];
       for (size_t i = 0; i < ast->block.n; ++i)
         exprs[i] = opi_builder_build_ir(bldr, ast->block.exprs[i]);
 
@@ -580,7 +580,7 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
       else if (ast->block.namespace)
         opi_builder_make_namespace(bldr, &scp, ast->block.namespace);
 
-      struct opi_ir *ret = opi_ir_block(exprs, ast->block.n);
+      OpiIr *ret = opi_ir_block(exprs, ast->block.n);
       opi_ir_block_set_drop(ret, ast->block.drop);
       return ret;
     }
@@ -626,7 +626,7 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
         /*opi_debug("chdir %s\n", dir);*/
         opi_assert(chdir(dir) == 0);
 
-        struct opi_ir *ret;
+        OpiIr *ret;
 
         if (opi_is_dl(path)) {
           void *dl = opi_context_find_dl(bldr->ctx, path);
@@ -656,7 +656,7 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
           // load file
           FILE *in = fopen(path, "r");
           opi_assert(in);
-          struct opi_ast *subast = opi_parse(in);
+          OpiAst *subast = opi_parse(in);
           fclose(in);
           if (subast == NULL) {
             opi_assert(chdir(cwd) == 0);
@@ -665,7 +665,7 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
 
           opi_assert(subast->tag == OPI_AST_BLOCK);
           opi_ast_block_set_drop(subast, FALSE);
-          struct opi_ir *ir = opi_builder_build_ir(bldr, subast);
+          OpiIr *ir = opi_builder_build_ir(bldr, subast);
           opi_assert(ir->tag == OPI_IR_BLOCK);
           opi_assert(ir->block.drop == FALSE);
           opi_ast_delete(subast);
@@ -712,13 +712,13 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
       }
 
       // evaluate expr
-      struct opi_ir *expr = opi_builder_build_ir(bldr, ast->match.expr);
+      OpiIr *expr = opi_builder_build_ir(bldr, ast->match.expr);
 
       // declare variables
       for (size_t i = 0; i < ast->match.n; ++i)
         opi_builder_push_decl(bldr, ast->match.vars[i]);
 
-      struct opi_ir *then = NULL, *els = NULL;
+      OpiIr *then = NULL, *els = NULL;
       if (ast->match.then) {
         // eval then-branch
         then = opi_builder_build_ir(bldr, ast->match.then);
@@ -756,7 +756,7 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
 
       // declare constructor
       opi_builder_push_decl(bldr, ast->strct.typename);
-      struct opi_ir *ctor_ir = opi_ir_const(ctor);
+      OpiIr *ctor_ir = opi_ir_const(ctor);
       return opi_ir_let(&ctor_ir, 1, NULL);
     }
 
@@ -776,7 +776,7 @@ opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast)
 static opi_t
 _export(void)
 {
-  struct opi_builder *bldr = opi_fn_get_data(opi_current_fn);
+  OpiBuilder *bldr = opi_fn_get_data(opi_current_fn);
   opi_t l = opi_pop();
   for (opi_t it = l; it != opi_nil; it = opi_cdr(it)) {
     opi_t elt = opi_car(it);
@@ -788,18 +788,18 @@ _export(void)
   return opi_nil;
 }
 
-struct opi_bytecode*
-opi_build(struct opi_builder *bldr, struct opi_ast *ast, int mode)
+OpiBytecode*
+opi_build(OpiBuilder *bldr, OpiAst *ast, int mode)
 {
   opi_error = 0;
-  struct opi_ir *ir = opi_builder_build_ir(bldr, ast);
+  OpiIr *ir = opi_builder_build_ir(bldr, ast);
   if (opi_error) {
     opi_ir_delete(ir);
     return NULL;
   }
   opi_assert(bldr->frame_offset == 0);
 
-  struct opi_bytecode *bc = opi_bytecode();
+  OpiBytecode *bc = opi_bytecode();
 
   switch (mode) {
     case OPI_BUILD_DEFAULT:
@@ -812,21 +812,21 @@ opi_build(struct opi_builder *bldr, struct opi_ast *ast, int mode)
         break;
 
       struct cod_strvec *decls = &bldr->decls;
-      struct opi_ir *list = opi_ir_const(opi_nil);
+      OpiIr *list = opi_ir_const(opi_nil);
       for (size_t i = 0; i < ndecls; ++i) {
-        struct opi_ast *var_ast = opi_ast_var(decls->data[i]);
-        struct opi_ir *var_ir = opi_builder_build_ir(bldr, var_ast);
+        OpiAst *var_ast = opi_ast_var(decls->data[i]);
+        OpiIr *var_ir = opi_builder_build_ir(bldr, var_ast);
         opi_ast_delete(var_ast);
-        struct opi_ir *nam_ir = opi_ir_const(opi_string(decls->data[i]));
-        struct opi_ir *pair = opi_ir_binop(OPI_OPC_CONS, nam_ir, var_ir);
+        OpiIr *nam_ir = opi_ir_const(opi_string(decls->data[i]));
+        OpiIr *pair = opi_ir_binop(OPI_OPC_CONS, nam_ir, var_ir);
         list = opi_ir_binop(OPI_OPC_CONS, pair, list);
       }
       opi_t export_fn = opi_fn("__export", _export, 1);
       opi_fn_set_data(export_fn, bldr, NULL);
-      struct opi_ir *export_ir = opi_ir_const(export_fn);
-      struct opi_ir *call = opi_ir_apply(export_ir, &list, 1);
+      OpiIr *export_ir = opi_ir_const(export_fn);
+      OpiIr *call = opi_ir_apply(export_ir, &list, 1);
 
-      struct opi_ir *block[] = { ir, call };
+      OpiIr *block[] = { ir, call };
       ir = opi_ir_block(block, 2);
 
       while (decls->size)
@@ -846,7 +846,7 @@ opi_build(struct opi_builder *bldr, struct opi_ast *ast, int mode)
 }
 
 void
-opi_ir_delete(struct opi_ir *node)
+opi_ir_delete(OpiIr *node)
 {
   switch (node->tag) {
     case OPI_IR_CONST:
@@ -915,75 +915,75 @@ opi_ir_delete(struct opi_ir *node)
   free(node);
 }
 
-struct opi_ir*
+OpiIr*
 opi_ir_const(opi_t x)
 {
-  struct opi_ir *node = malloc(sizeof(struct opi_ir));
+  OpiIr *node = malloc(sizeof(OpiIr));
   node->tag = OPI_AST_CONST;
   opi_inc_rc(node->cnst = x);
   return node;
 }
 
-struct opi_ir*
+OpiIr*
 opi_ir_var(size_t offs)
 {
-  struct opi_ir *node = malloc(sizeof(struct opi_ir));
+  OpiIr *node = malloc(sizeof(OpiIr));
   node->tag = OPI_IR_VAR;
   node->var = offs;
   return node;
 }
 
-struct opi_ir*
-opi_ir_apply(struct opi_ir *fn, struct opi_ir **args, size_t nargs)
+OpiIr*
+opi_ir_apply(OpiIr *fn, OpiIr **args, size_t nargs)
 {
-  struct opi_ir *node = malloc(sizeof(struct opi_ir));
+  OpiIr *node = malloc(sizeof(OpiIr));
   node->tag = OPI_IR_APPLY;
   node->apply.fn = fn;
-  node->apply.args = malloc(sizeof(struct opi_ir*) * nargs);
-  memcpy(node->apply.args, args, sizeof(struct opi_ir*) * nargs);
+  node->apply.args = malloc(sizeof(OpiIr*) * nargs);
+  memcpy(node->apply.args, args, sizeof(OpiIr*) * nargs);
   node->apply.nargs = nargs;
   node->apply.eflag = TRUE;
   node->apply.loc = NULL;
   return node;
 }
 
-struct opi_ir*
-opi_ir_fn(struct opi_ir **caps, size_t ncaps, size_t nargs, struct opi_ir *body)
+OpiIr*
+opi_ir_fn(OpiIr **caps, size_t ncaps, size_t nargs, OpiIr *body)
 {
-  struct opi_ir *node = malloc(sizeof(struct opi_ir));
+  OpiIr *node = malloc(sizeof(OpiIr));
   node->tag = OPI_IR_FN;
-  node->fn.caps = malloc(sizeof(struct opi_ir*) * ncaps);
-  memcpy(node->fn.caps, caps, sizeof(struct opi_ir*) * ncaps);
+  node->fn.caps = malloc(sizeof(OpiIr*) * ncaps);
+  memcpy(node->fn.caps, caps, sizeof(OpiIr*) * ncaps);
   node->fn.ncaps = ncaps;
   node->fn.nargs = nargs;
   node->fn.body = body;
   return node;
 }
 
-struct opi_ir*
-opi_ir_let(struct opi_ir **vals, size_t n, struct opi_ir *body)
+OpiIr*
+opi_ir_let(OpiIr **vals, size_t n, OpiIr *body)
 {
-  struct opi_ir *node = malloc(sizeof(struct opi_ir));
+  OpiIr *node = malloc(sizeof(OpiIr));
   node->tag = OPI_IR_LET;
-  node->let.vals = malloc(sizeof(struct opi_ir*) * n);
-  memcpy(node->let.vals, vals, sizeof(struct opi_ir*) * n);
+  node->let.vals = malloc(sizeof(OpiIr*) * n);
+  memcpy(node->let.vals, vals, sizeof(OpiIr*) * n);
   node->let.n = n;
   node->let.body = body;
   return node;
 }
 
-struct opi_ir*
-opi_ir_fix(struct opi_ir **vals, size_t n, struct opi_ir *body)
+OpiIr*
+opi_ir_fix(OpiIr **vals, size_t n, OpiIr *body)
 {
-  struct opi_ir *ir = opi_ir_let(vals, n, body);
+  OpiIr *ir = opi_ir_let(vals, n, body);
   ir->tag = OPI_IR_FIX;
   return ir;
 }
 
-struct opi_ir*
-opi_ir_if(struct opi_ir *test, struct opi_ir *then, struct opi_ir *els)
+OpiIr*
+opi_ir_if(OpiIr *test, OpiIr *then, OpiIr *els)
 {
-  struct opi_ir *node = malloc(sizeof(struct opi_ir));
+  OpiIr *node = malloc(sizeof(OpiIr));
   node->tag = OPI_IR_IF;
   node->iff.test = test;
   node->iff.then = then;
@@ -992,23 +992,23 @@ opi_ir_if(struct opi_ir *test, struct opi_ir *then, struct opi_ir *els)
 }
 
 
-struct opi_ir*
-opi_ir_block(struct opi_ir **exprs, size_t n)
+OpiIr*
+opi_ir_block(OpiIr **exprs, size_t n)
 {
-  struct opi_ir *node = malloc(sizeof(struct opi_ir));
+  OpiIr *node = malloc(sizeof(OpiIr));
   node->tag = OPI_IR_BLOCK;
-  node->block.exprs = malloc(sizeof(struct opi_ir*) *  n);
-  memcpy(node->block.exprs, exprs, sizeof(struct opi_ir*) * n);
+  node->block.exprs = malloc(sizeof(OpiIr*) *  n);
+  memcpy(node->block.exprs, exprs, sizeof(OpiIr*) * n);
   node->block.n = n;
   node->block.drop = TRUE;
   return node;
 }
 
-struct opi_ir*
-opi_ir_match(opi_type_t type, size_t *offs, size_t n, struct opi_ir *expr,
-    struct opi_ir *then, struct opi_ir *els)
+OpiIr*
+opi_ir_match(opi_type_t type, size_t *offs, size_t n, OpiIr *expr,
+    OpiIr *then, OpiIr *els)
 {
-  struct opi_ir *node = malloc(sizeof(struct opi_ir));
+  OpiIr *node = malloc(sizeof(OpiIr));
   node->tag = OPI_IR_MATCH;
   node->match.type = type;
   node->match.offs = malloc(sizeof(size_t) * n);
@@ -1020,19 +1020,19 @@ opi_ir_match(opi_type_t type, size_t *offs, size_t n, struct opi_ir *expr,
   return node;
 }
 
-struct opi_ir*
-opi_ir_return(struct opi_ir *val)
+OpiIr*
+opi_ir_return(OpiIr *val)
 {
-  struct opi_ir *node = malloc(sizeof(struct opi_ir));
+  OpiIr *node = malloc(sizeof(OpiIr));
   node->tag = OPI_IR_RETURN;
   node->ret = val;
   return node;
 }
 
-struct opi_ir*
-opi_ir_binop(int opc, struct opi_ir *lhs, struct opi_ir *rhs)
+OpiIr*
+opi_ir_binop(int opc, OpiIr *lhs, OpiIr *rhs)
 {
-  struct opi_ir *node = malloc(sizeof(struct opi_ir));
+  OpiIr *node = malloc(sizeof(OpiIr));
   node->tag = OPI_IR_BINOP;
   node->binop.opc = opc;
   node->binop.lhs = lhs;

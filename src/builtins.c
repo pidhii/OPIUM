@@ -421,7 +421,7 @@ string_at(void)
 struct compose_data { opi_t f, g; };
 
 static void
-compose_delete(struct opi_fn *fn)
+compose_delete(OpiFn *fn)
 {
   struct compose_data *data = fn->data;
   opi_unref(data->f);
@@ -567,7 +567,7 @@ struct vaarg_data {
 };
 
 static void
-vaarg_delete(struct opi_fn *fn)
+vaarg_delete(OpiFn *fn)
 {
   struct vaarg_data *data = fn->data;
   opi_unref(data->f);
@@ -690,7 +690,7 @@ shell(void)
 static opi_t
 loadfile(void)
 {
-  struct opi_context *ctx = opi_fn_get_data(opi_current_fn);
+  OpiContext *ctx = opi_fn_get_data(opi_current_fn);
 
   opi_t path = opi_pop();
   opi_t srcd = opi_nargs > 1 ? opi_pop() : opi_nil;
@@ -708,14 +708,14 @@ loadfile(void)
   }
 
   opi_error = 0;
-  struct opi_ast *ast = opi_parse(fs);
+  OpiAst *ast = opi_parse(fs);
   fclose(fs);
   if (opi_error) {
     opi_drop(srcd);
     return opi_undefined(opi_symbol("parse-error"));
   }
 
-  struct opi_builder bldr;
+  OpiBuilder bldr;
   opi_builder_init(&bldr, ctx);
   opi_builtins(&bldr);
   for (opi_t it = srcd; it->type == opi_pair_type; it = opi_cdr(it)) {
@@ -730,7 +730,7 @@ loadfile(void)
   }
   opi_drop(srcd);
 
-  struct opi_bytecode *bc = opi_build(&bldr, ast, OPI_BUILD_DEFAULT);
+  OpiBytecode *bc = opi_build(&bldr, ast, OPI_BUILD_DEFAULT);
   opi_ast_delete(ast);
   if (bc == NULL) {
     opi_builder_destroy(&bldr);
@@ -749,7 +749,7 @@ loadfile(void)
 }
 
 void
-opi_builtins(struct opi_builder *bldr)
+opi_builtins(OpiBuilder *bldr)
 {
   opi_builder_def_const(bldr, "null?", opi_fn("null?", null_, 1));
   opi_builder_def_const(bldr, "boolean?", opi_fn("boolean?", boolean_p, 1));

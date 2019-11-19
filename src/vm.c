@@ -6,14 +6,14 @@
 #include <math.h>
 
 opi_t
-opi_vm(struct opi_bytecode *bc)
+opi_vm(OpiBytecode *bc)
 {
   opi_assert(bc->nvals <= OPI_VM_REG_MAX);
   opi_t r[OPI_VM_REG_MAX];
   struct opi_scope *scp = NULL;
   size_t scpcnt = 0;
 
-  struct opi_flat_insn *ip = bc->tape;
+  OpiFlatInsn *ip = bc->tape;
 
   while (1) {
     switch (ip->opc) {
@@ -162,7 +162,7 @@ opi_vm(struct opi_bytecode *bc)
 
       case OPI_OPC_FINFN:
       {
-        struct opi_insn_fn_data *data = OPI_FINFN_ARG_DATA(ip);
+        OpiFnInsnData *data = OPI_FINFN_ARG_DATA(ip);
         size_t ncaps = data->ncaps;
         struct opi_lambda *lam = opi_lambda_allocate(ncaps);
         lam->bc = data->bc;

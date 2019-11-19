@@ -27,8 +27,7 @@ opi_die(const char *fmt, ...)
 }
 
 int
-opi_show_location(FILE *out, const char *path, int first_col, int first_line,
-    int last_col, int last_line)
+opi_show_location(FILE *out, const char *path, int fc, int fl, int lc, int ll)
 {
   FILE *fs = fopen(path, "r");
   if (fs == NULL) {
@@ -38,6 +37,7 @@ opi_show_location(FILE *out, const char *path, int first_col, int first_line,
 
   int line = 1;
   int col = 1;
+  int hl = FALSE;
   while (TRUE) {
     errno = 0;
     int c = fgetc(fs);
@@ -54,16 +54,22 @@ opi_show_location(FILE *out, const char *path, int first_col, int first_line,
       return OPI_ERR;
     }
 
-    if (line >= first_line && line <= last_line) {
-      if (col == 1)
-        fprintf(out, "%4d\t", line);
-
-      if (line == first_line && col == first_col)
+    if (line >= fl && line <= ll) {
+      if (line == fl && col == fc) {
+        hl = TRUE;
         fputs("\e[38;5;9;1m", out);
+      }
+
+      if (col == 1) {
+        fputs("\e[0m", out);
+        fprintf(out, "[\x1b[38;5;9m opium \x1b[0m] %4d: ", line);
+        if (hl)
+          fputs("\e[38;5;9;1m", out);
+      }
 
       putc(c, out);
 
-      if (line == last_line && col == last_col - 1)
+      if (line == ll && col == lc - 1)
         fputs("\e[0m", out);
     }
 
@@ -74,7 +80,7 @@ opi_show_location(FILE *out, const char *path, int first_col, int first_line,
       col += 1;
     }
 
-    if (line > last_line)
+    if (line > ll)
       break;
   }
 
@@ -121,7 +127,7 @@ opi_cleanup(void)
 /******************************************************************************/
 opi_type_t opi_type_type = NULL;
 
-struct opi_type {
+struct OpiType_s {
   char name[OPI_TYPE_NAME_MAX + 1];
 
   void (*delete_cell)(opi_type_t ty, opi_t cell);
@@ -167,7 +173,7 @@ default_equal(opi_type_t ty, opi_t x, opi_t y)
 static opi_type_t
 new_type(const char *name)
 {
-  struct opi_type *ty = malloc(sizeof(struct opi_type));
+  OpiType *ty = malloc(sizeof(OpiType));
   opi_assert(strlen(name) <= OPI_TYPE_NAME_MAX);
   strcpy(ty->name, name);
   ty->delete_cell = default_destroy_cell;
@@ -306,14 +312,14 @@ opi_type_t opi_number_type;
 static void
 number_write(opi_type_t ty, opi_t x, FILE *out)
 {
-  long double val = opi_as(x, struct opi_number).val;
+  long double val = opi_as(x, OpiNumber).val;
   fprintf(out, "%Lf", val);
 }
 
 static void
 number_display(opi_type_t ty, opi_t x, FILE *out)
 {
-  long double val = opi_as(x, struct opi_number).val;
+  long double val = opi_as(x, OpiNumber).val;
   long double i;
   long double f = modfl(val, &i);
   if (f == 0)
@@ -351,7 +357,7 @@ opi_number_cleanup(void)
 
 /******************************************************************************/
 struct symbol {
-  struct opi_header header;
+  OpiHeader header;
   char *str;
   uint64_t hash;
 };
@@ -443,7 +449,7 @@ opi_type_t opi_undefined_type;
 static void
 undefined_delete(opi_type_t ty, opi_t cell)
 {
-  struct opi_undefined *undef = opi_as_ptr(cell);
+  OpiUndefined *undef = opi_as_ptr(cell);
   opi_unref(undef->what);
   for (size_t i = 0; i < undef->trace->len; ++i)
     opi_location_delete(undef->trace->data[i]);
@@ -474,7 +480,7 @@ opi_undefined_init(void)
   opi_undefined_type = opi_type("undefined");
   opi_type_set_delete_cell(opi_undefined_type, undefined_delete);
   char *fields[] = { "what" };
-  opi_type_set_fields(opi_undefined_type, offsetof(struct opi_undefined, what), fields, 1);
+  opi_type_set_fields(opi_undefined_type, offsetof(OpiUndefined, what), fields, 1);
   opi_type_set_write(opi_undefined_type, undefined_write);
   opi_type_set_display(opi_undefined_type, undefined_display);
 }
@@ -486,7 +492,7 @@ opi_undefined_cleanup(void)
 opi_t
 opi_undefined(opi_t what)
 {
-  struct opi_undefined *undef = opi_allocate();
+  OpiUndefined *undef = opi_allocate();
   opi_inc_rc(undef->what = what);
   opi_init_cell(undef, opi_undefined_type);
   undef->trace = malloc(sizeof(opi_trace_t));
@@ -497,7 +503,7 @@ opi_undefined(opi_t what)
 /******************************************************************************/
 opi_type_t opi_null_type;
 
-struct opi_header g_nil;
+OpiHeader g_nil;
 opi_t opi_nil;
 
 static void
@@ -527,16 +533,16 @@ opi_type_t opi_string_type;
 
 static void
 string_write(opi_type_t ty, opi_t x, FILE *out)
-{ fprintf(out, "\"%s\"", opi_as(x, struct opi_string).str); }
+{ fprintf(out, "\"%s\"", opi_as(x, OpiString).str); }
 
 static void
 string_display(opi_type_t ty, opi_t x, FILE *out)
-{ fprintf(out, "%s", opi_as(x, struct opi_string).str); }
+{ fprintf(out, "%s", opi_as(x, OpiString).str); }
 
 static void
 string_delete(opi_type_t ty, opi_t x)
 {
-  struct opi_string *s = opi_as_ptr(x);
+  OpiString *s = opi_as_ptr(x);
   free(s->str);
   opi_free(s);
 }
@@ -577,7 +583,7 @@ opi_string_cleanup(void)
 extern inline opi_t
 opi_string_move2(char *str, size_t len)
 {
-  struct opi_string *s = opi_allocate();
+  OpiString *s = opi_allocate();
   opi_init_cell(s, opi_string_type);
   s->str = str;
   s->size = len;
@@ -604,7 +610,7 @@ opi_string(const char *str)
 opi_t
 opi_string_from_char(char c)
 {
-  struct opi_string *s = opi_allocate();
+  OpiString *s = opi_allocate();
   opi_init_cell(s, opi_string_type);
   s->str = malloc(2);;
   s->str[0] = c;
@@ -615,15 +621,15 @@ opi_string_from_char(char c)
 
 const char*
 opi_string_get_value(opi_t x)
-{ return opi_as(x, struct opi_string).str; }
+{ return opi_as(x, OpiString).str; }
 
 size_t
 opi_string_get_length(opi_t x)
-{ return opi_as(x, struct opi_string).size; }
+{ return opi_as(x, OpiString).size; }
 
 /******************************************************************************/
 static
-struct opi_header g_true, g_false;
+OpiHeader g_true, g_false;
 opi_type_t opi_boolean_type;
 opi_t opi_true, opi_false;
 
@@ -699,7 +705,7 @@ opi_pair_init(void)
   opi_type_set_write(opi_pair_type, pair_write);
   opi_type_set_delete_cell(opi_pair_type, pair_delete);
   char *fields[] = { "car", "cdr" };
-  opi_type_set_fields(opi_pair_type, offsetof(struct opi_pair, car), fields, 2);
+  opi_type_set_fields(opi_pair_type, offsetof(OpiPair, car), fields, 2);
 }
 
 void
@@ -708,7 +714,7 @@ opi_pair_cleanup(void)
 
 /******************************************************************************/
 struct table {
-  struct opi_header header;
+  OpiHeader header;
   struct opi_hash_map map;
 };
 
@@ -793,7 +799,7 @@ opi_table_insert(opi_t tab, opi_t key, opi_t val, int replace, opi_t *err)
 
 /******************************************************************************/
 struct file {
-  struct opi_header header;
+  OpiHeader header;
   FILE *fs;
   int (*close)(FILE*);
 };
@@ -866,7 +872,7 @@ opi_type_t opi_fn_type;
 static void
 fn_display(opi_type_t type, opi_t cell, FILE *out)
 {
-  struct opi_fn *fn = opi_as_ptr(cell);
+  OpiFn *fn = opi_as_ptr(cell);
   if (fn->name)
     fprintf(out, "<function %s>", fn->name);
   else
@@ -876,12 +882,12 @@ fn_display(opi_type_t type, opi_t cell, FILE *out)
 static void
 fn_delete(opi_type_t type, opi_t cell)
 {
-  struct opi_fn *fn = opi_as_ptr(cell);
+  OpiFn *fn = opi_as_ptr(cell);
   fn->delete(fn);
 }
 
 void
-opi_fn_delete(struct opi_fn *fn)
+opi_fn_delete(OpiFn *fn)
 {
   if (fn->name)
     free(fn->name);
@@ -911,7 +917,7 @@ fn_default_delete_data(void *data)
 opi_t
 opi_fn_alloc()
 {
-  struct opi_fn *fn = malloc(sizeof(struct opi_fn));
+  OpiFn *fn = malloc(sizeof(OpiFn));
   opi_init_cell(fn, opi_fn_type);
   fn->handle = fn_default_handle;
   return (opi_t)fn;
@@ -920,7 +926,7 @@ opi_fn_alloc()
 void
 opi_fn_finalize(opi_t cell, const char *name, opi_fn_handle_t f, int arity)
 {
-  struct opi_fn *fn = opi_as_ptr(cell);
+  OpiFn *fn = opi_as_ptr(cell);
   fn->name = name ? strdup(name) : NULL;
   fn->handle = f;
   fn->data = NULL;
@@ -937,9 +943,9 @@ opi_fn(const char *name, opi_t (*f)(void), int arity)
 }
 
 void
-opi_fn_set_data(opi_t cell, void *data, void (*delete)(struct opi_fn*))
+opi_fn_set_data(opi_t cell, void *data, void (*delete)(OpiFn*))
 {
-  struct opi_fn *fn = opi_as_ptr(cell);
+  OpiFn *fn = opi_as_ptr(cell);
   fn->data = data;
   if (delete)
     fn->delete = delete;
@@ -952,7 +958,7 @@ struct curry_data {
 };
 
 static void
-curry_delete(struct opi_fn *fn)
+curry_delete(OpiFn *fn)
 {
   struct curry_data *data = fn->data;
   opi_unref(data->f);
@@ -1028,7 +1034,7 @@ opi_type_t opi_lazy_type;
 static void
 lazy_delete(opi_type_t type, opi_t x)
 {
-  struct opi_lazy *lazy = opi_as_ptr(x);
+  OpiLazy *lazy = opi_as_ptr(x);
   opi_unref(lazy->cell);
   opi_free(lazy);
 }
@@ -1047,7 +1053,7 @@ opi_lazy_cleanup(void)
 opi_t
 opi_lazy(opi_t x)
 {
-  struct opi_lazy *lazy = opi_allocate();
+  OpiLazy *lazy = opi_allocate();
   opi_inc_rc(lazy->cell = x);
   lazy->is_ready = FALSE;
   opi_init_cell(lazy, opi_lazy_type);
@@ -1090,23 +1096,23 @@ opi_scanner_get_in(struct opi_scanner *scanner)
   return yyget_in(scanner);
 }
 
-struct opi_location*
+OpiLocation*
 opi_location(const char *path, int fl, int fc, int ll, int lc)
 {
-  struct opi_location *loc = malloc(sizeof(struct opi_location));
-  *loc = (struct opi_location) { strdup(path), fl, fc, ll, lc };
+  OpiLocation *loc = malloc(sizeof(OpiLocation));
+  *loc = (OpiLocation) { strdup(path), fl, fc, ll, lc };
   return loc;
 }
 
 void
-opi_location_delete(struct opi_location *loc)
+opi_location_delete(OpiLocation *loc)
 {
   free(loc->path);
   free(loc);
 }
 
-struct opi_location*
-opi_location_copy(const struct opi_location *loc)
+OpiLocation*
+opi_location_copy(const OpiLocation *loc)
 {
   return opi_location(loc->path, loc->fl, loc->fc, loc->ll, loc->lc);
 }

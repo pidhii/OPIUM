@@ -3,17 +3,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct opi_ast*
+OpiAst*
 opi_parse_string(const char *str)
 {
   FILE *fs = fmemopen((void*)str, strlen(str), "r");
-  struct opi_ast *ast = opi_parse(fs);
+  OpiAst *ast = opi_parse(fs);
   fclose(fs);
   return ast;
 }
 
 void
-opi_ast_delete(struct opi_ast *node)
+opi_ast_delete(OpiAst *node)
 {
   if (node == NULL)
     return;
@@ -113,52 +113,52 @@ opi_ast_delete(struct opi_ast *node)
   free(node);
 }
 
-struct opi_ast*
+OpiAst*
 opi_ast_const(opi_t x)
 {
-  struct opi_ast *node = malloc(sizeof(struct opi_ast));
+  OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_CONST;
   opi_inc_rc(node->cnst = x);
   return node;
 }
 
-struct opi_ast*
+OpiAst*
 opi_ast_var(const char *name)
 {
-  struct opi_ast *node = malloc(sizeof(struct opi_ast));
+  OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_VAR;
   node->var = strdup(name);
   return node;
 }
 
-struct opi_ast*
+OpiAst*
 opi_ast_use(const char *old, const char *new)
 {
-  struct opi_ast *node = malloc(sizeof(struct opi_ast));
+  OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_USE;
   node->use.old = strdup(old);
   node->use.new = strdup(new);
   return node;
 }
 
-struct opi_ast*
-opi_ast_apply(struct opi_ast *fn, struct opi_ast **args, size_t nargs)
+OpiAst*
+opi_ast_apply(OpiAst *fn, OpiAst **args, size_t nargs)
 {
-  struct opi_ast *node = malloc(sizeof(struct opi_ast));
+  OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_APPLY;
   node->apply.fn = fn;
-  node->apply.args = malloc(sizeof(struct opi_ast*) * nargs);
-  memcpy(node->apply.args, args, sizeof(struct opi_ast*) * nargs);
+  node->apply.args = malloc(sizeof(OpiAst*) * nargs);
+  memcpy(node->apply.args, args, sizeof(OpiAst*) * nargs);
   node->apply.nargs = nargs;
   node->apply.eflag = TRUE;
   node->apply.loc = NULL;
   return node;
 }
 
-struct opi_ast*
-opi_ast_fn(char **args, size_t nargs, struct opi_ast *body)
+OpiAst*
+opi_ast_fn(char **args, size_t nargs, OpiAst *body)
 {
-  struct opi_ast *node = malloc(sizeof(struct opi_ast));
+  OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_FN;
   node->fn.args = malloc(sizeof(char*) * nargs);
   for (size_t i = 0; i < nargs; ++i)
@@ -168,25 +168,25 @@ opi_ast_fn(char **args, size_t nargs, struct opi_ast *body)
   return node;
 }
 
-struct opi_ast*
-opi_ast_let(char **vars, struct opi_ast **vals, size_t n, struct opi_ast *body)
+OpiAst*
+opi_ast_let(char **vars, OpiAst **vals, size_t n, OpiAst *body)
 {
-  struct opi_ast *node = malloc(sizeof(struct opi_ast));
+  OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_LET;
   node->let.vars = malloc(sizeof(char*) * n);
   for (size_t i = 0; i < n; ++i)
     node->let.vars[i] = strdup(vars[i]);
-  node->let.vals = malloc(sizeof(struct opi_ast*) * n);
-  memcpy(node->let.vals, vals, sizeof(struct opi_ast*) * n);
+  node->let.vals = malloc(sizeof(OpiAst*) * n);
+  memcpy(node->let.vals, vals, sizeof(OpiAst*) * n);
   node->let.n = n;
   node->let.body = body;
   return node;
 }
 
-struct opi_ast*
-opi_ast_if(struct opi_ast *test, struct opi_ast *then, struct opi_ast *els)
+OpiAst*
+opi_ast_if(OpiAst *test, OpiAst *then, OpiAst *els)
 {
-  struct opi_ast *node = malloc(sizeof(struct opi_ast));
+  OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_IF;
   node->iff.test = test;
   node->iff.then = then;
@@ -194,15 +194,15 @@ opi_ast_if(struct opi_ast *test, struct opi_ast *then, struct opi_ast *els)
   return node;
 }
 
-struct opi_ast*
-opi_ast_fix(char **vars, struct opi_ast **lams, size_t n, struct opi_ast *body)
+OpiAst*
+opi_ast_fix(char **vars, OpiAst **lams, size_t n, OpiAst *body)
 {
-  struct opi_ast *node = malloc(sizeof(struct opi_ast));
+  OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_FIX;
   node->let.vars = malloc(sizeof(char*) * n);
   for (size_t i = 0; i < n; ++i)
     node->let.vars[i] = strdup(vars[i]);
-  node->let.vals = malloc(sizeof(struct opi_ast*) * n);
+  node->let.vals = malloc(sizeof(OpiAst*) * n);
   for (size_t i = 0; i < n; ++i) {
     opi_assert(lams[i]->tag == OPI_AST_FN);
     node->let.vals[i] = lams[i];
@@ -212,13 +212,13 @@ opi_ast_fix(char **vars, struct opi_ast **lams, size_t n, struct opi_ast *body)
   return node;
 }
 
-struct opi_ast*
-opi_ast_block(struct opi_ast **exprs, size_t n)
+OpiAst*
+opi_ast_block(OpiAst **exprs, size_t n)
 {
-  struct opi_ast *node = malloc(sizeof(struct opi_ast));
+  OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_BLOCK;
-  node->block.exprs = malloc(sizeof(struct opi_ast*) *  n);
-  memcpy(node->block.exprs, exprs, sizeof(struct opi_ast*) * n);
+  node->block.exprs = malloc(sizeof(OpiAst*) *  n);
+  memcpy(node->block.exprs, exprs, sizeof(OpiAst*) * n);
   node->block.n = n;
   node->block.drop = TRUE;
   node->block.namespace = NULL;
@@ -226,14 +226,14 @@ opi_ast_block(struct opi_ast **exprs, size_t n)
 }
 
 void
-opi_ast_block_set_drop(struct opi_ast *block, int drop)
+opi_ast_block_set_drop(OpiAst *block, int drop)
 {
   opi_assert(block->tag == OPI_AST_BLOCK);
   block->block.drop = drop;
 }
 
 void
-opi_ast_block_set_namespace(struct opi_ast *block, const char *namespace)
+opi_ast_block_set_namespace(OpiAst *block, const char *namespace)
 {
   opi_assert(block->tag == OPI_AST_BLOCK);
   if (block->block.namespace)
@@ -242,37 +242,37 @@ opi_ast_block_set_namespace(struct opi_ast *block, const char *namespace)
 }
 
 void
-opi_ast_block_prepend(struct opi_ast *block, struct opi_ast *node)
+opi_ast_block_prepend(OpiAst *block, OpiAst *node)
 {
   opi_assert(block->tag == OPI_AST_BLOCK);
-  block->block.exprs = realloc(block->block.exprs, sizeof(struct opi_ast*) * block->block.n + 1);
-  memmove(block->block.exprs + 1, block->block.exprs, sizeof(struct opi_ast*) * block->block.n);
+  block->block.exprs = realloc(block->block.exprs, sizeof(OpiAst*) * block->block.n + 1);
+  memmove(block->block.exprs + 1, block->block.exprs, sizeof(OpiAst*) * block->block.n);
   block->block.exprs[0] = node;
   block->block.n += 1;
 }
 
 void
-opi_ast_block_append(struct opi_ast *block, struct opi_ast *node)
+opi_ast_block_append(OpiAst *block, OpiAst *node)
 {
   opi_assert(block->tag == OPI_AST_BLOCK);
-  block->block.exprs = realloc(block->block.exprs, sizeof(struct opi_ast*) * block->block.n + 1);
+  block->block.exprs = realloc(block->block.exprs, sizeof(OpiAst*) * block->block.n + 1);
   block->block.exprs[block->block.n++] = node;
 }
 
-struct opi_ast*
+OpiAst*
 opi_ast_load(const char *path)
 {
-  struct opi_ast *node = malloc(sizeof(struct opi_ast));
+  OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_LOAD;
   node->load = strdup(path);
   return node;
 }
 
-struct opi_ast*
+OpiAst*
 opi_ast_match(const char *type, char **vars, char **fields, size_t n,
-    struct opi_ast *expr, struct opi_ast *then, struct opi_ast *els)
+    OpiAst *expr, OpiAst *then, OpiAst *els)
 {
-  struct opi_ast *node = malloc(sizeof(struct opi_ast));
+  OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_MATCH;
   node->match.type = strdup(type);
   node->match.vars = malloc(sizeof(char*) * n);
@@ -288,10 +288,10 @@ opi_ast_match(const char *type, char **vars, char **fields, size_t n,
   return node;
 }
 
-struct opi_ast*
+OpiAst*
 opi_ast_struct(const char *typename, char** fields, size_t nfields)
 {
-  struct opi_ast *node = malloc(sizeof(struct opi_ast));
+  OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_STRUCT;
   node->strct.typename = strdup(typename);
   node->strct.fields = malloc(sizeof(char*) * nfields);
@@ -301,29 +301,29 @@ opi_ast_struct(const char *typename, char** fields, size_t nfields)
   return node;
 }
 
-struct opi_ast*
-opi_ast_and(struct opi_ast *x, struct opi_ast *y)
+OpiAst*
+opi_ast_and(OpiAst *x, OpiAst *y)
 { return opi_ast_if(x, y, opi_ast_const(opi_false)); }
 
-struct opi_ast*
-opi_ast_or(struct opi_ast *x, struct opi_ast *y)
+OpiAst*
+opi_ast_or(OpiAst *x, OpiAst *y)
 {
   char *var = " or tmp ";
   return opi_ast_let(&var, &x, 1,
       opi_ast_if(opi_ast_var(" or tmp "), opi_ast_var(" or tmp "), y));
 }
 
-struct opi_ast*
-opi_ast_return(struct opi_ast *val)
+OpiAst*
+opi_ast_return(OpiAst *val)
 {
-  struct opi_ast *node = malloc(sizeof(struct opi_ast));
+  OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_RETURN;
   node->ret = val;
   return node;
 }
 
-struct opi_ast*
-opi_ast_eor(struct opi_ast *try, struct opi_ast *els)
+OpiAst*
+opi_ast_eor(OpiAst *try, OpiAst *els)
 {
   char *var = " eor tmp ";
   char *vars[] = { "wtf" };
@@ -336,10 +336,10 @@ opi_ast_eor(struct opi_ast *try, struct opi_ast *els)
         els, opi_ast_var(" eor tmp ")));
 }
 
-struct opi_ast*
-opi_ast_binop(int opc, struct opi_ast *lhs, struct opi_ast *rhs)
+OpiAst*
+opi_ast_binop(int opc, OpiAst *lhs, OpiAst *rhs)
 {
-  struct opi_ast *node = malloc(sizeof(struct opi_ast));
+  OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_BINOP;
   node->binop.opc = opc;
   node->binop.lhs = lhs;

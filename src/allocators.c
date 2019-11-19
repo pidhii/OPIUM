@@ -1,7 +1,7 @@
 #include "opium/opium.h"
 
 struct cell {
-  struct opi_header header;
+  OpiHeader header;
   uintptr_t w[2];
 };
 

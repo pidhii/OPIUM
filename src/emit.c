@@ -36,10 +36,10 @@ stack_pop(struct stack *stack, size_t n)
 { stack->size -= n; }
 
 static int
-emit(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int tc);
+emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc);
 
 static int
-emit_fn(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int cell)
+emit_fn(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int cell)
 {
   opi_assert(ir->tag == OPI_IR_FN);
 
@@ -50,7 +50,7 @@ emit_fn(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int cel
     caps[i] = emit(ir->fn.caps[i], bc, stack, FALSE);
 
   // create body
-  struct opi_bytecode *body = opi_bytecode();
+  OpiBytecode *body = opi_bytecode();
 
   // create separate stack
   struct stack body_stack;
@@ -84,9 +84,9 @@ emit_fn(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int cel
 }
 
 static void
-trace_delete(struct opi_fn *fn)
+trace_delete(OpiFn *fn)
 {
-  struct opi_location *loc = fn->data;
+  OpiLocation *loc = fn->data;
   opi_location_delete(loc);
   opi_fn_delete(fn);
 }
@@ -94,16 +94,16 @@ trace_delete(struct opi_fn *fn)
 static opi_t
 trace(void)
 {
-  struct opi_location *loc = opi_fn_get_data(opi_current_fn);
+  OpiLocation *loc = opi_fn_get_data(opi_current_fn);
   opi_t err = opi_pop();
   opi_assert(err->type == opi_undefined_type);
-  struct opi_undefined *u = (void*)err;
+  OpiUndefined *u = (void*)err;
   cod_vec_push(*u->trace, opi_location_copy(loc));
   return err;
 }
 
 static int
-emit(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int tc)
+emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
 {
   switch (ir->tag) {
     case OPI_IR_CONST:
@@ -310,7 +310,7 @@ emit(struct opi_ir *ir, struct opi_bytecode *bc, struct stack *stack, int tc)
 }
 
 void
-opi_ir_emit(struct opi_ir *ir, struct opi_bytecode *bc)
+opi_ir_emit(OpiIr *ir, OpiBytecode *bc)
 {
   struct stack stack;
   stack_init(&stack);

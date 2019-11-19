@@ -2,7 +2,7 @@
 #include "opium/lambda.h"
 
 static inline void
-lam_destroy(struct opi_fn *fn)
+lam_destroy(OpiFn *fn)
 {
   struct opi_lambda *lam = fn->data;
   for (size_t i = 0; i < lam->ncaps; ++i) {
@@ -12,7 +12,7 @@ lam_destroy(struct opi_fn *fn)
 }
 
 static inline void
-lam_free(struct opi_fn *fn)
+lam_free(OpiFn *fn)
 {
   struct opi_lambda *lam = fn->data;
   free(lam);
@@ -20,7 +20,7 @@ lam_free(struct opi_fn *fn)
 }
 
 static inline void
-lam_delete(struct opi_fn *fn)
+lam_delete(OpiFn *fn)
 {
   lam_destroy(fn);
   lam_free(fn);
@@ -47,7 +47,7 @@ opi_scope_dropout(struct opi_scope *scp)
 }
 
 void
-opi_lambda_delete(struct opi_fn *fn)
+opi_lambda_delete(OpiFn *fn)
 {
   struct opi_lambda *lam = fn->data;
   if (lam->scp)

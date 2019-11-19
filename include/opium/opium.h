@@ -58,21 +58,36 @@ opi_die(const char *fmt, ...);
 extern
 int opi_error;
 
-typedef struct opi_type *opi_type_t;
-typedef struct opi_header *opi_t;
+typedef struct OpiType_s OpiType;
+typedef OpiType *opi_type_t;
+
+typedef struct OpiHeader_s OpiHeader;
+typedef OpiHeader *opi_t;
 
 typedef uintptr_t opi_rc_t;
 
+typedef struct OpiLocation_s {
+  char *path;
+  int fl, fc, ll, lc;
+} OpiLocation;
+
+OpiLocation*
+opi_location(const char *path, int fl, int fc, int ll, int lc);
+
+void
+opi_location_delete(OpiLocation *loc);
+
+OpiLocation*
+opi_location_copy(const OpiLocation *loc);
+
 int
-opi_show_location(FILE *out, const char *path, int first_col, int first_line,
-    int last_col, int last_line);
+opi_show_location(FILE *out, const char *path, int fc, int fl, int lc, int ll);
 
 void
 opi_init(void);
 
 void
 opi_cleanup(void);
-
 
 extern
 opi_t *opi_sp;
@@ -81,7 +96,7 @@ opi_t opi_current_fn;
 extern
 size_t opi_nargs;
 
-struct opi_bytecode;
+typedef struct OpiBytecode_s OpiBytecode;
 
 
 void
@@ -152,8 +167,8 @@ opi_type_get_data(opi_type_t ty);
 /* ==========================================================================
  * Cell
  */
-struct opi_header {
-  struct opi_type *type;
+struct OpiHeader_s {
+  OpiType *type;
   opi_rc_t rc;
 };
 
@@ -234,10 +249,10 @@ opi_get(size_t offs)
 /* ==========================================================================
  * Number
  */
-struct opi_number {
-  struct opi_header header;
+typedef struct OpiNumber_s {
+  OpiHeader header;
   long double val;
-};
+} OpiNumber;
 
 extern
 opi_type_t opi_number_type;
@@ -251,7 +266,7 @@ opi_number_cleanup(void);
 static inline opi_t
 opi_number(long double x)
 {
-  struct opi_number *num = opi_allocate();
+  OpiNumber *num = opi_allocate();
   opi_init_cell(num, opi_number_type);
   num->val = x;
   return (opi_t)num;
@@ -259,7 +274,7 @@ opi_number(long double x)
 
 static inline long double
 opi_number_get_value(opi_t cell)
-{ return opi_as(cell, struct opi_number).val; }
+{ return opi_as(cell, OpiNumber).val; }
 
 /* ==========================================================================
  * Symbol
@@ -282,12 +297,12 @@ opi_symbol_get_string(opi_t x);
 /* ==========================================================================
  * Undefined
  */
-typedef cod_vec(struct opi_location*) opi_trace_t;
-struct opi_undefined {
-  struct opi_header header;
+typedef cod_vec(OpiLocation*) opi_trace_t;
+typedef struct OpiUndefined_s {
+  OpiHeader header;
   opi_t what;
   opi_trace_t* trace;
-};
+} OpiUndefined;
 
 extern
 opi_type_t opi_undefined_type;
@@ -303,11 +318,11 @@ opi_undefined(opi_t what);
 
 static inline opi_t
 opi_undefined_get_what(opi_t x)
-{ return opi_as(x, struct opi_undefined).what; }
+{ return opi_as(x, OpiUndefined).what; }
 
 static inline opi_trace_t*
 opi_undefined_get_trace(opi_t x)
-{ return opi_as(x, struct opi_undefined).trace; }
+{ return opi_as(x, OpiUndefined).trace; }
 
 /* ==========================================================================
  * Nil
@@ -327,11 +342,11 @@ opi_t opi_nil;
 /* ==========================================================================
  * String
  */
-struct opi_string {
-  struct opi_header header;
+typedef struct OpiString_s {
+  OpiHeader header;
   char *str;
   size_t size;
-};
+} OpiString;
 
 extern
 opi_type_t opi_string_type;
@@ -381,11 +396,11 @@ opi_t opi_true, opi_false;
 /* ==========================================================================
  * Pair
  */
-struct opi_pair {
-  struct opi_header header;
+typedef struct OpiPair_s {
+  OpiHeader header;
   opi_t car, cdr;
   size_t len;
-};
+} OpiPair;
 
 extern
 opi_type_t opi_pair_type;
@@ -399,7 +414,7 @@ opi_pair_cleanup(void);
 static inline opi_t
 opi_cons(opi_t car, opi_t cdr)
 {
-  struct opi_pair *p = opi_allocate();
+  OpiPair *p = opi_allocate();
   opi_inc_rc(p->car = car);
   opi_inc_rc(p->cdr = cdr);
   opi_init_cell(p, opi_pair_type);
@@ -408,11 +423,11 @@ opi_cons(opi_t car, opi_t cdr)
 
 static inline opi_t
 opi_car(opi_t x)
-{ return opi_as(x, struct opi_pair).car; }
+{ return opi_as(x, OpiPair).car; }
 
 static inline opi_t
 opi_cdr(opi_t x)
-{ return opi_as(x, struct opi_pair).cdr; }
+{ return opi_as(x, OpiPair).cdr; }
 
 static inline size_t
 opi_length(opi_t x)
@@ -472,18 +487,18 @@ opi_file_get_value(opi_t x);
  */
 typedef opi_t (*opi_fn_handle_t)(void);
 
-struct opi_fn {
-  struct opi_header header;
-
+typedef struct OpiFn_s OpiFn;
+struct OpiFn_s {
+  OpiHeader header;
   char *name;
   opi_fn_handle_t handle;
   void *data;
-  void (*delete)(struct opi_fn *self);
+  void (*delete)(OpiFn *self);
   intptr_t arity;
 };
 
 void
-opi_fn_delete(struct opi_fn *fn);
+opi_fn_delete(OpiFn *fn);
 
 extern
 opi_type_t opi_fn_type;
@@ -504,28 +519,36 @@ opi_t
 opi_fn(const char *name, opi_fn_handle_t f, int arity);
 
 void
-opi_fn_set_data(opi_t cell, void *data, void (*delete)(struct opi_fn *self));
+opi_fn_set_data(opi_t cell, void *data, void (*delete)(OpiFn *self));
 
 static inline int
 opi_fn_get_arity(opi_t cell)
-{ return opi_as(cell, struct opi_fn).arity; }
+{
+  return opi_as(cell, OpiFn).arity;
+}
 
 static inline void*
 opi_fn_get_data(opi_t cell)
-{ return opi_as(cell, struct opi_fn).data; }
+{
+  return opi_as(cell, OpiFn).data;
+}
 
 static inline opi_fn_handle_t
 opi_fn_get_handle(opi_t cell)
-{ return opi_as(cell, struct opi_fn).handle; }
+{
+  return opi_as(cell, OpiFn).handle;
+}
 
 static inline const char*
 opi_fn_get_name(opi_t f)
-{ return opi_as(f, struct opi_fn).name; }
+{
+  return opi_as(f, OpiFn).name;
+}
 
 static inline opi_t
 opi_fn_apply(opi_t cell, size_t nargs)
 {
-  struct opi_fn *fn = opi_as_ptr(cell);
+  OpiFn *fn = opi_as_ptr(cell);
   opi_nargs = nargs;
   opi_current_fn = cell;
   return fn->handle();
@@ -533,7 +556,9 @@ opi_fn_apply(opi_t cell, size_t nargs)
 
 static inline int
 opi_test_arity(int arity, int nargs)
-{ return ((arity < 0) & (nargs >= -(1 + arity))) | (arity == nargs); }
+{
+  return ((arity < 0) & (nargs >= -(1 + arity))) | (arity == nargs);
+}
 
 opi_t
 opi_apply_partial(opi_t f, int nargs);
@@ -553,11 +578,11 @@ opi_apply(opi_t f, size_t nargs)
 extern
 opi_type_t opi_lazy_type;
 
-struct opi_lazy {
-  struct opi_header header;
+typedef struct OpiLazy_s {
+  OpiHeader header;
   opi_t cell;
   uint_fast8_t is_ready;
-};
+} OpiLazy;
 
 void
 opi_lazy_init(void);
@@ -571,7 +596,7 @@ opi_lazy(opi_t x);
 static inline opi_t
 opi_lazy_get_value(opi_t x)
 {
-  struct opi_lazy *lazy = opi_as_ptr(x);
+  OpiLazy *lazy = opi_as_ptr(x);
   if (!lazy->is_ready) {
     opi_t val = opi_apply(lazy->cell, 0);
     opi_inc_rc(val);
@@ -582,20 +607,10 @@ opi_lazy_get_value(opi_t x)
   return lazy->cell;
 }
 
-static inline opi_t
-opi_flush(opi_t x)
-{
-  if (x->type == opi_lazy_type)
-    return opi_lazy_get_value(x);
-  else
-    return x;
-}
-
-
 /* ==========================================================================
  * AST
  */
-enum opi_ast_tag {
+typedef enum OpiAstTag_e {
   OPI_AST_CONST,
   OPI_AST_VAR,
   OPI_AST_APPLY,
@@ -610,38 +625,25 @@ enum opi_ast_tag {
   OPI_AST_USE,
   OPI_AST_RETURN,
   OPI_AST_BINOP,
-};
+} OpiAstTag;
 
-struct opi_location {
-  char *path;
-  int fl, fc, ll, lc;
-};
-
-struct opi_location*
-opi_location(const char *path, int fl, int fc, int ll, int lc);
-
-void
-opi_location_delete(struct opi_location *loc);
-
-struct opi_location*
-opi_location_copy(const struct opi_location *loc);
-
-struct opi_ast {
-  enum opi_ast_tag tag;
+typedef struct OpiAst_s OpiAst;
+struct OpiAst_s {
+  OpiAstTag tag;
   union {
     opi_t cnst;
     char *var;
-    struct { struct opi_ast *fn, **args; size_t nargs; char eflag; struct opi_location *loc; } apply;
-    struct { char **args; size_t nargs; struct opi_ast *body; } fn;
-    struct { char **vars; struct opi_ast **vals; size_t n; struct opi_ast *body; } let;
-    struct { struct opi_ast *test, *then, *els; } iff;
-    struct { struct opi_ast **exprs; size_t n; int drop; char *namespace; } block;
+    struct { OpiAst *fn, **args; size_t nargs; char eflag; OpiLocation *loc; } apply;
+    struct { char **args; size_t nargs; OpiAst *body; } fn;
+    struct { char **vars; OpiAst **vals; size_t n; OpiAst *body; } let;
+    struct { OpiAst *test, *then, *els; } iff;
+    struct { OpiAst **exprs; size_t n; int drop; char *namespace; } block;
     char *load;
-    struct { char *type, **vars, **fields; size_t n; struct opi_ast *then, *els, *expr; } match;
+    struct { char *type, **vars, **fields; size_t n; OpiAst *then, *els, *expr; } match;
     struct { char *typename, **fields; size_t nfields; } strct;
     struct { char *old, *new; } use;
-    struct opi_ast *ret;
-    struct { int opc; struct opi_ast *lhs, *rhs; } binop;
+    OpiAst *ret;
+    struct { int opc; OpiAst *lhs, *rhs; } binop;
   };
 };
 
@@ -659,109 +661,109 @@ opi_scanner_set_in(struct opi_scanner *scanner, FILE *in);
 FILE*
 opi_scanner_get_in(struct opi_scanner *scanner);
 
-struct opi_ast*
+OpiAst*
 opi_parse(FILE *in);
 
-struct opi_ast*
+OpiAst*
 opi_parse_expr(struct opi_scanner *scanner);
 
-struct opi_ast*
+OpiAst*
 opi_parse_string(const char *str);
 
 void
-opi_ast_delete(struct opi_ast *node);
+opi_ast_delete(OpiAst *node);
 
-struct opi_ast*
+OpiAst*
 opi_ast_const(opi_t x);
 
-struct opi_ast*
+OpiAst*
 opi_ast_var(const char *name);
 
-struct opi_ast*
+OpiAst*
 opi_ast_use(const char *old, const char *new);
 
-struct opi_ast*
-opi_ast_apply(struct opi_ast *fn, struct opi_ast **args, size_t nargs);
+OpiAst*
+opi_ast_apply(OpiAst *fn, OpiAst **args, size_t nargs);
 
-struct opi_ast*
-opi_ast_fn(char **args, size_t nargs, struct opi_ast *body);
+OpiAst*
+opi_ast_fn(char **args, size_t nargs, OpiAst *body);
 
-struct opi_ast*
-opi_ast_let(char **vars, struct opi_ast **vals, size_t n, struct opi_ast *body);
+OpiAst*
+opi_ast_let(char **vars, OpiAst **vals, size_t n, OpiAst *body);
 
-struct opi_ast*
-opi_ast_if(struct opi_ast *test, struct opi_ast *then, struct opi_ast *els);
+OpiAst*
+opi_ast_if(OpiAst *test, OpiAst *then, OpiAst *els);
 
-struct opi_ast*
-opi_ast_fix(char **vars, struct opi_ast **lams, size_t n, struct opi_ast *body);
+OpiAst*
+opi_ast_fix(char **vars, OpiAst **lams, size_t n, OpiAst *body);
 
-struct opi_ast*
-opi_ast_block(struct opi_ast **exprs, size_t n);
-
-void
-opi_ast_block_set_drop(struct opi_ast *block, int drop);
+OpiAst*
+opi_ast_block(OpiAst **exprs, size_t n);
 
 void
-opi_ast_block_set_namespace(struct opi_ast *block, const char *namespace);
+opi_ast_block_set_drop(OpiAst *block, int drop);
 
 void
-opi_ast_block_prepend(struct opi_ast *block, struct opi_ast *node);
+opi_ast_block_set_namespace(OpiAst *block, const char *namespace);
 
 void
-opi_ast_block_append(struct opi_ast *block, struct opi_ast *node);
+opi_ast_block_prepend(OpiAst *block, OpiAst *node);
 
-struct opi_ast*
+void
+opi_ast_block_append(OpiAst *block, OpiAst *node);
+
+OpiAst*
 opi_ast_load(const char *path);
 
-struct opi_ast*
+OpiAst*
 opi_ast_match(const char *type, char **vars, char **fields, size_t n,
-    struct opi_ast *expr, struct opi_ast *then, struct opi_ast *els);
+    OpiAst *expr, OpiAst *then, OpiAst *els);
 
-struct opi_ast*
+OpiAst*
 opi_ast_struct(const char *typename, char** fields, size_t nfields);
 
-struct opi_ast*
-opi_ast_and(struct opi_ast *x, struct opi_ast *y);
+OpiAst*
+opi_ast_and(OpiAst *x, OpiAst *y);
 
-struct opi_ast*
-opi_ast_or(struct opi_ast *x, struct opi_ast *y);
+OpiAst*
+opi_ast_or(OpiAst *x, OpiAst *y);
 
-struct opi_ast*
-opi_ast_eor(struct opi_ast *try, struct opi_ast *els);
+OpiAst*
+opi_ast_eor(OpiAst *try, OpiAst *els);
 
-struct opi_ast*
-opi_ast_return(struct opi_ast *val);
+OpiAst*
+opi_ast_return(OpiAst *val);
 
-struct opi_ast*
-opi_ast_binop(int opc, struct opi_ast *lhs, struct opi_ast *rhs);
+OpiAst*
+opi_ast_binop(int opc, OpiAst *lhs, OpiAst *rhs);
 
 /* ==========================================================================
  * Context
  */
-struct opi_context {
+typedef struct OpiContext_s {
   struct cod_ptrvec types;
   struct cod_ptrvec bc;
   struct cod_strvec dl_paths;
   struct cod_ptrvec dls;
-};
+} OpiContext;
 
 void
-opi_context_init(struct opi_context *ctx);
+opi_context_init(OpiContext *ctx);
 
 void
-opi_context_destroy(struct opi_context *ctx);
+opi_context_destroy(OpiContext *ctx);
 
 void
-opi_context_add_type(struct opi_context *ctx, opi_type_t type);
+opi_context_add_type(OpiContext *ctx, opi_type_t type);
 
 void
-opi_context_drain_bytecode(struct opi_context *ctx, struct opi_bytecode *bc);
+opi_context_drain_bytecode(OpiContext *ctx, OpiBytecode *bc);
 
 void
-opi_context_add_dl(struct opi_context *ctx, const char *path, void *dl);
+opi_context_add_dl(OpiContext *ctx, const char *path, void *dl);
 
 void*
-opi_context_find_dl(struct opi_context *ctx, const char *path);
+opi_context_find_dl(OpiContext *ctx, const char *path);
 
 int
 opi_is_dl(const char *path);
@@ -769,33 +771,33 @@ opi_is_dl(const char *path);
 /* ==========================================================================
  * IR
  */
-struct opi_alist {
+typedef struct OpiAlist_s {
   struct cod_strvec keys, vals;
-};
+} OpiAlist;
 
 void
-opi_alist_init(struct opi_alist *a);
+opi_alist_init(OpiAlist *a);
 
 void
-opi_alist_destroy(struct opi_alist *a);
+opi_alist_destroy(OpiAlist *a);
 
 size_t
-opi_alist_get_size(struct opi_alist *a);
+opi_alist_get_size(OpiAlist *a);
 
 void
-opi_alist_push(struct opi_alist *a, const char *var, const char *map);
+opi_alist_push(OpiAlist *a, const char *var, const char *map);
 
 void
-opi_alist_pop(struct opi_alist *a, size_t n);
+opi_alist_pop(OpiAlist *a, size_t n);
 
-struct opi_builder {
+typedef struct OpiBuilder_s {
   int is_derived;
 
-  struct opi_context *ctx;
+  OpiContext *ctx;
 
   int frame_offset;
   struct cod_strvec decls;
-  struct opi_alist *alist;
+  OpiAlist *alist;
 
   struct cod_strvec *srcdirs;
   struct cod_strvec *loaded;
@@ -806,76 +808,65 @@ struct opi_builder {
 
   struct cod_strvec *type_names;
   struct cod_ptrvec *types;
-};
+} OpiBuilder;
 
 void
-opi_builder_init(struct opi_builder *bldr, struct opi_context *ctx);
+opi_builder_init(OpiBuilder *bldr, OpiContext *ctx);
 
 void
-opi_builder_init_derived(struct opi_builder *bldr, struct opi_builder *parent);
+opi_builder_init_derived(OpiBuilder *bldr, OpiBuilder *parent);
 
 void
-opi_builder_destroy(struct opi_builder *bldr);
+opi_builder_destroy(OpiBuilder *bldr);
 
 void
-opi_builtins(struct opi_builder *bldr);
+opi_builtins(OpiBuilder *bldr);
 
 int
-opi_builder_load_dl(struct opi_builder *bldr, void *dl);
+opi_builder_load_dl(OpiBuilder *bldr, void *dl);
 
 void
-opi_builder_push_decl(struct opi_builder *bldr, const char *var);
+opi_builder_push_decl(OpiBuilder *bldr, const char *var);
 
 void
-opi_builder_pop_decl(struct opi_builder *bldr);
+opi_builder_pop_decl(OpiBuilder *bldr);
 
 void
-opi_builder_capture(struct opi_builder *bldr, const char *var);
+opi_builder_capture(OpiBuilder *bldr, const char *var);
 
 const char*
-opi_builder_assoc(struct opi_builder *bldr, const char *var);
+opi_builder_assoc(OpiBuilder *bldr, const char *var);
 
 const char*
-opi_builder_try_assoc(struct opi_builder *bldr, const char *var);
+opi_builder_try_assoc(OpiBuilder *bldr, const char *var);
 
 struct opi_build_scope { size_t nvars1, ntypes1, vasize1; };
 
 void
-opi_builder_begin_scope(struct opi_builder *bldr, struct opi_build_scope *scp);
+opi_builder_begin_scope(OpiBuilder *bldr, struct opi_build_scope *scp);
 
 void
-opi_builder_drop_scope(struct opi_builder *bldr, struct opi_build_scope *scp);
+opi_builder_drop_scope(OpiBuilder *bldr, struct opi_build_scope *scp);
 
 void
-opi_builder_add_source_directory(struct opi_builder *bldr, const char *path);
+opi_builder_add_source_directory(OpiBuilder *bldr, const char *path);
 
 char*
-opi_builder_find_path(struct opi_builder *bldr, const char *path, char *fullpath);
+opi_builder_find_path(OpiBuilder *bldr, const char *path, char *fullpath);
 
 int
-opi_builder_add_type(struct opi_builder *bldr, const char *name, opi_type_t type);
+opi_builder_add_type(OpiBuilder *bldr, const char *name, opi_type_t type);
 
 opi_type_t
-opi_builder_find_type(struct opi_builder *bldr, const char *typename);
+opi_builder_find_type(OpiBuilder *bldr, const char *typename);
 
 void
-opi_builder_def_const(struct opi_builder *bldr, const char *name, opi_t val);
+opi_builder_def_const(OpiBuilder *bldr, const char *name, opi_t val);
 
 int
-opi_builder_def_type(struct opi_builder *bldr, const char *name, opi_type_t type);
+opi_builder_def_type(OpiBuilder *bldr, const char *name, opi_type_t type);
 
-struct opi_ir*
-opi_builder_build_ir(struct opi_builder *bldr, struct opi_ast *ast);
-
-enum {
-  OPI_BUILD_DEFAULT,
-  OPI_BUILD_EXPORT,
-};
-
-struct opi_bytecode*
-opi_build(struct opi_builder *bldr, struct opi_ast *ast, int mode);
-
-enum opi_ir_tag {
+typedef enum OpiIrTag_e {
   OPI_IR_CONST,
   OPI_IR_VAR,
   OPI_IR_APPLY,
@@ -887,72 +878,84 @@ enum opi_ir_tag {
   OPI_IR_MATCH,
   OPI_IR_RETURN,
   OPI_IR_BINOP,
-};
+} OpiIrTag;
 
-struct opi_ir {
-  enum opi_ir_tag tag;
+typedef struct OpiIr_s OpiIr;
+struct OpiIr_s {
+  OpiIrTag tag;
   union {
     opi_t cnst;
     size_t var;
-    struct { struct opi_ir *fn, **args; size_t nargs; char eflag; struct opi_location *loc; } apply;
-    struct { struct opi_ir **caps; size_t ncaps, nargs; struct opi_ir *body; } fn;
-    struct { struct opi_ir **vals; size_t n; struct opi_ir *body; } let;
-    struct { struct opi_ir *test, *then, *els; } iff;
-    struct { struct opi_ir **exprs; size_t n; int drop; } block;
-    struct { opi_type_t type; size_t *offs, n; struct opi_ir *expr, *then, *els; } match;
-    struct opi_ir *ret;
-    struct { int opc; struct opi_ir *lhs, *rhs; } binop;
+    struct { OpiIr *fn, **args; size_t nargs; char eflag; OpiLocation *loc; } apply;
+    struct { OpiIr **caps; size_t ncaps, nargs; OpiIr *body; } fn;
+    struct { OpiIr **vals; size_t n; OpiIr *body; } let;
+    struct { OpiIr *test, *then, *els; } iff;
+    struct { OpiIr **exprs; size_t n; int drop; } block;
+    struct { opi_type_t type; size_t *offs, n; OpiIr *expr, *then, *els; } match;
+    OpiIr *ret;
+    struct { int opc; OpiIr *lhs, *rhs; } binop;
   };
 };
 
-void
-opi_ir_delete(struct opi_ir *node);
+OpiIr*
+opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast);
+
+enum {
+  OPI_BUILD_DEFAULT,
+  OPI_BUILD_EXPORT,
+};
+
+OpiBytecode*
+opi_build(OpiBuilder *bldr, OpiAst *ast, int mode);
 
 void
-opi_ir_emit(struct opi_ir *ir, struct opi_bytecode *bc);
+opi_ir_delete(OpiIr *node);
 
-struct opi_ir*
+void
+opi_ir_emit(OpiIr *ir, OpiBytecode *bc);
+
+OpiIr*
 opi_ir_const(opi_t x);
 
-struct opi_ir*
+OpiIr*
 opi_ir_var(size_t offs);
 
-struct opi_ir*
-opi_ir_apply(struct opi_ir *fn, struct opi_ir **args, size_t nargs);
+OpiIr*
+opi_ir_apply(OpiIr *fn, OpiIr **args, size_t nargs);
 
-struct opi_ir*
-opi_ir_fn(struct opi_ir **caps, size_t ncaps, size_t nargs, struct opi_ir *body);
+OpiIr*
+opi_ir_fn(OpiIr **caps, size_t ncaps, size_t nargs, OpiIr *body);
 
-struct opi_ir*
-opi_ir_let(struct opi_ir **vals, size_t n, struct opi_ir *body);
+OpiIr*
+opi_ir_let(OpiIr **vals, size_t n, OpiIr *body);
 
-struct opi_ir*
-opi_ir_if(struct opi_ir *test, struct opi_ir *then, struct opi_ir *els);
+OpiIr*
+opi_ir_if(OpiIr *test, OpiIr *then, OpiIr *els);
 
-struct opi_ir*
-opi_ir_fix(struct opi_ir **vals, size_t n, struct opi_ir *body);
+OpiIr*
+opi_ir_fix(OpiIr **vals, size_t n, OpiIr *body);
 
-struct opi_ir*
-opi_ir_block(struct opi_ir **exprs, size_t n);
+OpiIr*
+opi_ir_block(OpiIr **exprs, size_t n);
 
 static void
-opi_ir_block_set_drop(struct opi_ir *block, int drop)
+opi_ir_block_set_drop(OpiIr *block, int drop)
 { block->block.drop = drop; }
 
-struct opi_ir*
-opi_ir_match(opi_type_t type, size_t *offs, size_t n, struct opi_ir *expr,
-    struct opi_ir *then, struct opi_ir *els);
+OpiIr*
+opi_ir_match(opi_type_t type, size_t *offs, size_t n, OpiIr *expr,
+    OpiIr *then, OpiIr *els);
 
-struct opi_ir*
-opi_ir_return(struct opi_ir *val);
+OpiIr*
+opi_ir_return(OpiIr *val);
 
-struct opi_ir*
-opi_ir_binop(int opc, struct opi_ir *lhs, struct opi_ir *rhs);
+OpiIr*
+opi_ir_binop(int opc, OpiIr *lhs, OpiIr *rhs);
 
 /* ==========================================================================
  * Bytecode
  */
-enum opi_opc {
+typedef enum OpiOpc_e {
   OPI_OPC_NOP,
   OPI_OPC_END,
 
@@ -1000,7 +1003,7 @@ enum opi_opc {
 
   OPI_OPC_FINFN,
 #define OPI_FINFN_REG_CELL(insn) (insn)->reg[0]
-#define OPI_FINFN_ARG_DATA(insn) ((struct opi_insn_fn_data*)(insn)->ptr[1])
+#define OPI_FINFN_ARG_DATA(insn) ((OpiFnInsnData*)(insn)->ptr[1])
 
   OPI_OPC_IF,
 #define OPI_IF_REG_TEST(insn) (insn)->reg[0]
@@ -1048,29 +1051,30 @@ enum opi_opc {
 #define OPI_BINOP_REG_OUT(insn) (insn)->reg[0]
 #define OPI_BINOP_REG_LHS(insn) (insn)->reg[1]
 #define OPI_BINOP_REG_RHS(insn) (insn)->reg[2]
-};
+} OpiOpc;
 
-struct opi_flat_insn {
-  enum opi_opc opc;
+typedef struct OpiFlatInsn_s {
+  OpiOpc opc;
   union {
     uintptr_t reg[3];
     void *ptr[3];
   };
-};
+} OpiFlatInsn;
 
-struct opi_insn {
-  enum opi_opc opc;
+typedef struct OpiInsn_s OpiInsn;
+struct OpiInsn_s {
+  OpiOpc opc;
   union {
     uintptr_t reg[3];
     void *ptr[3];
   };
 
-  struct opi_insn *prev;
-  struct opi_insn *next;
+  OpiInsn *prev;
+  OpiInsn *next;
 };
 
 static inline void
-opi_insn_chain(struct opi_insn *prev, struct opi_insn *insn, struct opi_insn *next)
+opi_insn_chain(OpiInsn *prev, OpiInsn *insn, OpiInsn *next)
 {
   insn->prev = prev;
   insn->next = next;
@@ -1082,180 +1086,152 @@ opi_insn_chain(struct opi_insn *prev, struct opi_insn *insn, struct opi_insn *ne
 }
 
 void
-opi_insn_delete1(struct opi_insn *insn);
+opi_insn_delete1(OpiInsn *insn);
 
 void
-opi_insn_delete(struct opi_insn *insn);
+opi_insn_delete(OpiInsn *insn);
 
 void
-opi_insn_dump1(struct opi_insn *insn, FILE *out);
+opi_insn_dump1(OpiInsn *insn, FILE *out);
 
 void
-opi_insn_dump(struct opi_insn *insn, FILE *out);
+opi_insn_dump(OpiInsn *insn, FILE *out);
 
 int
-opi_insn_is_using(struct opi_insn *insn, int vid);
+opi_insn_is_using(OpiInsn *insn, int vid);
 
 int
-opi_insn_is_killing(struct opi_insn *insn, int vid);
+opi_insn_is_killing(OpiInsn *insn, int vid);
 
 int
-opi_insn_is_creating(struct opi_insn *insn, int vid);
+opi_insn_is_creating(OpiInsn *insn, int vid);
 
 int
-opi_insn_is_end(struct opi_insn *insn);
+opi_insn_is_end(OpiInsn *insn);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_nop();
 
-struct opi_insn*
+OpiInsn*
 opi_insn_const(int ret, opi_t cell);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_apply(int ret, int fn, size_t nargs, int tc);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_ret(int val);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_push(int val);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_pop(size_t n);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_ldcap(int out, int idx);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_param(int out, int offs);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_test(int out, int in);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_if(int test);
 
-static inline int
-opi_insn_if_is_analysed(struct opi_insn *iff)
-{ return iff->reg[2] & 0x1; }
+OpiInsn*
+opi_insn_jmp(OpiInsn *to);
 
-static inline void
-opi_insn_if_set_analysed(struct opi_insn *iff)
-{ iff->reg[2] |= 0x1; }
-
-static inline int
-opi_insn_if_is_then_end(struct opi_insn *iff)
-{ return iff->reg[2] & 0x2; }
-
-static inline void
-opi_insn_if_set_then_end(struct opi_insn *iff, int is_end)
-{  iff->reg[2] |= 0x2; }
-
-static inline int
-opi_insn_if_is_else_end(struct opi_insn *iff)
-{ return iff->reg[2] & 0x4; }
-
-static inline void
-opi_insn_if_set_else_end(struct opi_insn *iff, int is_end)
-{  iff->reg[2] |= 0x4; }
-
-struct opi_insn*
-opi_insn_jmp(struct opi_insn *to);
-
-struct opi_insn*
+OpiInsn*
 opi_insn_phi(int reg);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_incrc(int cell);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_decrc(int cell);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_drop(int cell);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_unref(int cell);
 
-struct opi_insn_fn_data {
-  struct opi_bytecode *bc;
+typedef struct OpiFnInsnData_s {
+  OpiBytecode *bc;
   int arity;
   int ncaps;
   int caps[];
-};
+} OpiFnInsnData;
 
-struct opi_insn*
+OpiInsn*
 opi_insn_alcfn(int out);
 
-struct opi_insn*
-opi_insn_finfn(int cell, int arity, struct opi_bytecode *bc, int *cap, size_t ncap);
+OpiInsn*
+opi_insn_finfn(int cell, int arity, OpiBytecode *bc, int *cap, size_t ncap);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_begscp(size_t n);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_endscp(int *cells, size_t n);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_testty(int out, int cell, opi_type_t type);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_ldfld(int out, int cell, size_t offs);
 
-struct opi_insn*
+OpiInsn*
 opi_insn_guard(int in);
 
-struct opi_insn*
-opi_insn_binop(enum opi_opc opc, int out, int lhs, int rhs);
+OpiInsn*
+opi_insn_binop(OpiOpc opc, int out, int lhs, int rhs);
 
-enum opi_val_type {
+typedef enum OpiValType_e {
   // Value is "born" in local scope with RC petentionaly set to zero at the
   // beginning.
   OPI_VAL_LOCAL,
-
   // External value with already (and for sure) non-zero RC.
   OPI_VAL_GLOBAL,
-
   OPI_VAL_PHI,
-
   OPI_VAL_BOOL,
-};
+} OpiValType;
 
 struct opi_val_info {
-  enum opi_val_type type;
+  OpiValType type;
 };
 
-struct opi_bytecode {
+struct OpiBytecode_s {
   size_t nvals;
   struct opi_val_info *vinfo;
   size_t vinfo_cap;
-  struct opi_insn *head;
-  struct opi_insn *tail;
-  struct opi_insn *point;
-
-  struct opi_flat_insn *tape;
+  OpiInsn *head;
+  OpiInsn *tail;
+  OpiInsn *point;
+  OpiFlatInsn *tape;
 };
 
-struct opi_bytecode*
+OpiBytecode*
 opi_bytecode();
 
 void
-opi_bytecode_delete(struct opi_bytecode *bc);
+opi_bytecode_delete(OpiBytecode *bc);
 
-struct opi_insn*
-opi_bytecode_drain(struct opi_bytecode *bc);
-
-void
-opi_bytecode_fix_lifetimes(struct opi_bytecode *bc);
+OpiInsn*
+opi_bytecode_drain(OpiBytecode *bc);
 
 void
-opi_bytecode_cleanup(struct opi_bytecode *bc);
+opi_bytecode_fix_lifetimes(OpiBytecode *bc);
 
-struct opi_flat_insn*
-opi_bytecode_flatten(struct opi_bytecode *bc);
+void
+opi_bytecode_cleanup(OpiBytecode *bc);
+
+OpiFlatInsn*
+opi_bytecode_flatten(OpiBytecode *bc);
 
 static void
-opi_bytecode_finalize(struct opi_bytecode *bc)
+opi_bytecode_finalize(OpiBytecode *bc)
 {
   opi_bytecode_fix_lifetimes(bc);
   opi_bytecode_cleanup(bc);
@@ -1263,117 +1239,116 @@ opi_bytecode_finalize(struct opi_bytecode *bc)
 }
 
 int
-opi_bytecode_new_val(struct opi_bytecode *bc, enum opi_val_type vtype);
+opi_bytecode_new_val(OpiBytecode *bc, OpiValType vtype);
 
 static inline int
-opi_bytecode_value_is_local(struct opi_bytecode *bc, int vid)
+opi_bytecode_value_is_local(OpiBytecode *bc, int vid)
 { return bc->vinfo[vid].type == OPI_VAL_LOCAL; }
 
 static inline int
-opi_bytecode_value_is_global(struct opi_bytecode *bc, int vid)
+opi_bytecode_value_is_global(OpiBytecode *bc, int vid)
 { return bc->vinfo[vid].type == OPI_VAL_GLOBAL; }
 
 void
-opi_bytecode_append(struct opi_bytecode *bc, struct opi_insn *insn);
+opi_bytecode_append(OpiBytecode *bc, OpiInsn *insn);
 
 void
-opi_bytecode_prepend(struct opi_bytecode *bc, struct opi_insn *insn);
+opi_bytecode_prepend(OpiBytecode *bc, OpiInsn *insn);
 
 void
-opi_bytecode_write(struct opi_bytecode *bc, struct opi_insn *insn);
+opi_bytecode_write(OpiBytecode *bc, OpiInsn *insn);
 
 int
-opi_bytecode_while(struct opi_bytecode *bc, int (*test)(struct opi_insn *insn, void *data), void *data);
+opi_bytecode_while(OpiBytecode *bc, int (*test)(OpiInsn *insn, void *data), void *data);
 
-struct opi_insn*
-opi_bytecode_find_creating(struct opi_bytecode *bc, int vid);
-
-int
-opi_bytecode_const(struct opi_bytecode *bc, opi_t cell);
+OpiInsn*
+opi_bytecode_find_creating(OpiBytecode *bc, int vid);
 
 int
-opi_bytecode_apply(struct opi_bytecode *bc, int fn, size_t nargs, ...);
+opi_bytecode_const(OpiBytecode *bc, opi_t cell);
 
 int
-opi_bytecode_apply_tailcall(struct opi_bytecode *bc, int fn, size_t nargs, ...);
+opi_bytecode_apply(OpiBytecode *bc, int fn, size_t nargs, ...);
 
 int
-opi_bytecode_apply_arr(struct opi_bytecode *bc, int fn, size_t nargs, const int *args);
+opi_bytecode_apply_tailcall(OpiBytecode *bc, int fn, size_t nargs, ...);
 
 int
-opi_bytecode_apply_tailcall_arr(struct opi_bytecode *bc, int fn, size_t nargs, const int *args);
-
-void
-opi_bytecode_ret(struct opi_bytecode *bc, int val);
-
-void
-opi_bytecode_push(struct opi_bytecode *bc, int val);
-
-void
-opi_bytecode_pop(struct opi_bytecode *bc, size_t n);
+opi_bytecode_apply_arr(OpiBytecode *bc, int fn, size_t nargs, const int *args);
 
 int
-opi_bytecode_ldcap(struct opi_bytecode *bc, size_t idx);
+opi_bytecode_apply_tailcall_arr(OpiBytecode *bc, int fn, size_t nargs, const int *args);
+
+void
+opi_bytecode_ret(OpiBytecode *bc, int val);
+
+void
+opi_bytecode_push(OpiBytecode *bc, int val);
+
+void
+opi_bytecode_pop(OpiBytecode *bc, size_t n);
 
 int
-opi_bytecode_param(struct opi_bytecode *bc, size_t offs);
+opi_bytecode_ldcap(OpiBytecode *bc, size_t idx);
 
 int
-opi_bytecode_alcfn(struct opi_bytecode *bc, enum opi_val_type valtype);
-
-void
-opi_bytecode_finfn(struct opi_bytecode *bc,
-    int cell, int arity, struct opi_bytecode *body, int *cap, size_t ncap);
+opi_bytecode_param(OpiBytecode *bc, size_t offs);
 
 int
-opi_bytecode_test(struct opi_bytecode *bc, int in);
+opi_bytecode_alcfn(OpiBytecode *bc, OpiValType valtype);
 
-struct opi_if { struct opi_insn *iff, *els; };
 void
-opi_bytecode_if(struct opi_bytecode *bc, int test, struct opi_if *iff);
-void
-opi_bytecode_if_else(struct opi_bytecode *bc, struct opi_if *iff);
-void
-opi_bytecode_if_end(struct opi_bytecode *bc, struct opi_if *iff);
+opi_bytecode_finfn(OpiBytecode *bc, int cell, int arity, OpiBytecode *body, int *cap, size_t ncap);
 
 int
-opi_bytecode_phi(struct opi_bytecode *bc);
+opi_bytecode_test(OpiBytecode *bc, int in);
 
+struct opi_if { OpiInsn *iff, *els; };
 void
-opi_bytecode_dup(struct opi_bytecode *bc, int dst, int src);
-
+opi_bytecode_if(OpiBytecode *bc, int test, struct opi_if *iff);
 void
-opi_bytecode_incrc(struct opi_bytecode *bc, int cell);
-
+opi_bytecode_if_else(OpiBytecode *bc, struct opi_if *iff);
 void
-opi_bytecode_decrc(struct opi_bytecode *bc, int cell);
-
-void
-opi_bytecode_drop(struct opi_bytecode *bc, int cell);
-
-void
-opi_bytecode_unref(struct opi_bytecode *bc, int cell);
-
-void
-opi_bytecode_begscp(struct opi_bytecode *bc, size_t n);
-
-void
-opi_bytecode_endscp(struct opi_bytecode *bc, int *cells, size_t n);
+opi_bytecode_if_end(OpiBytecode *bc, struct opi_if *iff);
 
 int
-opi_bytecode_testty(struct opi_bytecode *bc, int cell, opi_type_t type);
-
-int
-opi_bytecode_ldfld(struct opi_bytecode *bc, int cell, size_t offs);
+opi_bytecode_phi(OpiBytecode *bc);
 
 void
-opi_bytecode_guard(struct opi_bytecode *bc, int cell);
+opi_bytecode_dup(OpiBytecode *bc, int dst, int src);
+
+void
+opi_bytecode_incrc(OpiBytecode *bc, int cell);
+
+void
+opi_bytecode_decrc(OpiBytecode *bc, int cell);
+
+void
+opi_bytecode_drop(OpiBytecode *bc, int cell);
+
+void
+opi_bytecode_unref(OpiBytecode *bc, int cell);
+
+void
+opi_bytecode_begscp(OpiBytecode *bc, size_t n);
+
+void
+opi_bytecode_endscp(OpiBytecode *bc, int *cells, size_t n);
 
 int
-opi_bytecode_binop(struct opi_bytecode *bc, enum opi_opc opc, int lhs, int rhs);
+opi_bytecode_testty(OpiBytecode *bc, int cell, opi_type_t type);
+
+int
+opi_bytecode_ldfld(OpiBytecode *bc, int cell, size_t offs);
+
+void
+opi_bytecode_guard(OpiBytecode *bc, int cell);
+
+int
+opi_bytecode_binop(OpiBytecode *bc, OpiOpc opc, int lhs, int rhs);
 
 #define OPI_VM_REG_MAX 0x200
 opi_t
-opi_vm(struct opi_bytecode *bc);
+opi_vm(OpiBytecode *bc);
 
 #endif
