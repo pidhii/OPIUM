@@ -58,12 +58,11 @@ syn keyword opiWtf wtf
 
 syn keyword opiConditional if unless then else
 
-syn match Keyword /!\|\$/
 syn match opiLazy /@/
 
 syn match opiOperator /[-+=*/%><&|.][-+=*/%><&|.!]*/
 syn match opiOperator /![-+=*/%><&|!.]\+/
-syn match opiOperator /:/
+syn match opiOperator /:\|\$/
 syn keyword opiOperator is eq equal not
 
 syn match opiDelimiter /[,;(){}]/
@@ -95,7 +94,7 @@ syn match Number '\<\d[[:digit:]]*[eE][\-+]\=\d\+'
 " Floating point like number with E and decimal point (+,-)
 syn match Number '\<\d[[:digit:]]*\.\d*[eE][\-+]\=\d\+'
 
-syn match String /"\(\\.\|\s\|\n\|[^"\\]\)*"/ skipwhite skipnl
+syn region String start=/"/ skip=/\\.\|[^"\\]/ end=/"/ skipnl
 syn match String /`\(\\.\|[^`\\]\)*`/hs=s+1,he=e-1 skipwhite skipnl
 syn match Operator /`/ contained containedin=String
 

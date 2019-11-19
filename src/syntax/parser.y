@@ -1,5 +1,6 @@
 /*%glr-parser*/
 %define parse.error verbose
+%define api.pure full
 
 %{
 #include "opium/opium.h"
@@ -16,7 +17,7 @@ extern
 FILE* yyin;
 
 void
-yyerror(const char *what);
+yyerror(void *locp, const char *what);
 
 static
 struct opi_ast *g_result;
@@ -49,6 +50,9 @@ binds_push(struct binds *binds, const char *var, struct opi_ast *val)
   cod_strvec_push(&binds->vars, var);
   cod_ptrvec_push(&binds->vals, val, NULL);
 }
+
+extern
+int opi_start_token;
 %}
 
 %union {
@@ -87,6 +91,8 @@ binds_push(struct binds *binds, const char *var, struct opi_ast *val)
 %nonassoc RETURN
 %token WTF
 %token DOTDOT
+%token START_FILE
+%token START_REPL
 
 //
 // Patterns
@@ -109,7 +115,6 @@ binds_push(struct binds *binds, const char *var, struct opi_ast *val)
 
 %right OR
 %right '$'
-%left '!'
 %right SCOR
 %right SCAND
 %nonassoc IS ISNOT EQ EQUAL NUMLT NUMGT NUMLE NUMGE NUMEQ NUMNE
@@ -125,7 +130,9 @@ binds_push(struct binds *binds, const char *var, struct opi_ast *val)
 %start entry
 %%
 
-entry: block { g_result = $1; }
+entry
+  : START_FILE block { @$; g_result = $2; }
+  | START_REPL block_expr { g_result = $2; }
 
 Atom
   : NUMBER { $$ = opi_ast_const(opi_number($1)); }
@@ -169,11 +176,6 @@ Form
     $$ = opi_ast_apply($1, (struct opi_ast**)$2->data, $2->size);
     cod_ptrvec_destroy($2, NULL);
     free($2);
-  }
-  | Expr '!' arg {
-    $$ = opi_ast_apply($1, (struct opi_ast**)$3->data, $3->size);
-    cod_ptrvec_destroy($3, NULL);
-    free($3);
   }
 ;
 
@@ -646,9 +648,12 @@ recbins
 
 %%
 
+int opi_start_token = 0;
+
 struct opi_ast*
 opi_parse(FILE *in)
 {
+  opi_start_token = START_FILE;
   yyin = in;
   yyparse();
   yylex_destroy();
@@ -656,8 +661,9 @@ opi_parse(FILE *in)
 }
 
 void
-yyerror(const char *what)
+yyerror(void *locp_ptr, const char *what)
 {
+  YYLTYPE *locp = locp_ptr;
   fprintf(stderr, "parse error: %s\n", what);
   abort();
 }

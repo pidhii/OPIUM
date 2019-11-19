@@ -430,7 +430,7 @@ opi_table_insert(opi_t tab, opi_t key, opi_t val, int replace, opi_t *err);
  * Port
  */
 extern
-opi_type_t opi_file_type; 
+opi_type_t opi_file_type;
 
 extern
 opi_t opi_stdin, opi_stdout, opi_stderr;
@@ -486,24 +486,46 @@ opi_fn(const char *name, opi_fn_handle_t f, int arity);
 void
 opi_fn_set_data(opi_t cell, void *data, void (*delete)(struct opi_fn *self));
 
-int
-opi_fn_get_arity(opi_t cell);
+static inline int
+opi_fn_get_arity(opi_t cell)
+{ return opi_as(cell, struct opi_fn).arity; }
 
-void*
-opi_fn_get_data(opi_t cell);
+static inline void*
+opi_fn_get_data(opi_t cell)
+{ return opi_as(cell, struct opi_fn).data; }
 
-opi_fn_handle_t
-opi_fn_get_handle(opi_t cell);
+static inline opi_fn_handle_t
+opi_fn_get_handle(opi_t cell)
+{ return opi_as(cell, struct opi_fn).handle; }
 
-const char*
-opi_fn_get_name(opi_t f);
+static inline const char*
+opi_fn_get_name(opi_t f)
+{ return opi_as(f, struct opi_fn).name; }
 
-opi_t
-opi_fn_apply(opi_t cell, size_t nargs);
+static inline opi_t
+opi_fn_apply(opi_t cell, size_t nargs)
+{
+  struct opi_fn *fn = opi_as_ptr(cell);
+  opi_nargs = nargs;
+  opi_current_fn = cell;
+  return fn->handle();
+}
 
 static inline int
 opi_test_arity(int arity, int nargs)
 { return ((arity < 0) & (nargs >= -(1 + arity))) | (arity == nargs); }
+
+opi_t
+opi_apply_partial(opi_t f, int nargs);
+
+static inline opi_t
+opi_apply(opi_t f, size_t nargs)
+{
+  if (opi_test_arity(opi_fn_get_arity(f), nargs))
+    return opi_fn_apply(f, nargs);
+  else
+    return opi_apply_partial(f, nargs);
+}
 
 /* ==========================================================================
  * Lazy
@@ -531,7 +553,7 @@ opi_lazy_get_value(opi_t x)
 {
   struct opi_lazy *lazy = opi_as_ptr(x);
   if (!lazy->is_ready) {
-    opi_t val = opi_fn_apply(lazy->cell, 0);
+    opi_t val = opi_apply(lazy->cell, 0);
     opi_inc_rc(val);
     opi_unref(lazy->cell);
     lazy->cell = val;

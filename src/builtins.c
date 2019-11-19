@@ -434,18 +434,13 @@ static opi_t
 compose_aux(void)
 {
   struct compose_data *data = opi_fn_get_data(opi_current_fn);
-  if (!opi_test_arity(opi_fn_get_arity(data->g), opi_nargs)) {
-    for (size_t i = 1; i <= opi_nargs; ++i)
-      opi_drop(opi_pop());
-    return opi_undefined(opi_symbol("arity-error"));
-  }
 
-  opi_t tmp = opi_fn_apply(data->g, opi_nargs);
+  opi_t tmp = opi_apply(data->g, opi_nargs);
   if (opi_unlikely(tmp->type == opi_undefined_type))
     return tmp;
 
   opi_push(tmp);
-  return opi_fn_apply(data->f, 1);
+  return opi_apply(data->f, 1);
 }
 
 static opi_t
@@ -474,20 +469,12 @@ apply(void)
   }
 
   size_t nargs = opi_length(l);
-  if (!opi_test_arity(opi_fn_get_arity(f), nargs)) {
-    opi_debug("arity = %d, nargs = %zu\n", opi_fn_get_arity(f), nargs);
-    opi_write(l, OPI_DEBUG);
-    putc('\n', OPI_DEBUG);
-    opi_drop(f);
-    opi_drop(l);
-    return opi_undefined(opi_symbol("arity-error"));
-  }
 
   opi_sp += nargs;
   size_t iarg = 1;
   for (opi_t it = l; it->type == opi_pair_type; it = opi_cdr(it))
     opi_sp[-iarg++] = opi_car(it);
-  opi_t ret = opi_fn_apply(f, nargs);
+  opi_t ret = opi_apply(f, nargs);
 
   opi_inc_rc(ret);
   opi_drop(f);

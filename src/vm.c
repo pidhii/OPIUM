@@ -105,13 +105,7 @@ opi_vm(struct opi_bytecode *bc)
           r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("type-error"));
           break;
         }
-        if (opi_unlikely(!opi_test_arity(opi_fn_get_arity(fn), nargs))) {
-          while (nargs--)
-            opi_drop(opi_pop());
-          r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("arity-error"));
-          break;
-        }
-        r[OPI_APPLY_REG_OUT(ip)] = opi_fn_apply(fn, nargs);
+        r[OPI_APPLY_REG_OUT(ip)] = opi_apply(fn, nargs);
         break;
       }
 
@@ -125,13 +119,7 @@ opi_vm(struct opi_bytecode *bc)
           r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("type-error"));
           break;
         }
-        if (opi_unlikely(!opi_test_arity(opi_fn_get_arity(fn), nargs))) {
-          while (nargs--)
-            opi_drop(opi_pop());
-          r[OPI_APPLY_REG_OUT(ip)] = opi_undefined(opi_symbol("arity-error"));
-          break;
-        }
-        if (opi_is_lambda(fn)) {
+        if (opi_is_lambda(fn) & opi_test_arity(opi_fn_get_arity(fn), nargs)) {
           // Tail Call
           struct opi_lambda *lam = opi_fn_get_data(fn);
           opi_current_fn = fn;
@@ -141,7 +129,7 @@ opi_vm(struct opi_bytecode *bc)
           continue;
         } else {
           // Fall back to default APPLY
-          r[OPI_APPLY_REG_OUT(ip)] = opi_fn_apply(fn, nargs);
+          r[OPI_APPLY_REG_OUT(ip)] = opi_apply(fn, nargs);
         }
         break;
       }

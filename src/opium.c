@@ -882,29 +882,81 @@ opi_fn_set_data(opi_t cell, void *data, void (*delete)(struct opi_fn*))
     fn->delete = delete;
 }
 
-int
-opi_fn_get_arity(opi_t cell)
-{ return opi_as(cell, struct opi_fn).arity; }
+struct curry_data {
+  opi_t f;
+  size_t n;
+  opi_t p[];
+};
 
-void*
-opi_fn_get_data(opi_t cell)
-{ return opi_as(cell, struct opi_fn).data; }
+static void
+curry_delete(struct opi_fn *fn)
+{
+  struct curry_data *data = fn->data;
+  opi_unref(data->f);
+  for (size_t i = 0; i < data->n; ++i)
+    opi_unref(data->p[i]);
+  free(data);
+  opi_fn_delete(fn);
+}
 
-opi_fn_handle_t
-opi_fn_get_handle(opi_t cell)
-{ return opi_as(cell, struct opi_fn).handle; }
-
-const char*
-opi_fn_get_name(opi_t f)
-{ return opi_as(f, struct opi_fn).name; }
+static opi_t
+curry(void)
+{
+  struct curry_data *data = opi_fn_get_data(opi_current_fn);
+  for (int i = data->n - 1; i >= 0; --i)
+    opi_push(data->p[i]);
+  return opi_apply(data->f, opi_nargs + data->n);
+}
 
 opi_t
-opi_fn_apply(opi_t cell, size_t nargs)
+opi_apply_partial(opi_t f, int nargs)
 {
-  struct opi_fn *fn = opi_as_ptr(cell);
-  opi_nargs = nargs;
-  opi_current_fn = cell;
-  return fn->handle();
+  int arity = opi_fn_get_arity(f);
+
+  if (arity < 0) {
+    opi_assert(!"unimplemented partial application for variadic function");
+
+  } else {
+    if (arity < nargs) {
+      // Apply part of the arguments and pass the rest to the return value.
+
+      for (int i = arity; i < nargs; ++i)
+        opi_inc_rc(opi_sp[-(i + 1)]);
+      nargs -= arity;
+
+      opi_t tmp_f = opi_fn_apply(f, arity);
+      opi_inc_rc(tmp_f);
+      if (opi_unlikely(tmp_f->type != opi_fn_type)) {
+        opi_unref(tmp_f);
+        while (nargs--)
+          opi_unref(opi_pop());
+        return opi_undefined(opi_symbol("not-a-function"));
+      }
+
+      for (int i = 0; i < nargs; ++i)
+        opi_dec_rc(opi_sp[-(i + 1)]);
+      opi_t ret = opi_apply(tmp_f, nargs);
+      opi_inc_rc(ret);
+      opi_unref(tmp_f);
+      opi_dec_rc(ret);
+      return ret;
+
+    } else {
+      // Curry functoin.
+      //
+      struct curry_data *data =
+        malloc(sizeof(struct curry_data) + sizeof(opi_t) * nargs);
+      opi_inc_rc(data->f = f);
+      data->n = nargs;
+      for (int i = 0; i < nargs; ++i)
+        opi_inc_rc(data->p[i] = opi_pop());
+
+      opi_t curry_f = opi_fn(opi_fn_get_name(f), curry, arity - nargs);
+      opi_fn_set_data(curry_f, data, curry_delete);
+
+      return curry_f;
+    }
+  }
 }
 
 /******************************************************************************/

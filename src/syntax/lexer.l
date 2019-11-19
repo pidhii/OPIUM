@@ -1,21 +1,35 @@
-%option noyywrap
-
 %{
 #include <string.h>
 #include "opium/opium.h"
 
-#define YY_DECL int yylex()
+#define YY_DECL int yylex(YYSTYPE *yylval, YYLTYPE *llocp)
 
 #include "parser.h"
+
+extern
+int opi_start_token;
 %}
 
+%option noyywrap
+/*%option reentrant*/
+
 %%
+
+%{
+  if (opi_start_token) {
+    int tok = opi_start_token;
+    opi_start_token = 0;
+    if (tok == START_REPL)
+      yy_set_interactive(TRUE);
+    return tok;
+  }
+%}
 
 [ \t\n]
 
 #.*$
 
-[0-9]+(\.[0-9]+)?([eE][-+]?[0-9]+)? { yylval.num = strtold(yytext, NULL); return NUMBER; }
+[0-9]+(\.[0-9]+)?([eE][-+]?[0-9]+)? { yylval->num = strtold(yytext, NULL); return NUMBER; }
 
 let { return LET; }
 rec { return REC; }
@@ -65,7 +79,7 @@ return { return RETURN; }
         *p++ = buf[i];
     }
   }
-  yylval.str = str;
+  yylval->str = str;
   return STRING;
 }
 `(\\.|[^`\\])*` {
@@ -97,15 +111,15 @@ return { return RETURN; }
         *p++ = buf[i];
     }
   }
-  yylval.str = str;
+  yylval->str = str;
   return SHELL;
 }
-nil { yylval.opi = opi_nil; return CONST; }
-true { yylval.opi = opi_true; return CONST; }
-false { yylval.opi = opi_false; return CONST; }
-stdin { yylval.opi = opi_stdin; return CONST; }
-stdout { yylval.opi = opi_stdout; return CONST; }
-stderr { yylval.opi = opi_stderr; return CONST; }
+nil { yylval->opi = opi_nil; return CONST; }
+true { yylval->opi = opi_true; return CONST; }
+false { yylval->opi = opi_false; return CONST; }
+stdin { yylval->opi = opi_stdin; return CONST; }
+stdout { yylval->opi = opi_stdout; return CONST; }
+stderr { yylval->opi = opi_stderr; return CONST; }
 
 not { return NOT; }
 is { return IS; }
@@ -134,8 +148,8 @@ wtf { return WTF; }
 "="|"+"|"-"|"*"|"/"|"%"|\. { return yytext[0]; }
 "["|"]"|"{"|"}"|"\\"|"("|")"|"," { return yytext[0]; }
 
-"'"[^ \t\n(){}\[\]'\";,:]+ { yylval.opi = opi_symbol(yytext+1); return CONST; }
-[a-zA-Z_][0-9a-zA-Z_]*['?]? { yylval.str = strdup(yytext); return SYMBOL; }
+"'"[^ \t\n(){}\[\]'\";,:]+ { yylval->opi = opi_symbol(yytext+1); return CONST; }
+[a-zA-Z_][0-9a-zA-Z_]*['?]? { yylval->str = strdup(yytext); return SYMBOL; }
 
 . { fprintf(stderr, "unexpected symbol: %s\n", yytext); exit(1); }
 
