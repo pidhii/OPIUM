@@ -3,7 +3,7 @@
 #include "opium/opium.h"
 
 #define YY_DECL \
-  int yylex(YYSTYPE *yylval, YYLTYPE *yylloc, struct opi_scanner *yyscanner)
+  int yylex(YYSTYPE *yylval, YYLTYPE *yylloc, OpiScanner *yyscanner)
 
 #define YY_USER_ACTION                          \
     yylloc->first_line = yylloc->last_line;     \
@@ -155,7 +155,8 @@ wtf { return WTF; }
 ".." { return DOTDOT; }
 "-|" { return COMPOSE; }
 
-";"+ { return ';'; }
+";" { return ';'; }
+";;" { return BRK; }
 "@"|"!" |
 "$"|":" { return yytext[0]; }
 "->" { return RARROW; }

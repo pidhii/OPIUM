@@ -12,7 +12,7 @@ opi_bytecode()
   bc->nvals = 0;
   bc->vinfo_cap = 0x10;
   bc->nvals = 0;
-  bc->vinfo = malloc(sizeof(struct opi_val_info) * bc->vinfo_cap);
+  bc->vinfo = malloc(sizeof(OpiValInfo) * bc->vinfo_cap);
 
   bc->head = malloc(sizeof(OpiInsn));
   bc->head->opc = OPI_OPC_NOP;
@@ -54,7 +54,7 @@ opi_bytecode_new_val(OpiBytecode *bc, OpiValType vtype)
 {
   if (bc->vinfo_cap == bc->nvals) {
     bc->vinfo_cap <<= 1;
-    bc->vinfo = realloc(bc->vinfo, sizeof(struct opi_val_info) * bc->vinfo_cap);
+    bc->vinfo = realloc(bc->vinfo, sizeof(OpiValInfo) * bc->vinfo_cap);
   }
 
   bc->vinfo[bc->nvals].type = vtype;
@@ -870,7 +870,7 @@ opi_bytecode_test(OpiBytecode *bc, int in)
 }
 
 void
-opi_bytecode_if(OpiBytecode *bc, int test, struct opi_if *iff)
+opi_bytecode_if(OpiBytecode *bc, int test, OpiIf *iff)
 {
   OpiInsn *insn = opi_insn_if(test);
   opi_bytecode_write(bc, insn);
@@ -878,7 +878,7 @@ opi_bytecode_if(OpiBytecode *bc, int test, struct opi_if *iff)
 }
 
 void
-opi_bytecode_if_else(OpiBytecode *bc, struct opi_if *iff)
+opi_bytecode_if_else(OpiBytecode *bc, OpiIf *iff)
 {
   OpiInsn *else_label = opi_insn_nop();
   opi_bytecode_write(bc, else_label);
@@ -887,7 +887,7 @@ opi_bytecode_if_else(OpiBytecode *bc, struct opi_if *iff)
 }
 
 void
-opi_bytecode_if_end(OpiBytecode *bc, struct opi_if *iff)
+opi_bytecode_if_end(OpiBytecode *bc, OpiIf *iff)
 {
   OpiInsn *end_label = opi_insn_nop();
   opi_bytecode_write(bc, end_label);

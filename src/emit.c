@@ -132,7 +132,7 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
           // Implicit error-test:
           // if
           int test = opi_bytecode_testty(bc, ret, opi_undefined_type);
-          struct opi_if iff;
+          OpiIf iff;
           opi_bytecode_if(bc, test, &iff);
           // then
           if (ir->apply.loc) {
@@ -160,7 +160,7 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
         // Implicit error-test:
         // if
         int test = opi_bytecode_testty(bc, ret, opi_undefined_type);
-        struct opi_if iff;
+        OpiIf iff;
         opi_bytecode_if(bc, test, &iff);
         // then
         opi_bytecode_ret(bc, ret);
@@ -218,7 +218,7 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
     {
       // IF
       int test = opi_bytecode_test(bc, emit(ir->iff.test, bc, stack, FALSE));
-      struct opi_if iff;
+      OpiIf iff;
       // PHI
       int phi = opi_bytecode_phi(bc);
       // THEN
@@ -272,7 +272,7 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
 
       } else {
         // IF
-        struct opi_if iff;
+        OpiIf iff;
         // PHI
         int phi = opi_bytecode_phi(bc);
         // THEN

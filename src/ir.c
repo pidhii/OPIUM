@@ -270,7 +270,7 @@ opi_builder_try_assoc(OpiBuilder *bldr, const char *var)
 }
 
 void
-opi_builder_begin_scope(OpiBuilder *bldr, struct opi_build_scope *scp)
+opi_builder_begin_scope(OpiBuilder *bldr, OpiScope *scp)
 {
   scp->nvars1 = bldr->decls.size - bldr->frame_offset;
   scp->ntypes1 = bldr->types->size;
@@ -278,7 +278,7 @@ opi_builder_begin_scope(OpiBuilder *bldr, struct opi_build_scope *scp)
 }
 
 void
-opi_builder_drop_scope(OpiBuilder *bldr, struct opi_build_scope *scp)
+opi_builder_drop_scope(OpiBuilder *bldr, OpiScope *scp)
 {
   size_t nvars1 = scp->nvars1;
   size_t nvars2 = bldr->decls.size - bldr->frame_offset;
@@ -305,7 +305,7 @@ opi_builder_drop_scope(OpiBuilder *bldr, struct opi_build_scope *scp)
 }
 
 void
-opi_builder_make_namespace(OpiBuilder *bldr, struct opi_build_scope *scp, const char *prefix)
+opi_builder_make_namespace(OpiBuilder *bldr, OpiScope *scp, const char *prefix)
 {
   size_t nvars1 = scp->nvars1;
   size_t nvars2 = bldr->decls.size - bldr->frame_offset;
@@ -568,7 +568,7 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
 
     case OPI_AST_BLOCK:
     {
-      struct opi_build_scope scp;
+      OpiScope scp;
       opi_builder_begin_scope(bldr, &scp);
 
       OpiIr *exprs[ast->block.n];

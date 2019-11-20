@@ -1,17 +1,17 @@
 # file: base/base.opi
 
-load "base.so";
+load "base.so"
 
-let zero? x = x == 0;
-let positive? x = x > 0;
-let negative? x = x < 0;
-let even? x = x % 2 == 0;
-let odd? x = x % 2 /= 0;
+let zero? x = x == 0
+let positive? x = x > 0
+let negative? x = x < 0
+let even? x = x % 2 == 0
+let odd? x = x % 2 /= 0
 
-let open path ..mode = __builtin_open path (car mode or "r");
-let popen cmd ..mode = __builtin_popen cmd (car mode or "r");
+let open path ..mode = __builtin_open path (car mode or "r")
+let popen cmd ..mode = __builtin_popen cmd (car mode or "r")
 
-let trim = chomp -| ltrim;
+let trim = chomp -| ltrim
 
-load "common.opi";
-load "list-base.opi";
+load "common.opi"
+load "list-base.opi"

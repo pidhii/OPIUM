@@ -1,37 +1,34 @@
-load "base";
+load "base"
 
-let l = range 0 100;
+let l = range 0 100 in
 print $ all? number? l;
-print $ any? string? l;
-
-#print $ map (+) (range 0 10) (range 0 10);
-
-print 42;
+print $ any? string? l
 
 let stream? x =
   unless let head:tail = x then false
   else if let lazy { } = tail then true
-  else false;
+  else false
 
 namespace stream {
-  let car = car;
-  let cdr = force -| cdr;
+  let car = car
+  let cdr = force -| cdr
 
-  let null? = null?;
+  let null? = null?
 
   let rec map f s =
     unless let head:tail = s then nil
-    else f head : @map f (force tail);
-};
+    else f head : lazy map f (force tail)
+}
 
-let t = loadfile "t.opi" ["./build/install/lib/opium"];
-t.test ();
+let t = loadfile "t.opi" ["./build/install/lib/opium"] in
+t.test ()
 
-printf "HOME = %w\n" `echo $HOME`;
+let _ =
+  printf "HOME = %w\n" `echo $HOME`;
+  printf "argv = %d\n" argv
 
-let add x y = if y > 0 then x + y else error 'OloLo;
-#let add x y = x + y;
-print $ foldl add 0 $ revfilter even? $ range 0 10000000;
-
+let add x y = if y > 0 then x + y else error 'OloLo in
+#let add x y = x + y in
+#print $ foldl add 0 $ revfilter even? $ range 0 10000000;
 print $ flip map [1 2 3] (add 1);
 

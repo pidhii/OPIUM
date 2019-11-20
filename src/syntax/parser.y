@@ -1,10 +1,12 @@
-/*%glr-parser*/
+%glr-parser
 %define parse.error verbose
-%define api.pure full
-%param {struct opi_scanner *yyscanner}
+%define api.pure true
+%param {OpiScanner *yyscanner}
 %locations
 
 %{
+#define YYDEBUG 1
+
 #include "opium/opium.h"
 #include <stdio.h>
 #include <string.h>
@@ -33,7 +35,7 @@ static OpiLocation*
 location(void *locp);
 
 void
-yyerror(void *locp, struct opi_scanner *yyscanner, const char *what);
+yyerror(void *locp, OpiScanner *yyscanner, const char *what);
 
 struct binds {
   struct cod_strvec vars;
@@ -109,7 +111,7 @@ int opi_start_token;
 %token<num> NUMBER
 %token<str> SYMBOL STRING SHELL
 %token<opi> CONST
-%left LET REC
+%nonassoc LET REC
 %left IF UNLESS THEN ELSE
 %right IN
 %token AND
@@ -130,12 +132,12 @@ int opi_start_token;
 //
 %type<ast> Atom
 %type<ast> Form
-%type<ast> Expr
+%type<ast> Expr Stmnt
 
 %type<binds> binds recbins
 %type<strvec> param param_aux
 %type<ptrvec> arg arg_aux
-%type<ast> block block_expr
+%type<ast> block block_stmnt block_stmnt_only block_expr
 %type<ptrvec> block_aux
 %type<ast> fn_aux vafn_aux anyfn_aux
 %type<ast> def_aux vadef_aux anydef_aux
@@ -144,6 +146,9 @@ int opi_start_token;
 %type<matches> matches matches_aux
 %type<strvec> fields
 
+%right BRK
+
+%right ';'
 %right OR
 %right '$'
 %right SCOR
@@ -163,7 +168,12 @@ int opi_start_token;
 
 entry
   : START_FILE block { @$; g_result = $2; }
-  | START_REPL block_expr ';' { g_result = $2; opi_start_token = 0; }
+  | START_REPL block_aux BRK {
+    g_result = opi_ast_block((OpiAst**)$2->data, $2->size);
+    cod_ptrvec_destroy($2, NULL);
+    free($2);
+    opi_start_token = 0;
+  }
   | START_REPL { g_result = NULL; opi_start_token = 0; }
   | error { g_result = NULL; opi_start_token = 0; }
 ;
@@ -217,8 +227,87 @@ Form
   }
 ;
 
+Stmnt
+  : IF Expr THEN Expr ELSE Expr {
+    $$ = opi_ast_if($2, $4, $6);
+  }
+  | UNLESS Expr THEN Expr ELSE Expr {
+    $$ = opi_ast_if($2, $6, $4);
+  }
+  | LET REC recbins IN Expr {
+    $$ = opi_ast_fix($3->vars.data, (OpiAst**)$3->vals.data, $3->vars.size, $5);
+    binds_delete($3);
+  }
+  | LET binds IN Expr {
+    $$ = opi_ast_let($2->vars.data, (OpiAst**)$2->vals.data, $2->vars.size, $4);
+    binds_delete($2);
+  }
+  | LET refstr '{' matches '}' '=' Expr IN Expr {
+    OpiAst *body[] = {
+      opi_ast_match($2, $4.vars->data, $4.fields->data, $4.vars->size, $7, NULL, NULL),
+      $9
+    };
+    $$ = opi_ast_block(body, 2);
+    free($2);
+    cod_strvec_destroy($4.vars);
+    cod_strvec_destroy($4.fields);
+    free($4.vars);
+    free($4.fields);
+  }
+  | LET SYMBOL ':' SYMBOL '=' Expr IN Expr {
+    char *flds[] = { "car", "cdr" };
+    char *vars[] = { $2, $4 };
+    OpiAst *body[] = {
+      opi_ast_match("pair", vars, flds, 2, $6, NULL, NULL),
+      $8
+    };
+    $$ = opi_ast_block(body, 2);
+    free($2);
+    free($4);
+  }
+  | IF LET refstr '{' matches '}' '=' Expr THEN Expr ELSE Expr {
+    $$ = opi_ast_match($3, $5.vars->data, $5.fields->data, $5.vars->size, $8, $10, $12),
+    free($3);
+    cod_strvec_destroy($5.vars);
+    cod_strvec_destroy($5.fields);
+    free($5.vars);
+    free($5.fields);
+  }
+  | IF LET SYMBOL ':' SYMBOL '=' Expr THEN Expr ELSE Expr {
+    char *flds[] = { "car", "cdr" };
+    char *vars[] = { $3, $5 };
+    $$ = opi_ast_match("pair", vars, flds, 2, $7, $9, $11),
+    free($3);
+    free($5);
+  }
+  | UNLESS LET refstr '{' matches '}' '=' Expr THEN Expr ELSE Expr {
+    $$ = opi_ast_match($3, $5.vars->data, $5.fields->data, $5.vars->size, $8, $12, $10),
+    free($3);
+    cod_strvec_destroy($5.vars);
+    cod_strvec_destroy($5.fields);
+    free($5.vars);
+    free($5.fields);
+  }
+  | UNLESS LET SYMBOL ':' SYMBOL '=' Expr THEN Expr ELSE Expr {
+    char *flds[] = { "car", "cdr" };
+    char *vars[] = { $3, $5 };
+    $$ = opi_ast_match("pair", vars, flds, 2, $7, $11, $9),
+    free($3);
+    free($5);
+  }
+  | RETURN Expr {
+    $$ = opi_ast_return($2);
+  }
+;
+
 Expr
   : Form
+  | Stmnt
+  | Expr ';' Expr {
+    OpiAst *body[] = { $1, $3 };
+    $$ = opi_ast_block(body, 2);
+  }
+  | Expr ';' { $$ = $1; }
   | '(' ')' {
     $$ = opi_ast_apply(opi_ast_var("()"), NULL, 0);
     $$->apply.loc = location(&@$);
@@ -306,77 +395,7 @@ Expr
     $$ = opi_ast_apply(opi_ast_var("++"), p, 2);
     $$->apply.loc = location(&@$);
   }
-  | '{' block '}' { $$ = $2; }
-  | IF Expr THEN Expr ELSE Expr {
-    $$ = opi_ast_if($2, $4, $6);
-  }
-  | UNLESS Expr THEN Expr ELSE Expr {
-    $$ = opi_ast_if($2, $6, $4);
-  }
-  | LET REC recbins IN Expr {
-    $$ = opi_ast_fix($3->vars.data, (OpiAst**)$3->vals.data, $3->vars.size, $5);
-    binds_delete($3);
-  }
-  | LET binds IN Expr {
-    $$ = opi_ast_let($2->vars.data, (OpiAst**)$2->vals.data, $2->vars.size, $4);
-    binds_delete($2);
-  }
-  | LET refstr '{' matches '}' '=' Expr IN Expr {
-    OpiAst *body[] = {
-      opi_ast_match($2, $4.vars->data, $4.fields->data, $4.vars->size, $7, NULL, NULL),
-      $9
-    };
-    $$ = opi_ast_block(body, 2);
-    free($2);
-    cod_strvec_destroy($4.vars);
-    cod_strvec_destroy($4.fields);
-    free($4.vars);
-    free($4.fields);
-  }
-  | LET SYMBOL ':' SYMBOL '=' Expr IN Expr {
-    char *flds[] = { "car", "cdr" };
-    char *vars[] = { $2, $4 };
-    OpiAst *body[] = {
-      opi_ast_match("pair", vars, flds, 2, $6, NULL, NULL),
-      $8
-    };
-    $$ = opi_ast_block(body, 2);
-    free($2);
-    free($4);
-  }
-  | IF LET refstr '{' matches '}' '=' Expr THEN Expr ELSE Expr {
-    $$ = opi_ast_match($3, $5.vars->data, $5.fields->data, $5.vars->size, $8, $10, $12),
-    free($3);
-    cod_strvec_destroy($5.vars);
-    cod_strvec_destroy($5.fields);
-    free($5.vars);
-    free($5.fields);
-  }
-  | IF LET SYMBOL ':' SYMBOL '=' Expr THEN Expr ELSE Expr {
-    char *flds[] = { "car", "cdr" };
-    char *vars[] = { $3, $5 };
-    $$ = opi_ast_match("pair", vars, flds, 2, $7, $9, $11),
-    free($3);
-    free($5);
-  }
-  | UNLESS LET refstr '{' matches '}' '=' Expr THEN Expr ELSE Expr {
-    $$ = opi_ast_match($3, $5.vars->data, $5.fields->data, $5.vars->size, $8, $12, $10),
-    free($3);
-    cod_strvec_destroy($5.vars);
-    cod_strvec_destroy($5.fields);
-    free($5.vars);
-    free($5.fields);
-  }
-  | UNLESS LET SYMBOL ':' SYMBOL '=' Expr THEN Expr ELSE Expr {
-    char *flds[] = { "car", "cdr" };
-    char *vars[] = { $3, $5 };
-    $$ = opi_ast_match("pair", vars, flds, 2, $7, $11, $9),
-    free($3);
-    free($5);
-  }
-  | RETURN Expr {
-    $$ = opi_ast_return($2);
-  }
+  /*| '{' block '}' { $$ = $2; }*/
   | Expr OR Expr {
     $$ = opi_ast_eor($1, $3);
   }
@@ -491,7 +510,7 @@ block
     cod_ptrvec_destroy($1, NULL);
     free($1);
   }
-  | block_aux ';' {
+  | block_aux BRK {
     $$ = opi_ast_block((OpiAst**)$1->data, $1->size);
     cod_ptrvec_destroy($1, NULL);
     free($1);
@@ -504,15 +523,29 @@ block_aux
     cod_ptrvec_init($$);
     cod_ptrvec_push($$, $1, NULL);
   }
-  | block_aux ';' block_expr {
+  | block_aux BRK block_expr {
+    $$ = $1;
+    cod_ptrvec_push($$, $3, NULL);
+  }
+  | block_aux block_stmnt {
+    $$ = $1;
+    cod_ptrvec_push($$, $2, NULL);
+  }
+  | block_aux error block_stmnt {
     $$ = $1;
     cod_ptrvec_push($$, $3, NULL);
   }
 ;
 
 block_expr
-  : Expr
-  | IF Expr THEN Expr {
+  : block_stmnt_only
+  | Expr
+;
+
+block_stmnt: Stmnt | block_stmnt_only;
+
+block_stmnt_only
+  : IF Expr THEN Expr {
     $$ = opi_ast_if($2, $4, opi_ast_const(opi_nil));
   }
   | UNLESS Expr THEN Expr {
@@ -609,7 +642,8 @@ fn_aux
 
 vafn_aux
   : DOTDOT SYMBOL RARROW Expr {
-    OpiAst *fn = opi_ast_fn(&($2), 1, $4);
+    char *p[] = { $2 };
+    OpiAst *fn = opi_ast_fn(p, 1, $4);
     OpiAst *param[] = { opi_ast_const(opi_number(0)), fn };
     $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
     $$->apply.loc = location(&@$);
@@ -639,7 +673,8 @@ def_aux
 
 vadef_aux
   : DOTDOT SYMBOL '=' Expr {
-    OpiAst *fn = opi_ast_fn(&($2), 1, $4);
+    char *p[] = { $2 };
+    OpiAst *fn = opi_ast_fn(p, 1, $4);
     OpiAst *param[] = { opi_ast_const(opi_number(0)), fn };
     $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
     $$->apply.loc = location(&@$);
@@ -734,16 +769,15 @@ opi_parse(FILE *in)
   else
     g_filename[0] = 0;
 
-  struct opi_scanner *scanner;
-  opi_scanner_init(&scanner);
+  OpiScanner *scanner = opi_scanner();
   opi_scanner_set_in(scanner, in);
   yyparse(scanner);
-  opi_scanner_destroy(scanner);
+  opi_scanner_delete(scanner);
   return g_result;
 }
 
 OpiAst*
-opi_parse_expr(struct opi_scanner *scanner)
+opi_parse_expr(OpiScanner *scanner)
 {
   opi_start_token = START_REPL;
   g_filename[0] = 0;
@@ -753,7 +787,7 @@ opi_parse_expr(struct opi_scanner *scanner)
 }
 
 void
-yyerror(void *locp_ptr, struct opi_scanner *yyscanner, const char *what)
+yyerror(void *locp_ptr, OpiScanner *yyscanner, const char *what)
 {
   YYLTYPE *locp = locp_ptr;
   opi_error("parse error: %s\n", what);

@@ -54,7 +54,7 @@ syn keyword Function zero? positive? negative? even? odd?
 
 
 syn keyword Statement let rec and or in return
-syn keyword opiWtf wtf
+syn keyword opiSpecial wtf argv
 
 syn keyword opiConditional if unless then else
 
@@ -111,7 +111,7 @@ hi link opiUse Define
 hi link opiStruct     Structure
 hi link opiStructName StorageClass
 
-hi link opiWtf Special
+hi link opiSpecial Special
 
 hi link opiLazy Keyword
 

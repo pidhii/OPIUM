@@ -105,11 +105,10 @@ main(int argc, char **argv)
 
   if (in == stdin) {
     // REPL
-    struct opi_scanner *scan;
     OpiAst *ast;
     OpiBytecode *bc;
 
-    opi_scanner_init(&scan);
+    OpiScanner *scan = opi_scanner();
     opi_scanner_set_in(scan, stdin);
 
     size_t cnt = 0;
@@ -160,7 +159,7 @@ main(int argc, char **argv)
       opi_bytecode_delete(bc);
     }
 
-    opi_scanner_destroy(scan);
+    opi_scanner_delete(scan);
     printf("End of input reached.\n");
 
   } else {
@@ -168,6 +167,12 @@ main(int argc, char **argv)
     fclose(in);
     if (ast == NULL)
       goto cleanup;
+
+    opi_t argv_ = opi_nil;
+    for (int i = argc - 1; i >= optind; --i)
+      argv_ = opi_cons(opi_string(argv[i]), argv_);
+    opi_builder_def_const(&builder, "argv", argv_);
+    
 
     OpiBytecode *bc = opi_build(&builder, ast, OPI_BUILD_DEFAULT);
     opi_ast_delete(ast);

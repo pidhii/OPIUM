@@ -48,10 +48,11 @@ opi_show_location(FILE *out, const char *path, int fc, int fl, int lc, int ll)
       return OPI_ERR;
     }
     if (c == EOF) {
-      opi_error("print location: unexpected end of file\n");
-      opi_error = 1;
+      /*opi_error("print location: unexpected end of file\n");*/
+      /*opi_error = 1;*/
       opi_assert(fclose(fs) == 0);
-      return OPI_ERR;
+      fputs("\e[0m", out);
+      return OPI_OK;
     }
 
     if (line >= fl && line <= ll) {
@@ -334,7 +335,7 @@ number_eq(opi_type_t ty, opi_t x, opi_t y)
 
 static void
 number_delete(opi_type_t ty, opi_t cell)
-{ opi_free(cell); }
+{ opi_h2w_free(cell); }
 
 static size_t
 number_hash(opi_type_t type, opi_t x)
@@ -455,7 +456,7 @@ undefined_delete(opi_type_t ty, opi_t cell)
     opi_location_delete(undef->trace->data[i]);
   cod_vec_destroy(*undef->trace);
   free(undef->trace);
-  opi_free(cell);
+  opi_h2w_free(cell);
 }
 
 static void
@@ -492,7 +493,7 @@ opi_undefined_cleanup(void)
 opi_t
 opi_undefined(opi_t what)
 {
-  OpiUndefined *undef = opi_allocate();
+  OpiUndefined *undef = opi_h2w();
   opi_inc_rc(undef->what = what);
   opi_init_cell(undef, opi_undefined_type);
   undef->trace = malloc(sizeof(opi_trace_t));
@@ -544,7 +545,7 @@ string_delete(opi_type_t ty, opi_t x)
 {
   OpiString *s = opi_as_ptr(x);
   free(s->str);
-  opi_free(s);
+  opi_h2w_free(s);
 }
 
 static int
@@ -583,7 +584,7 @@ opi_string_cleanup(void)
 extern inline opi_t
 opi_string_move2(char *str, size_t len)
 {
-  OpiString *s = opi_allocate();
+  OpiString *s = opi_h2w();
   opi_init_cell(s, opi_string_type);
   s->str = str;
   s->size = len;
@@ -610,7 +611,7 @@ opi_string(const char *str)
 opi_t
 opi_string_from_char(char c)
 {
-  OpiString *s = opi_allocate();
+  OpiString *s = opi_h2w();
   opi_init_cell(s, opi_string_type);
   s->str = malloc(2);;
   s->str[0] = c;
@@ -690,7 +691,7 @@ pair_delete(opi_type_t ty, opi_t x) {
   while (x->type == opi_pair_type) {
     opi_t tmp = opi_cdr(x);
     opi_unref(opi_car(x));
-    opi_free(x);
+    opi_h2w_free(x);
     if (opi_dec_rc(x = tmp) > 0)
       return;
   }
@@ -724,7 +725,7 @@ static void
 table_delete(opi_type_t ty, opi_t x)
 {
   opi_hash_map_destroy(&opi_as(x, struct table).map);
-  opi_free(x);
+  opi_h2w_free(x);
 }
 
 void
@@ -741,7 +742,7 @@ opi_table_cleanup(void)
 opi_t
 opi_table(void)
 {
-  struct table *tab = opi_allocate();
+  struct table *tab = opi_h2w();
   opi_hash_map_init(&tab->map);
   opi_init_cell(tab, opi_table_type);
   return (opi_t)tab;
@@ -814,7 +815,7 @@ file_delete(opi_type_t type, opi_t x)
   struct file *p = opi_as_ptr(x);
   if (p->close)
     p->close(p->fs);
-  opi_free(p);
+  opi_h2w_free(p);
 }
 
 void
@@ -855,7 +856,7 @@ opi_file_cleanup(void)
 opi_t
 opi_file(FILE *fs, int (*close)(FILE*))
 {
-  struct file *p = opi_allocate();
+  struct file *p = opi_h2w();
   p->fs = fs;
   p->close = close;
   opi_init_cell(p, opi_file_type);
@@ -1036,7 +1037,7 @@ lazy_delete(opi_type_t type, opi_t x)
 {
   OpiLazy *lazy = opi_as_ptr(x);
   opi_unref(lazy->cell);
-  opi_free(lazy);
+  opi_h2w_free(lazy);
 }
 
 void
@@ -1053,7 +1054,7 @@ opi_lazy_cleanup(void)
 opi_t
 opi_lazy(opi_t x)
 {
-  OpiLazy *lazy = opi_allocate();
+  OpiLazy *lazy = opi_h2w();
   opi_inc_rc(lazy->cell = x);
   lazy->is_ready = FALSE;
   opi_init_cell(lazy, opi_lazy_type);
@@ -1061,37 +1062,39 @@ opi_lazy(opi_t x)
 }
 
 extern int
-yylex_init(struct opi_scanner **scanner);
+yylex_init(OpiScanner **scanner);
 
 extern int
-yylex_destroy(struct opi_scanner *scanner);
+yylex_destroy(OpiScanner *scanner);
 
 extern void
-yyset_in(FILE *in, struct opi_scanner *scanner);
+yyset_in(FILE *in, OpiScanner *scanner);
 
 extern FILE*
-yyget_in(struct opi_scanner *scanner);
+yyget_in(OpiScanner *scanner);
 
-int
-opi_scanner_init(struct opi_scanner **scanner)
+OpiScanner*
+opi_scanner()
 {
-  return yylex_init(scanner);
+  OpiScanner *scan;
+  yylex_init(&scan);
+  return scan;
 }
 
 int
-opi_scanner_destroy(struct opi_scanner *scanner)
+opi_scanner_delete(OpiScanner *scanner)
 {
   return yylex_destroy(scanner);
 }
 
 void
-opi_scanner_set_in(struct opi_scanner *scanner, FILE *in)
+opi_scanner_set_in(OpiScanner *scanner, FILE *in)
 {
   yyset_in(in, scanner);
 }
 
 FILE*
-opi_scanner_get_in(struct opi_scanner *scanner)
+opi_scanner_get_in(OpiScanner *scanner)
 {
   return yyget_in(scanner);
 }
