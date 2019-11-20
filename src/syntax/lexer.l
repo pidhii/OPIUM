@@ -22,11 +22,16 @@
 
 extern
 int opi_start_token;
+
+static
+int g_begin_cnt = 0;
 %}
 
 %option noyywrap
 %option reentrant
 %option interactive
+
+%x comment
 
 %%
 
@@ -42,7 +47,13 @@ int opi_start_token;
 
 [ \t\n]
 
-#.*$
+^#!.*$
+"--".*$
+"{-" { BEGIN(comment); }
+<comment>\n
+<comment>.
+<comment>"-}" { BEGIN(INITIAL); }
+
 
 [0-9]+(\.[0-9]+)?([eE][-+]?[0-9]+)? { yylval->num = strtold(yytext, NULL); return NUMBER; }
 
@@ -61,6 +72,16 @@ struct { return STRUCT; }
 use { return USE; }
 as { return AS; }
 return { return RETURN; }
+
+begin {
+  g_begin_cnt += 1;
+  return BEG;
+}
+end {
+  if (--g_begin_cnt)
+    opi_start_token = ';';
+  return END;
+}
 
 "::" { return DCOL; }
 
@@ -141,8 +162,6 @@ eq { return EQ; }
 equal { return EQUAL; }
 is[ \n\t]+not { return ISNOT; }
 
-wtf { return WTF; }
-
 "&&" { return SCAND; }
 "||" { return SCOR; }
 "<" { return NUMLT; }
@@ -153,7 +172,8 @@ wtf { return WTF; }
 "/=" { return NUMNE; }
 "++" { return PLUSPLUS; }
 ".." { return DOTDOT; }
-"-|" { return COMPOSE; }
+"." { return COMPOSE; }
+"#" { return TABLEREF; }
 
 ";" { return ';'; }
 ";;" { return BRK; }

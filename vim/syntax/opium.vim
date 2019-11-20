@@ -6,6 +6,8 @@ if exists("b:current_syntax")
   finish
 endif
 
+set comments=sr:{-,mb:-,ex:-}
+
 set iskeyword+=?,'
 syn match opiIdentifier /\<[a-zA-Z_][a-zA-Z0-9_]*['?]?\>/
 syn match opiSymbol /'[^ \t\n(){}\[\]'";,:]\+/
@@ -32,6 +34,7 @@ syn keyword Function die error
 syn keyword Function force
 syn keyword Function system shell
 syn keyword Function loadfile
+syn keyword Function exit
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Base:
@@ -53,10 +56,10 @@ syn keyword Function revfilter filter
 syn keyword Function zero? positive? negative? even? odd?
 
 
-syn keyword Statement let rec and or in return
-syn keyword opiSpecial wtf argv
+syn keyword opiKeyword let rec and or in return begin end
+syn keyword opiSpecial ARGV ENV
 
-syn keyword opiConditional if unless then else
+syn keyword opiKeyword if unless then else
 
 syn match opiLazy /@/
 
@@ -80,7 +83,13 @@ syn keyword opiLoad load
 syn match opiNamespaceRef /\<\w\+::/he=e-2 contains=opiNamespaceDots
 syn match opiNamespaceDots /::/
 
-syn match Comment /#.*$/
+syn match opiTableRef /#/ nextgroup=opiKey
+syn match opiKey /\k\+/ contained
+
+syn match Comment /^#!.*$/
+syn match Comment /--.*$/ contains=Label
+syn region Comment start=/{-/ end=/-}/ skipnl skipwhite contains=Label
+syn match Label /[A-Z]\w*:/
 
 " Integer with - + or nothing in front
 syn match Number '\<\d\+'
@@ -113,6 +122,8 @@ hi link opiStructName StorageClass
 
 hi link opiSpecial Special
 
+hi link opiKeyword Conditional
+
 hi link opiLazy Keyword
 
 hi link opiType Type
@@ -127,3 +138,7 @@ hi link opiNil Constant
 hi link opiBoolean Boolean
 hi link opiConstant Constant
 hi link opiSymbol Constant
+
+hi link opiKey Identifiers
+hi link opiTableRef Keywords
+

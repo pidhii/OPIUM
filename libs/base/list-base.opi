@@ -39,7 +39,7 @@ let revmap f l =
     else loop xs (f x : acc)
   in loop l nil
 
-let map = reverse -| revmap
+let map = reverse . revmap
 
 let foreach f l =
   let rec loop l =
@@ -61,5 +61,5 @@ let revfilter f l =
     else loop xs $ if f x then x:acc else acc
   in loop l nil
 
-let filter = reverse -| revfilter
+let filter = reverse . revfilter
 

@@ -755,7 +755,7 @@ opi_table_at(opi_t tab, opi_t key, opi_t *err)
 
   if (opi_unlikely(!opi_type_is_hashable(key->type))) {
     if (err)
-      *err = opi_undefined(opi_symbol("hash_error"));
+      *err = opi_undefined(opi_symbol("hash-error"));
     return NULL;
   }
 
@@ -765,7 +765,7 @@ opi_table_at(opi_t tab, opi_t key, opi_t *err)
     return elt.val;
   } else {
     if (err)
-      *err = opi_undefined(opi_symbol("out_of_range"));
+      *err = opi_undefined(opi_symbol("out-of-range"));
     return NULL;
   }
 }
@@ -777,7 +777,7 @@ opi_table_insert(opi_t tab, opi_t key, opi_t val, int replace, opi_t *err)
 
   if (opi_unlikely(!opi_type_is_hashable(key->type))) {
     if (err)
-      *err = opi_undefined(opi_symbol("hash_error"));
+      *err = opi_undefined(opi_symbol("hash-error"));
     return FALSE;
   }
 

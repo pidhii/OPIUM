@@ -11,7 +11,7 @@ let odd? x = x % 2 /= 0
 let open path ..mode = __builtin_open path (car mode or "r")
 let popen cmd ..mode = __builtin_popen cmd (car mode or "r")
 
-let trim = chomp -| ltrim
+let trim = chomp . ltrim
 
 load "common.opi"
 load "list-base.opi"

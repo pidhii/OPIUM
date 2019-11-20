@@ -770,7 +770,7 @@ OpiAst*
 opi_ast_or(OpiAst *x, OpiAst *y);
 
 OpiAst*
-opi_ast_eor(OpiAst *try, OpiAst *els);
+opi_ast_eor(OpiAst *try, OpiAst *els, const char *ename);
 
 OpiAst*
 opi_ast_return(OpiAst *val);

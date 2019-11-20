@@ -30,7 +30,6 @@ setlocal nosmartindent
 " Comment formatting
 if !exists("no_ocaml_comments")
  if (has("comments"))
-   setlocal comments=sr:(*,mb:*,ex:*)
    setlocal fo=cqort
  endif
 endif
@@ -52,10 +51,10 @@ let s:type = '^\s*\%(class\|let\|type\)\>.*='
 " Skipping pattern, for comments
 function! s:GetLineWithoutFullComment(lnum)
  let lnum = prevnonblank(a:lnum - 1)
- let lline = substitute(getline(lnum), '(\*.*\*)\s*$', '', '')
+ let lline = substitute(getline(lnum), '{-.*-}\s*$', '', '')
  while lline =~ '^\s*$' && lnum > 0
    let lnum = prevnonblank(lnum - 1)
-   let lline = substitute(getline(lnum), '(\*.*\*)\s*$', '', '')
+   let lline = substitute(getline(lnum), '{-.*-}\s*$', '', '')
  endwhile
  return lnum
 endfunction
@@ -97,7 +96,7 @@ function! GetOCamlIndent()
  endif
 
  let ind = indent(lnum)
- let lline = substitute(getline(lnum), '(\*.*\*)\s*$', '', '')
+ let lline = substitute(getline(lnum), '{-.*-}\s*$', '', '')
 
  " Return double 'shiftwidth' after lines matching:
  if lline =~ '^\s*|.*->\s*$'
@@ -233,16 +232,16 @@ function! GetOCamlIndent()
    let ind = s:FindPair('\[', '','\]')
 
  " Back to normal indent after comments:
- elseif lline =~ '\*)\s*$'
-   call search('\*)', 'bW')
-   let ind = indent(searchpair('(\*', '', '\*)', 'bWn', 'synIDattr(synID(line("."), col("."), 0), "name") =~? "string"'))
+ elseif lline =~ '-}\s*$'
+   call search('*-}', 'bW')
+   let ind = indent(searchpair('{-', '', '-}', 'bWn', 'synIDattr(synID(line("."), col("."), 0), "name") =~? "string"'))
 
  " Back to normal indent after lines ending with ')':
  elseif lline =~ ')\s*$'
    let ind = s:FindPair('(', '',')')
 
  " If this is a multiline comment then align '*':
- elseif lline =~ '^\s*(\*' && line =~ '^\s*\*'
+ elseif lline =~ '^\s*{-' && line =~ '^\s*-'
    let ind = ind + 1
 
  else

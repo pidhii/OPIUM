@@ -323,10 +323,10 @@ opi_ast_return(OpiAst *val)
 }
 
 OpiAst*
-opi_ast_eor(OpiAst *try, OpiAst *els)
+opi_ast_eor(OpiAst *try, OpiAst *els, const char *ename)
 {
   char *var = " eor tmp ";
-  char *vars[] = { "wtf" };
+  char *vars[] = { (char*)ename };
   char *fields[] = { "what" };
   if (try->tag == OPI_AST_APPLY)
     try->apply.eflag = FALSE;

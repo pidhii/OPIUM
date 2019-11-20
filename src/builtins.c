@@ -521,12 +521,15 @@ static opi_t
 concat(void)
 {
   opi_t s1 = opi_pop();
+  opi_inc_rc(s1);
   opi_t s2 = opi_pop();
+  opi_inc_rc(s2);
+
   if (opi_unlikely(s1->type != opi_string_type
                 || s2->type != opi_string_type))
   {
-    opi_drop(s1);
-    opi_drop(s2);
+    opi_unref(s1);
+    opi_unref(s2);
     return opi_undefined(opi_symbol("type-error"));
   }
 
@@ -537,8 +540,8 @@ concat(void)
   memcpy(buf + l1, opi_string_get_value(s2), l2);
   buf[l1 + l2] = '\0';
 
-  opi_drop(s1);
-  opi_drop(s2);
+  opi_unref(s1);
+  opi_unref(s2);
   return opi_string_move2(buf, l1 + l2);
 }
 
@@ -676,7 +679,7 @@ shell(void)
           else
             return opi_undefined(opi_string(strerror(errno)));
         }
-        if (buf.data[buf.len - 1] == '\n')
+        if (buf.len > 0 && buf.data[buf.len - 1] == '\n')
           buf.data[buf.len - 1] = 0;
         else
           cod_vec_push(buf, '\0');
@@ -748,6 +751,23 @@ loadfile(void)
   return ret;
 }
 
+static opi_t
+exit_(void)
+{
+  opi_t err = opi_pop();
+  if (err->type != opi_number_type) {
+    opi_drop(err);
+    return opi_undefined(opi_symbol("type-error"));
+  }
+  long double e = opi_number_get_value(err);
+  opi_drop(err);
+  if (e < 0 || e > 255) {
+    opi_drop(err);
+    return opi_undefined(opi_symbol("domain-error"));
+  }
+  exit(e);
+}
+
 void
 opi_builtins(OpiBuilder *bldr)
 {
@@ -760,7 +780,7 @@ opi_builtins(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "symbol?", opi_fn("symbol?", symbol_p, 1));
   opi_builder_def_const(bldr, "fn?", opi_fn("fn?", fn_p, 1));
 
-  opi_builder_def_const(bldr, "-|", opi_fn("-|", compose, 2));
+  opi_builder_def_const(bldr, ".", opi_fn(".", compose, 2));
   opi_builder_def_const(bldr, "++", opi_fn("++", concat, 2));
   opi_builder_def_const(bldr, "car", opi_fn("car", car_, 1));
   opi_builder_def_const(bldr, "cdr", opi_fn("cdr", cdr_, 1));
@@ -794,4 +814,6 @@ opi_builtins(OpiBuilder *bldr)
   opi_t loadfile_fn = opi_fn("loadfile", loadfile, -2);
   opi_fn_set_data(loadfile_fn, bldr->ctx, NULL);
   opi_builder_def_const(bldr, "loadfile", loadfile_fn);
+
+  opi_builder_def_const(bldr, "exit", opi_fn("exit", exit_, 1));
 }

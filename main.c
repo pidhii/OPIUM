@@ -24,7 +24,7 @@ help_and_exit(char *argv0, int err)
 }
 
 int
-main(int argc, char **argv)
+main(int argc, char **argv, char **env)
 {
   stack = malloc(sizeof(opi_t) * 0x1000);
   opi_sp = stack;
@@ -33,6 +33,10 @@ main(int argc, char **argv)
   cod_strvec_init(&srcdirs);
   int show_bytecode = FALSE;
   int use_base = TRUE;
+
+  char *opium_path = getenv("OPIUM_PATH");
+  if (opium_path)
+    cod_strvec_push(&srcdirs, opium_path);
 
   struct option opts[] = {
     { "help", FALSE, NULL, 'h' },
@@ -88,19 +92,37 @@ main(int argc, char **argv)
   OpiBuilder builder;
   opi_builder_init(&builder, &ctx);
 
-  /*opi_debug("add source directories:\n");*/
+  // Add source-directories.
   cod_strvec_push(&srcdirs, dir);
   for (size_t i = 0; i < srcdirs.size; ++i) {
     opi_builder_add_source_directory(&builder, srcdirs.data[i]);
-    /*opi_debug("  %2.zu. %s\n", i + 1, builder.srcdirs->data[builder.srcdirs->size - 1]);*/
   }
   cod_strvec_destroy(&srcdirs);
 
-  // change working direcotry to the source location
-  /*opi_debug("chdir \"%s\"\n", dir);*/
-  opi_assert(chdir(dir) == 0);
+  // Add command-line arguments.
+  opi_t argv_ = opi_nil;
+  for (int i = argc - 1; i >= optind; --i)
+    argv_ = opi_cons(opi_string(argv[i]), argv_);
+  opi_builder_def_const(&builder, "ARGV", argv_);
+  
+  // Add environment variables.
+  opi_t env_ = opi_table();
+  for (int i = 0; env[i]; ++i) {
+    char *eq = strchr(env[i], '=');
+    opi_assert(eq);
+    char key_buf[eq - env[i] + 1];
+    memcpy(key_buf, env[i], eq - env[i]);
+    key_buf[eq - env[i]] = 0;
+    opi_t key = opi_symbol(key_buf);
+    opi_t val = opi_string(eq + 1);
+    opi_table_insert(env_, key, val, FALSE, NULL);
+  }
+  opi_builder_def_const(&builder, "ENV", env_);
 
-  /*opi_debug("define builtins\n");*/
+  // change working direcotry to the source location
+  /*opi_debug("chdir %s\n", dir);*/
+  /*opi_assert(chdir(dir) == 0);*/
+
   opi_builtins(&builder);
 
   if (in == stdin) {
@@ -167,12 +189,6 @@ main(int argc, char **argv)
     fclose(in);
     if (ast == NULL)
       goto cleanup;
-
-    opi_t argv_ = opi_nil;
-    for (int i = argc - 1; i >= optind; --i)
-      argv_ = opi_cons(opi_string(argv[i]), argv_);
-    opi_builder_def_const(&builder, "argv", argv_);
-    
 
     OpiBytecode *bc = opi_build(&builder, ast, OPI_BUILD_DEFAULT);
     opi_ast_delete(ast);

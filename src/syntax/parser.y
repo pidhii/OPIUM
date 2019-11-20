@@ -1,4 +1,4 @@
-%glr-parser
+/*%glr-parser*/
 %define parse.error verbose
 %define api.pure true
 %param {OpiScanner *yyscanner}
@@ -106,25 +106,34 @@ int opi_start_token;
 //
 // Tokens
 //
+%nonassoc DUMMYCOL
+
 %right '=' RARROW '\\' '@'
+
+%nonassoc STRUCT
 
 %token<num> NUMBER
 %token<str> SYMBOL STRING SHELL
 %token<opi> CONST
-%nonassoc LET REC
+
+%nonassoc LET REC IN AND
+%nonassoc BEG END
+
+%right BRK
+
+%right ';'
+
 %left IF UNLESS THEN ELSE
-%right IN
-%token AND
 %token LOAD
 %token DCOL
 %token NAMESPACE
-%token STRUCT
 %token USE AS
 %nonassoc RETURN
-%token WTF
 %token DOTDOT
+
 %token START_FILE
 %token START_REPL
+
 %token FLEX_ERROR
 
 //
@@ -146,9 +155,6 @@ int opi_start_token;
 %type<matches> matches matches_aux
 %type<strvec> fields
 
-%right BRK
-
-%right ';'
 %right OR
 %right '$'
 %right SCOR
@@ -159,7 +165,7 @@ int opi_start_token;
 %left '*' '/' '%'
 %right COMPOSE
 %right NOT
-%left '.'
+%left TABLEREF
 
 %left UMINUS
 
@@ -168,10 +174,8 @@ int opi_start_token;
 
 entry
   : START_FILE block { @$; g_result = $2; }
-  | START_REPL block_aux BRK {
-    g_result = opi_ast_block((OpiAst**)$2->data, $2->size);
-    cod_ptrvec_destroy($2, NULL);
-    free($2);
+  | START_REPL block_expr BRK {
+    g_result = $2;
     opi_start_token = 0;
   }
   | START_REPL { g_result = NULL; opi_start_token = 0; }
@@ -190,7 +194,6 @@ Atom
     free($1);
   }
   | '(' Expr ')' { $$ = $2; }
-  | WTF { $$ = opi_ast_var("wtf"); }
   | '[' arg_aux ']' {
     $$ = opi_ast_apply(opi_ast_var("list"), (OpiAst**)$2->data, $2->size);
     $$->apply.loc = location(&@$);
@@ -198,7 +201,7 @@ Atom
     free($2);
   }
   | '[' ']' { $$ = opi_ast_const(opi_nil); }
-  | Atom '.' SYMBOL {
+  | Atom TABLEREF SYMBOL {
     OpiAst *p[] = { $1, opi_ast_const(opi_symbol($3)) };
     $$ = opi_ast_apply(opi_ast_var("."), p, 2);
     $$->apply.loc = location(&@$);
@@ -298,6 +301,7 @@ Stmnt
   | RETURN Expr {
     $$ = opi_ast_return($2);
   }
+  | BEG Expr END { $$ = $2; }
 ;
 
 Expr
@@ -307,7 +311,7 @@ Expr
     OpiAst *body[] = { $1, $3 };
     $$ = opi_ast_block(body, 2);
   }
-  | Expr ';' { $$ = $1; }
+  | Expr ';' %prec DUMMYCOL { $$ = $1; }
   | '(' ')' {
     $$ = opi_ast_apply(opi_ast_var("()"), NULL, 0);
     $$->apply.loc = location(&@$);
@@ -395,10 +399,9 @@ Expr
     $$ = opi_ast_apply(opi_ast_var("++"), p, 2);
     $$->apply.loc = location(&@$);
   }
+  | Expr OR Expr { $$ = opi_ast_eor($1, $3, " "); }
+  | Expr OR SYMBOL RARROW Expr { $$ = opi_ast_eor($1, $5, $3); free($3); }
   /*| '{' block '}' { $$ = $2; }*/
-  | Expr OR Expr {
-    $$ = opi_ast_eor($1, $3);
-  }
 ;
 
 matches
@@ -444,6 +447,7 @@ anylambda: lambda | valambda;
 
 lambda
   : '\\' fn_aux { $$ = $2; }
+  | '(' ')'  RARROW Expr { $$ = opi_ast_fn(0, 0, $4); }
 ;
 
 valambda
@@ -531,10 +535,11 @@ block_aux
     $$ = $1;
     cod_ptrvec_push($$, $2, NULL);
   }
-  | block_aux error block_stmnt {
-    $$ = $1;
-    cod_ptrvec_push($$, $3, NULL);
-  }
+  /*| block_aux error {*/
+    /*// WTF !?!?!?*/
+    /*$$ = $1;*/
+    /*opi_error = 1;*/
+  /*}*/
 ;
 
 block_expr
