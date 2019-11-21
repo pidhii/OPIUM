@@ -1,4 +1,4 @@
-# file: base/base.opi
+{- file: base/base.opi -}
 
 load "base.so"
 

@@ -25,6 +25,15 @@ int opi_start_token;
 
 static
 int g_begin_cnt = 0;
+
+enum {
+  BRACE_CODE,
+  BRACE_STRING,
+  BRACE_SHELL,
+};
+
+static
+cod_vec(int) g_braces;
 %}
 
 %option noyywrap
@@ -32,6 +41,8 @@ int g_begin_cnt = 0;
 %option interactive
 
 %x comment
+%x string
+%x shell
 
 %%
 
@@ -85,70 +96,34 @@ end {
 
 "::" { return DCOL; }
 
-\"(\\.|[^"\\])*\" {
-  size_t len = strlen(yytext) - 2;
-  char buf[len + 1];
-  memcpy(buf, yytext + 1, len);
-  buf[len] = 0;
-  
-  char *str = malloc(len + 1);
-  char *p = str;
-  for (size_t i = 0; i < len + 1; ++i) {
-    switch (buf[i]) {
-      case '\\':
-        switch (buf[++i]) {
-          case 'a': *p++ = '\a'; break;
-          case 'b': *p++ = '\b'; break;
-          case 'e': *p++ = '\x1b'; break;
-          case 'f': *p++ = '\f'; break;
-          case 'n': *p++ = '\n'; break;
-          case 'r': *p++ = '\r'; break;
-          case 't': *p++ = '\t'; break;
-          case 'v': *p++ = '\v'; break;
-          case '?': *p++ = '\?'; break;
-          default: *p++ = buf[i];
-        }
-        break;
-
-      default:
-        *p++ = buf[i];
-    }
-  }
-  yylval->str = str;
-  return STRING;
+\" { BEGIN(string); return '"'; }
+<string>\" { BEGIN(INITIAL); return '"'; }
+\` { BEGIN(shell); return '`'; }
+<shell>\` { BEGIN(INITIAL); return '`'; }
+<string,shell>\\\n
+<string,shell>\\a { yylval->c = '\a'; return CHAR; }
+<string,shell>\\b { yylval->c = '\b'; return CHAR; }
+<string,shell>\\e { yylval->c = '\x1b'; return CHAR; }
+<string,shell>\\f { yylval->c = '\f'; return CHAR; }
+<string,shell>\\n { yylval->c = '\n'; return CHAR; }
+<string,shell>\\r { yylval->c = '\r'; return CHAR; }
+<string,shell>\\t { yylval->c = '\t'; return CHAR; }
+<string,shell>\\v { yylval->c = '\v'; return CHAR; }
+<string,shell>\\? { yylval->c = '\?'; return CHAR; }
+<string,shell>\\. { yylval->c = yytext[1]; return CHAR; }
+<string>"%{" {
+  BEGIN(INITIAL);
+  cod_vec_push(g_braces, BRACE_STRING);
+  return FMT_START;
 }
-`(\\.|[^`\\])*` {
-  size_t len = strlen(yytext) - 2;
-  char buf[len + 1];
-  memcpy(buf, yytext + 1, len);
-  buf[len] = 0;
-  
-  char *str = malloc(len + 1);
-  char *p = str;
-  for (size_t i = 0; i < len + 1; ++i) {
-    switch (buf[i]) {
-      case '\\':
-        switch (buf[++i]) {
-          case 'a': *p++ = '\a'; break;
-          case 'b': *p++ = '\b'; break;
-          case 'e': *p++ = '\x1b'; break;
-          case 'f': *p++ = '\f'; break;
-          case 'n': *p++ = '\n'; break;
-          case 'r': *p++ = '\r'; break;
-          case 't': *p++ = '\t'; break;
-          case 'v': *p++ = '\v'; break;
-          case '?': *p++ = '\?'; break;
-          default: *p++ = buf[i];
-        }
-        break;
-
-      default:
-        *p++ = buf[i];
-    }
-  }
-  yylval->str = str;
-  return SHELL;
+<shell>"%{" {
+  BEGIN(INITIAL);
+  cod_vec_push(g_braces, BRACE_SHELL);
+  return FMT_START;
 }
+<string,shell>. { yylval->c = yytext[0]; return CHAR; }
+<string,shell>\n { yylval->c = yytext[0]; return CHAR; }
+
 nil { yylval->opi = opi_nil; return CONST; }
 true { yylval->opi = opi_true; return CONST; }
 false { yylval->opi = opi_false; return CONST; }
@@ -175,13 +150,40 @@ is[ \n\t]+not { return ISNOT; }
 "." { return COMPOSE; }
 "#" { return TABLEREF; }
 
+"{" {
+  cod_vec_push(g_braces, BRACE_CODE);
+  return '{';
+}
+"}" {
+  opi_assert(g_braces.len > 0);
+
+  int brace = g_braces.data[g_braces.len - 1];
+  cod_vec_pop(g_braces);
+
+  switch (brace) {
+    case BRACE_CODE:
+      return '}';
+
+    case BRACE_STRING:
+      BEGIN(string);
+      return FMT_END;
+
+    case BRACE_SHELL:
+      BEGIN(shell); 
+      return FMT_END;
+
+    default:
+      opi_assert(!"WTF");
+  }
+}
+
 ";" { return ';'; }
 ";;" { return BRK; }
 "@"|"!" |
 "$"|":" { return yytext[0]; }
 "->" { return RARROW; }
 "="|"+"|"-"|"*"|"/"|"%"|\. { return yytext[0]; }
-"["|"]"|"{"|"}"|"\\"|"("|")"|"," { return yytext[0]; }
+"["|"]"|"\\"|"("|")"|"," { return yytext[0]; }
 
 "'"[^ \t\n(){}\[\]'\";,:]+ { yylval->opi = opi_symbol(yytext+1); return CONST; }
 [a-zA-Z_][0-9a-zA-Z_]*['?]? { yylval->str = strdup(yytext); return SYMBOL; }
@@ -193,3 +195,15 @@ is[ \n\t]+not { return ISNOT; }
 }
 
 %%
+
+void
+opi_lexer_init(void)
+{
+  cod_vec_init(g_braces);
+}
+
+void
+opi_lexer_cleanup(void)
+{
+  cod_vec_destroy(g_braces);
+}

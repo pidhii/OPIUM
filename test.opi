@@ -11,7 +11,7 @@ let stream? x =
 
 namespace stream {
   let car = car
-  let cdr = force -| cdr
+  let cdr = force . cdr
 
   let null? = null?
 
@@ -20,15 +20,13 @@ namespace stream {
     else f head : lazy map f (force tail)
 }
 
-let t = loadfile "t.opi" ["./build/install/lib/opium"] in
-t.test ()
-
 let _ =
-  printf "HOME = %w\n" `echo $HOME`;
-  printf "argv = %d\n" argv
+  print "HOME (from shell) = %{ `echo $HOME` }";
+  print "argv = %{ARGV}";
+  print "HOME (from ENV) = %{ENV#HOME}"
 
 let add x y = if y > 0 then x + y else error 'OloLo in
-#let add x y = x + y in
-#print $ foldl add 0 $ revfilter even? $ range 0 10000000;
+--let add x y = x + y in
+print $ foldl add 0 $ revfilter even? $ range 0 10000000;
 print $ flip map [1 2 3] (add 1);
 

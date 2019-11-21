@@ -93,6 +93,7 @@ void
 opi_init(void)
 {
   opi_allocators_init();
+  opi_lexer_init();
 
   opi_undefined_init();
   opi_nil_init();
@@ -123,6 +124,7 @@ opi_cleanup(void)
   opi_table_cleanup();
 
   opi_allocators_cleanup();
+  opi_lexer_cleanup();
 }
 
 /******************************************************************************/

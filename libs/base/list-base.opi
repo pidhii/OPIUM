@@ -1,19 +1,19 @@
-################################################################################
-# File: base/list-base.opi
-#-------------------------------------------------------------------------------
-# Definitions:
-# - reverse l -> list
-# - range from to -> list
-# - any? f l -> boolean
-# - all? f l -> boolean
-# - revmap f l -> list
-# - map f l -> list
-# - foreach f l
-# - foldl f z l -> any
-# - foldr f z l -> any
-# - revfilter f l -> list
-# - filter f l -> list
-################################################################################
+{-------------------------------------------------------------------------------
+ - File: base/list-base.opi
+ -------------------------------------------------------------------------------
+ - Definitions:
+ - - reverse l -> list
+ - - range from to -> list
+ - - any? f l -> boolean
+ - - all? f l -> boolean
+ - - revmap f l -> list
+ - - map f l -> list
+ - - foreach f l
+ - - foldl f z l -> any
+ - - foldr f z l -> any
+ - - revfilter f l -> list
+ - - filter f l -> list
+ -}
 
 load "common.opi"
 
@@ -44,7 +44,7 @@ let map = reverse . revmap
 let foreach f l =
   let rec loop l =
     unless let x:xs = l then nil
-    else f x; loop xs
+    else (f x; loop xs)
   in loop l
 
 let foldl f z l =

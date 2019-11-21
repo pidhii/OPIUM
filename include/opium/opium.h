@@ -84,6 +84,12 @@ int
 opi_show_location(FILE *out, const char *path, int fc, int fl, int lc, int ll);
 
 void
+opi_lexer_init(void);
+
+void
+opi_lexer_cleanup(void);
+
+void
 opi_init(void);
 
 void

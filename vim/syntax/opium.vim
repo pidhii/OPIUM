@@ -68,7 +68,8 @@ syn match opiOperator /![-+=*/%><&|!.]\+/
 syn match opiOperator /:\|\$/
 syn keyword opiOperator is eq equal not
 
-syn match opiDelimiter /[,;(){}]/
+syn region opiBraces matchgroup=opiDelimiter start=/{/ end=/}/ contains=TOP skipwhite skipnl
+syn match opiDelimiter /[,;()]/
 
 syn match opiUnit /(\s*)/
 
@@ -103,9 +104,10 @@ syn match Number '\<\d[[:digit:]]*[eE][\-+]\=\d\+'
 " Floating point like number with E and decimal point (+,-)
 syn match Number '\<\d[[:digit:]]*\.\d*[eE][\-+]\=\d\+'
 
-syn region String start=/"/ skip=/\\.\|[^"\\]/ end=/"/ skipnl
-syn match String /`\(\\.\|[^`\\]\)*`/hs=s+1,he=e-1 skipwhite skipnl
-syn match Operator /`/ contained containedin=String
+syn region String start=/"/ end=/"/ skipnl skipwhite contains=opiFormat
+syn region String matchgroup=opiOperator start=/`/ end=/\`/ skipnl skipwhite contains=opiFormat
+syn region opiFormat matchgroup=opiSpecial start=/%{/ end=/}/ contained contains=TOP
+syn match opiSpecial /\\$/ containedin=String
 
 
 hi link opiNamespace     Define
@@ -122,7 +124,7 @@ hi link opiStructName StorageClass
 
 hi link opiSpecial Special
 
-hi link opiKeyword Conditional
+hi link opiKeyword Statement
 
 hi link opiLazy Keyword
 

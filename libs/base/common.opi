@@ -1,4 +1,4 @@
-# file: base/common.opi
+{- file: base/common.opi -}
 
 let flip f = \x y -> f y x
 

@@ -786,7 +786,7 @@ opi_builtins(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "cdr", opi_fn("cdr", cdr_, 1));
   opi_builder_def_const(bldr, "list", opi_fn("list", list, -1));
   opi_builder_def_const(bldr, "table", opi_fn("table", table, 1));
-  opi_builder_def_const(bldr, ".", opi_fn(".", table_ref, 2));
+  opi_builder_def_const(bldr, "#", opi_fn("#", table_ref, 2));
   opi_builder_def_const(bldr, "is", opi_fn("is", is_, 2));
   opi_builder_def_const(bldr, "eq", opi_fn("eq", eq_, 2));
   opi_builder_def_const(bldr, "equal", opi_fn("equal", equal_, 2));

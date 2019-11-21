@@ -74,6 +74,7 @@ int opi_start_token;
   opi_t opi;
   OpiAst *ast;
   long double num;
+  char c;
   char *str;
   struct binds *binds;
   struct cod_strvec *strvec;
@@ -83,6 +84,12 @@ int opi_start_token;
     struct cod_strvec *fields;
     struct cod_strvec *vars;
   } matches;
+
+  cod_vec(char) s;
+  struct {
+    cod_vec(char) s;
+    cod_vec(OpiAst*) p;
+  } fmt;
 }
 
 %destructor { opi_drop($$); } <opi>
@@ -102,6 +109,12 @@ int opi_start_token;
   free($$.vars);
   free($$.fields);
 } <matches>
+%destructor {
+  cod_vec_destroy($$.s);
+  for (size_t i = 0; i < $$.p.len; ++i)
+    opi_ast_delete($$.p.data[i]);
+  cod_vec_destroy($$.p);
+} <fmt>
 
 //
 // Tokens
@@ -112,8 +125,9 @@ int opi_start_token;
 
 %nonassoc STRUCT
 
+%token<c>   CHAR
 %token<num> NUMBER
-%token<str> SYMBOL STRING SHELL
+%token<str> SYMBOL SHELL
 %token<opi> CONST
 
 %nonassoc LET REC IN AND
@@ -130,6 +144,9 @@ int opi_start_token;
 %token USE AS
 %nonassoc RETURN
 %token DOTDOT
+
+%token FMT_START
+%token FMT_END
 
 %token START_FILE
 %token START_REPL
@@ -154,6 +171,8 @@ int opi_start_token;
 %type<str> refstr
 %type<matches> matches matches_aux
 %type<strvec> fields
+%type<fmt> string shell
+%type<fmt> fmt
 
 %right OR
 %right '$'
@@ -186,12 +205,36 @@ Atom
   : NUMBER { $$ = opi_ast_const(opi_number($1)); }
   | refstr { $$ = opi_ast_var($1); free($1); }
   | CONST { $$ = opi_ast_const($1); }
-  | STRING { $$ = opi_ast_const(opi_string($1)); free($1); }
-  | SHELL {
-    OpiAst *cmd = opi_ast_const(opi_string($1));
+  | string {
+    if ($1.p.len == 0) {
+      $$ = opi_ast_const(opi_string_move2($1.s.data, $1.s.len - 1));
+      cod_vec_destroy($1.p);
+    } else {
+      char *fmt = $1.s.data;
+      OpiAst *p[$1.p.len + 1];
+      p[0] = opi_ast_const(opi_string_move2($1.s.data, $1.s.len - 1));
+      for (size_t i = 0; i < $1.p.len; ++i)
+        p[i + 1] = $1.p.data[i];
+      cod_vec_destroy($1.p);
+      $$ = opi_ast_apply(opi_ast_var("format"), p, $1.p.len + 1);
+    }
+  }
+  | shell {
+    OpiAst *cmd;
+    if ($1.p.len == 0) {
+      cmd = opi_ast_const(opi_string_move2($1.s.data, $1.s.len - 1));
+      cod_vec_destroy($1.p);
+    } else {
+      char *fmt = $1.s.data;
+      OpiAst *p[$1.p.len + 1];
+      p[0] = opi_ast_const(opi_string_move2($1.s.data, $1.s.len - 1));
+      for (size_t i = 0; i < $1.p.len; ++i)
+        p[i + 1] = $1.p.data[i];
+      cod_vec_destroy($1.p);
+      cmd = opi_ast_apply(opi_ast_var("format"), p, $1.p.len + 1);
+    }
     $$ = opi_ast_apply(opi_ast_var("shell"), &cmd, 1);
     $$->apply.loc = location(&@$);
-    free($1);
   }
   | '(' Expr ')' { $$ = $2; }
   | '[' arg_aux ']' {
@@ -203,7 +246,7 @@ Atom
   | '[' ']' { $$ = opi_ast_const(opi_nil); }
   | Atom TABLEREF SYMBOL {
     OpiAst *p[] = { $1, opi_ast_const(opi_symbol($3)) };
-    $$ = opi_ast_apply(opi_ast_var("."), p, 2);
+    $$ = opi_ast_apply(opi_ast_var("#"), p, 2);
     $$->apply.loc = location(&@$);
     free($3);
   }
@@ -391,7 +434,7 @@ Expr
   | Expr ':' Expr { $$ = opi_ast_binop(OPI_OPC_CONS, $1, $3); }
   | Expr COMPOSE Expr {
     OpiAst *p[] = { $1, $3 };
-    $$ = opi_ast_apply(opi_ast_var("-|"), p, 2);
+    $$ = opi_ast_apply(opi_ast_var("."), p, 2);
     $$->apply.loc = location(&@$);
   }
   | Expr PLUSPLUS Expr {
@@ -579,9 +622,11 @@ block_stmnt_only
     free($2);
     free($4);
   }
-  | LOAD STRING {
-    $$ = opi_ast_load($2);
-    free($2);
+  | LOAD string {
+    opi_assert($2.p.len == 0);
+    $$ = opi_ast_load($2.s.data);
+    cod_vec_destroy($2.s);
+    cod_vec_destroy($2.p);
   }
   | NAMESPACE SYMBOL '{' block '}' {
     $$ = $4;
@@ -740,6 +785,26 @@ recbins
     $$ = $1;
     binds_push($$, $3, $4);
     free($3);
+  }
+;
+
+string: '"' fmt '"' { $$ = $2; cod_vec_push($$.s, 0); };
+shell: '`' fmt '`' { $$ = $2; cod_vec_push($$.s, 0); };
+
+fmt
+  : {
+    cod_vec_init($$.s);
+    cod_vec_init($$.p);
+  }
+  | fmt CHAR {
+    $$ = $1;
+    cod_vec_push($$.s, $2);
+  }
+  | fmt FMT_START Expr FMT_END {
+    $$ = $1;
+    cod_vec_push($$.s, '%');
+    cod_vec_push($$.s, 'd');
+    cod_vec_push($$.p, $3);
   }
 ;
 
