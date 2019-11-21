@@ -324,25 +324,26 @@ static opi_t
 table(void)
 {
   opi_t l = opi_pop();
+  opi_inc_rc(l);
   opi_t tab = opi_table();
 
   opi_t err;
   for (opi_t it = l; it->type == opi_pair_type; it = opi_cdr(it)) {
     opi_t kv = opi_car(it);
     if (opi_unlikely(kv->type != opi_pair_type)) {
-      opi_drop(l);
+      opi_unref(l);
       opi_drop(tab);
-      return opi_undefined(opi_symbol("type_error"));
+      return opi_undefined(opi_symbol("type-error"));
     }
     err = NULL;
     opi_table_insert(tab, opi_car(kv), opi_cdr(kv), TRUE, &err);
     if (opi_unlikely(err)) {
-      opi_drop(l);
+      opi_unref(l);
       opi_drop(tab);
       return err;
     }
   }
-  opi_drop(l);
+  opi_unref(l);
   return tab;
 }
 
@@ -350,45 +351,23 @@ static opi_t
 table_ref(void)
 {
   opi_t tab = opi_pop();
+  opi_inc_rc(tab);
   opi_t key = opi_pop();
+  opi_inc_rc(key);
+
+  if (opi_unlikely(tab->type != opi_table_type)) {
+    opi_unref(tab);
+    opi_unref(key);
+    return opi_undefined(opi_symbol("type-error"));
+  }
 
   opi_t err = NULL;
   opi_t x = opi_table_at(tab, key, &err);
   opi_t ret = x ? x : err;
 
   opi_inc_rc(ret);
-  opi_drop(tab);
-  opi_drop(key);
-  opi_dec_rc(ret);
-  return ret;
-}
-
-static opi_t
-default_at(void)
-{
-  opi_t l = opi_pop();
-  opi_t idx = opi_pop();
-
-  if (opi_unlikely(idx->type != opi_number_type)) {
-    opi_drop(l);
-    opi_drop(idx);
-    return opi_undefined(opi_symbol("type-error"));
-  }
-
-  size_t k = opi_number_get_value(idx);
-  if (opi_unlikely(k >= opi_length(l))) {
-    opi_drop(l);
-    opi_drop(idx);
-    return opi_undefined(opi_symbol("out-of-range"));
-  }
-
-  while (k--)
-    l = opi_cdr(l);
-
-  opi_t ret = opi_car(l);
-  opi_inc_rc(ret);
-  opi_drop(l);
-  opi_drop(idx);
+  opi_unref(tab);
+  opi_unref(key);
   opi_dec_rc(ret);
   return ret;
 }
@@ -397,24 +376,32 @@ static opi_t
 string_at(void)
 {
   opi_t str = opi_pop();
+  opi_inc_rc(str);
   opi_t idx = opi_pop();
+  opi_inc_rc(idx);
+
+  if (opi_unlikely(str->type != opi_string_type)) {
+    opi_unref(str);
+    opi_unref(idx);
+    return opi_undefined(opi_symbol("type-error"));
+  }
 
   if (opi_unlikely(idx->type != opi_number_type)) {
-    opi_drop(str);
-    opi_drop(idx);
+    opi_unref(str);
+    opi_unref(idx);
     return opi_undefined(opi_symbol("type-error"));
   }
 
   size_t k = opi_number_get_value(idx);
   if (opi_unlikely(k >= opi_string_get_length(str))) {
-    opi_drop(str);
-    opi_drop(idx);
+    opi_unref(str);
+    opi_unref(idx);
     return opi_undefined(opi_symbol("out-of-range"));
   }
 
   opi_t ret = opi_string_from_char(opi_string_get_value(str)[k]);
-  opi_drop(str);
-  opi_drop(idx);
+  opi_unref(str);
+  opi_unref(idx);
   return ret;
 }
 

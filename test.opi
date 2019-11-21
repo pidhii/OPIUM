@@ -25,8 +25,22 @@ let _ =
   print "argv = %{ARGV}";
   print "HOME (from ENV) = %{ENV#HOME}"
 
-let add x y = if y > 0 then x + y else error 'OloLo in
---let add x y = x + y in
-print $ foldl add 0 $ revfilter even? $ range 0 10000000;
-print $ flip map [1 2 3] (add 1);
+--let add x y = if y > 0 then x + y else error 'OloLo in
+let add x y = x + y in
+print $ foldl add 0 $ revfilter even? $ range 0 100;
+print $ flip map [1 2 3] (add 1);;
 
+let window w h = {
+  let width = w
+  let height = h
+
+  let show () = print "window { width: %{width}, height: %{height} }"
+}
+
+let win = window 1990 800 in begin
+  print "win: %{win}";
+  print "win#width = %{win#width}";
+  print "win#height = %{win#height}";
+  print "show win:";
+  win#show ();
+end

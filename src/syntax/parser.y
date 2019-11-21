@@ -90,6 +90,11 @@ int opi_start_token;
     cod_vec(char) s;
     cod_vec(OpiAst*) p;
   } fmt;
+
+  struct {
+    struct cod_strvec names;
+    cod_vec(OpiAst*) body;
+  } table;
 }
 
 %destructor { opi_drop($$); } <opi>
@@ -115,6 +120,12 @@ int opi_start_token;
     opi_ast_delete($$.p.data[i]);
   cod_vec_destroy($$.p);
 } <fmt>
+%destructor {
+  cod_strvec_destroy(&$$.names);
+  for (size_t i = 0; i < $$.body.len; ++i)
+    opi_ast_delete($$.body.data[i]);
+  cod_vec_destroy($$.body);
+} <table>
 
 //
 // Tokens
@@ -160,7 +171,7 @@ int opi_start_token;
 %type<ast> Form
 %type<ast> Expr Stmnt
 
-%type<binds> binds recbins
+%type<binds> binds recbinds
 %type<strvec> param param_aux
 %type<ptrvec> arg arg_aux
 %type<ast> block block_stmnt block_stmnt_only block_expr
@@ -173,6 +184,8 @@ int opi_start_token;
 %type<strvec> fields
 %type<fmt> string shell
 %type<fmt> fmt
+%type<ast> table
+%type<table> table_aux
 
 %right OR
 %right '$'
@@ -280,7 +293,7 @@ Stmnt
   | UNLESS Expr THEN Expr ELSE Expr {
     $$ = opi_ast_if($2, $6, $4);
   }
-  | LET REC recbins IN Expr {
+  | LET REC recbinds IN Expr {
     $$ = opi_ast_fix($3->vars.data, (OpiAst**)$3->vals.data, $3->vars.size, $5);
     binds_delete($3);
   }
@@ -444,7 +457,7 @@ Expr
   }
   | Expr OR Expr { $$ = opi_ast_eor($1, $3, " "); }
   | Expr OR SYMBOL RARROW Expr { $$ = opi_ast_eor($1, $5, $3); free($3); }
-  /*| '{' block '}' { $$ = $2; }*/
+  | table
 ;
 
 matches
@@ -599,7 +612,7 @@ block_stmnt_only
   | UNLESS Expr THEN Expr {
     $$ = opi_ast_if($2, opi_ast_const(opi_nil), $4);
   }
-  | LET REC recbins {
+  | LET REC recbinds {
     $$ = opi_ast_fix($3->vars.data, (OpiAst**)$3->vals.data, $3->vars.size, NULL);
     binds_delete($3);
   }
@@ -765,7 +778,7 @@ binds
   }
 ;
 
-recbins
+recbinds
   : SYMBOL '=' lambda {
     $$ = binds_new();
     binds_push($$, $1, $3);
@@ -776,12 +789,12 @@ recbins
     binds_push($$, $1, $2);
     free($1);
   }
-  | recbins AND SYMBOL '=' lambda {
+  | recbinds AND SYMBOL '=' lambda {
     $$ = $1;
     binds_push($$, $3, $5);
     free($3);
   }
-  | recbins AND SYMBOL def_aux {
+  | recbinds AND SYMBOL def_aux {
     $$ = $1;
     binds_push($$, $3, $4);
     free($3);
@@ -805,6 +818,54 @@ fmt
     cod_vec_push($$.s, '%');
     cod_vec_push($$.s, 'd');
     cod_vec_push($$.p, $3);
+  }
+;
+
+table
+  : '{' table_aux '}' {
+
+    OpiAst *list_args[$2.names.size];
+    for (size_t i = 0; i < $2.names.size; ++i) {
+      OpiAst *key = opi_ast_const(opi_symbol($2.names.data[i]));
+      OpiAst *val = opi_ast_var($2.names.data[i]);
+      list_args[i] = opi_ast_binop(OPI_OPC_CONS, key, val);
+    }
+
+    OpiAst *list = opi_ast_apply(opi_ast_var("list"), list_args, $2.names.size);
+    cod_strvec_destroy(&$2.names);
+
+    cod_vec_push($2.body, list);
+    OpiAst *block = opi_ast_block($2.body.data, $2.body.len);
+    cod_vec_destroy($2.body);
+
+    $$ = opi_ast_apply(opi_ast_var("table"), &block, 1);
+  }
+;
+
+table_aux
+  : {
+    cod_strvec_init(&$$.names);
+    cod_vec_init($$.body);
+  }
+  | table_aux LET REC recbinds {
+    OpiAst *letrec = opi_ast_fix($4->vars.data, (OpiAst**)$4->vals.data, $4->vars.size, NULL);
+
+    $$ = $1;
+    for (size_t i = 0; i < $4->vars.size; ++i)
+      cod_strvec_push(&$$.names, $4->vars.data[i]);
+    cod_vec_push($$.body, letrec);
+
+    binds_delete($4);
+  }
+  | table_aux LET binds {
+    OpiAst *let = opi_ast_let($3->vars.data, (OpiAst**)$3->vals.data, $3->vars.size, NULL);
+
+    $$ = $1;
+    for (size_t i = 0; i < $3->vars.size; ++i)
+      cod_strvec_push(&$$.names, $3->vars.data[i]);
+    cod_vec_push($$.body, let);
+
+    binds_delete($3);
   }
 ;
 
