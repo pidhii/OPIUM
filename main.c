@@ -102,11 +102,11 @@ main(int argc, char **argv, char **env)
   // Add command-line arguments.
   opi_t argv_ = opi_nil;
   for (int i = argc - 1; i >= optind; --i)
-    argv_ = opi_cons(opi_string(argv[i]), argv_);
+    argv_ = opi_cons(opi_string_new(argv[i]), argv_);
   opi_builder_def_const(&builder, "ARGV", argv_);
   
   // Add environment variables.
-  opi_t env_ = opi_table();
+  opi_t env_list = opi_nil;
   for (int i = 0; env[i]; ++i) {
     char *eq = strchr(env[i], '=');
     opi_assert(eq);
@@ -114,9 +114,10 @@ main(int argc, char **argv, char **env)
     memcpy(key_buf, env[i], eq - env[i]);
     key_buf[eq - env[i]] = 0;
     opi_t key = opi_symbol(key_buf);
-    opi_t val = opi_string(eq + 1);
-    opi_table_insert(env_, key, val, FALSE, NULL);
+    opi_t val = opi_string_new(eq + 1);
+    env_list = opi_cons(opi_cons(key, val), env_list);
   }
+  opi_t env_ = opi_table(env_list, TRUE);
   opi_builder_def_const(&builder, "ENV", env_);
 
   // change working direcotry to the source location
@@ -213,6 +214,7 @@ main(int argc, char **argv, char **env)
           opi_show_location(OPI_ERROR, loc->path, loc->fc, loc->fl, loc->lc, loc->ll);
         }
       }
+      opi_error = 1;
     }
     opi_drop(ret);
     opi_bytecode_delete(bc);
@@ -223,4 +225,6 @@ cleanup:
   opi_context_destroy(&ctx);
   opi_cleanup();
   free(stack);
+
+  return opi_error ? EXIT_FAILURE : EXIT_SUCCESS;
 }

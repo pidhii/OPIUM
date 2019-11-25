@@ -132,7 +132,7 @@ int opi_start_token;
 //
 %nonassoc DUMMYCOL
 
-%right '=' RARROW '\\' '@'
+%right '=' RARROW FN
 
 %nonassoc STRUCT
 
@@ -140,6 +140,7 @@ int opi_start_token;
 %token<num> NUMBER
 %token<str> SYMBOL SHELL
 %token<opi> CONST
+%token<str> S
 
 %nonassoc LET REC IN AND
 %nonassoc BEG END
@@ -148,7 +149,12 @@ int opi_start_token;
 
 %right ';'
 
-%left IF UNLESS THEN ELSE
+%right LAZY ASSERT
+
+%left IF UNLESS WHEN
+%precedence THEN
+%precedence ELSE
+%type<ast> if unless when
 %token LOAD
 %token DCOL
 %token NAMESPACE
@@ -182,7 +188,8 @@ int opi_start_token;
 %type<str> refstr
 %type<matches> matches matches_aux
 %type<strvec> fields
-%type<fmt> string shell
+%type<ast> string shell qr sr
+%type<fmt> string_aux shell_aux qr_aux
 %type<fmt> fmt
 %type<ast> table
 %type<table> table_aux
@@ -218,37 +225,10 @@ Atom
   : NUMBER { $$ = opi_ast_const(opi_number($1)); }
   | refstr { $$ = opi_ast_var($1); free($1); }
   | CONST { $$ = opi_ast_const($1); }
-  | string {
-    if ($1.p.len == 0) {
-      $$ = opi_ast_const(opi_string_move2($1.s.data, $1.s.len - 1));
-      cod_vec_destroy($1.p);
-    } else {
-      char *fmt = $1.s.data;
-      OpiAst *p[$1.p.len + 1];
-      p[0] = opi_ast_const(opi_string_move2($1.s.data, $1.s.len - 1));
-      for (size_t i = 0; i < $1.p.len; ++i)
-        p[i + 1] = $1.p.data[i];
-      cod_vec_destroy($1.p);
-      $$ = opi_ast_apply(opi_ast_var("format"), p, $1.p.len + 1);
-    }
-  }
-  | shell {
-    OpiAst *cmd;
-    if ($1.p.len == 0) {
-      cmd = opi_ast_const(opi_string_move2($1.s.data, $1.s.len - 1));
-      cod_vec_destroy($1.p);
-    } else {
-      char *fmt = $1.s.data;
-      OpiAst *p[$1.p.len + 1];
-      p[0] = opi_ast_const(opi_string_move2($1.s.data, $1.s.len - 1));
-      for (size_t i = 0; i < $1.p.len; ++i)
-        p[i + 1] = $1.p.data[i];
-      cod_vec_destroy($1.p);
-      cmd = opi_ast_apply(opi_ast_var("format"), p, $1.p.len + 1);
-    }
-    $$ = opi_ast_apply(opi_ast_var("shell"), &cmd, 1);
-    $$->apply.loc = location(&@$);
-  }
+  | string
+  | shell
+  | qr
+  | sr
   | '(' Expr ')' { $$ = $2; }
   | '[' arg_aux ']' {
     $$ = opi_ast_apply(opi_ast_var("list"), (OpiAst**)$2->data, $2->size);
@@ -287,12 +267,9 @@ Form
 ;
 
 Stmnt
-  : IF Expr THEN Expr ELSE Expr {
-    $$ = opi_ast_if($2, $4, $6);
-  }
-  | UNLESS Expr THEN Expr ELSE Expr {
-    $$ = opi_ast_if($2, $6, $4);
-  }
+  : if
+  | unless
+  | when
   | LET REC recbinds IN Expr {
     $$ = opi_ast_fix($3->vars.data, (OpiAst**)$3->vals.data, $3->vars.size, $5);
     binds_delete($3);
@@ -373,10 +350,15 @@ Expr
     $$->apply.loc = location(&@$);
   }
   | anylambda
-  | '@' Expr {
+  | LAZY Expr {
     OpiAst *fn = opi_ast_fn(NULL, 0, $2);
     $$ = opi_ast_apply(opi_ast_var("lazy"), &fn, 1);
     $$->apply.loc = location(&@$);
+  }
+  | ASSERT Expr {
+    opi_t err = opi_undefined(opi_symbol("assertion-failed"));
+    $$ = opi_ast_if($2, opi_ast_const(opi_nil),
+        opi_ast_return(opi_ast_const(err)));
   }
   | Expr IS Expr {
     OpiAst *p[] = { $1, $3 };
@@ -456,8 +438,80 @@ Expr
     $$->apply.loc = location(&@$);
   }
   | Expr OR Expr { $$ = opi_ast_eor($1, $3, " "); }
-  | Expr OR SYMBOL RARROW Expr { $$ = opi_ast_eor($1, $5, $3); free($3); }
+  | Expr OR SYMBOL RARROW Expr %prec THEN { $$ = opi_ast_eor($1, $5, $3); free($3); }
   | table
+;
+
+if
+  : IF Expr THEN Expr {
+    $$ = opi_ast_if($2, $4, opi_ast_const(opi_nil));
+  }
+  | IF Expr THEN Expr ELSE Expr {
+    $$ = opi_ast_if($2, $4, $6);
+  }
+;
+
+unless
+  : UNLESS Expr THEN Expr {
+    $$ = opi_ast_if($2, opi_ast_const(opi_nil), $4);
+  }
+  | UNLESS Expr THEN Expr ELSE Expr {
+    $$ = opi_ast_if($2, $6, $4);
+  }
+;
+
+when
+  /*
+   * when <tets-expr>
+   * then <then-expr>
+   */
+  : WHEN Expr THEN Expr {
+    $$ = opi_ast_when($2, "", $4, "", NULL);
+  }
+  /*
+   * when <tets-expr>
+   * then <then-bind> -> <then-expr>
+   */
+  | WHEN Expr THEN SYMBOL RARROW Expr {
+    $$ = opi_ast_when($2, $4, $6, "", NULL);
+    free($4);
+  }
+  /*
+   * when <tets-expr>
+   * then <then-expr>
+   * else <else-expr>
+   */
+  | WHEN Expr THEN Expr ELSE Expr {
+    $$ = opi_ast_when($2, "", $4, "", $6);
+  }
+  /*
+   * when <tets-expr>
+   * then <then-bind> -> <then-expr>
+   * else <else-expr>
+   */
+  | WHEN Expr THEN SYMBOL RARROW Expr ELSE Expr {
+    $$ = opi_ast_when($2, $4, $6, "", $8);
+    free($4);
+  }
+  /*
+   * when <tets-expr>
+   * then <then-expr>
+   * else <else-bind> -> <else-expr>
+   */
+  | WHEN Expr THEN Expr ELSE SYMBOL RARROW Expr {
+    $$ = opi_ast_when($2, "", $4, $6, $8);
+    free($6);
+  }
+  /*
+   * when <tets-expr>
+   * then <then-bind> -> <then-expr>
+   * else <else-bind> -> <else-expr>
+   */
+  | WHEN Expr THEN SYMBOL RARROW Expr ELSE SYMBOL RARROW Expr {
+    $$ = opi_ast_when($2, $4, $6, $8, $10);
+    free($4);
+    free($8);
+  }
 ;
 
 matches
@@ -502,12 +556,12 @@ matches_aux
 anylambda: lambda | valambda;
 
 lambda
-  : '\\' fn_aux { $$ = $2; }
+  : FN fn_aux { $$ = $2; }
   | '(' ')'  RARROW Expr { $$ = opi_ast_fn(0, 0, $4); }
 ;
 
 valambda
-  : '\\' vafn_aux { $$ = $2; }
+  : FN vafn_aux { $$ = $2; }
 ;
 
 param
@@ -543,12 +597,12 @@ arg
     cod_ptrvec_push($$, $2, NULL);
   }
   | arg_aux '$' Expr { $$ = $1; cod_ptrvec_push($$, $3, NULL); }
-  | '\\' anyfn_aux {
+  | FN anyfn_aux {
     $$ = malloc(sizeof(struct cod_ptrvec));
     cod_ptrvec_init($$);
     cod_ptrvec_push($$, $2, NULL);
   }
-  | arg_aux '\\' anyfn_aux { $$ = $1; cod_ptrvec_push($$, $3, NULL); }
+  | arg_aux FN anyfn_aux { $$ = $1; cod_ptrvec_push($$, $3, NULL); }
 ;
 
 arg_aux
@@ -606,13 +660,7 @@ block_expr
 block_stmnt: Stmnt | block_stmnt_only;
 
 block_stmnt_only
-  : IF Expr THEN Expr {
-    $$ = opi_ast_if($2, $4, opi_ast_const(opi_nil));
-  }
-  | UNLESS Expr THEN Expr {
-    $$ = opi_ast_if($2, opi_ast_const(opi_nil), $4);
-  }
-  | LET REC recbinds {
+  : LET REC recbinds {
     $$ = opi_ast_fix($3->vars.data, (OpiAst**)$3->vals.data, $3->vars.size, NULL);
     binds_delete($3);
   }
@@ -636,10 +684,9 @@ block_stmnt_only
     free($4);
   }
   | LOAD string {
-    opi_assert($2.p.len == 0);
-    $$ = opi_ast_load($2.s.data);
-    cod_vec_destroy($2.s);
-    cod_vec_destroy($2.p);
+    opi_assert($2->tag == OPI_AST_CONST);
+    $$ = opi_ast_load(OPI_STR($2->cnst));
+    opi_ast_delete($2);
   }
   | NAMESPACE SYMBOL '{' block '}' {
     $$ = $4;
@@ -801,8 +848,67 @@ recbinds
   }
 ;
 
-string: '"' fmt '"' { $$ = $2; cod_vec_push($$.s, 0); };
-shell: '`' fmt '`' { $$ = $2; cod_vec_push($$.s, 0); };
+string: string_aux {
+  if ($1.p.len == 0) {
+    $$ = opi_ast_const(opi_string_drain_with_len($1.s.data, $1.s.len - 1));
+    cod_vec_destroy($1.p);
+  } else {
+    char *fmt = $1.s.data;
+    OpiAst *p[$1.p.len + 1];
+    p[0] = opi_ast_const(opi_string_drain_with_len($1.s.data, $1.s.len - 1));
+    for (size_t i = 0; i < $1.p.len; ++i)
+      p[i + 1] = $1.p.data[i];
+    cod_vec_destroy($1.p);
+    $$ = opi_ast_apply(opi_ast_var("format"), p, $1.p.len + 1);
+  }
+};
+string_aux
+  : '"' fmt '"' { $$ = $2; cod_vec_push($$.s, 0); }
+  | 'q' fmt 'q' { $$ = $2; cod_vec_push($$.s, 0); }
+;
+
+shell: shell_aux {
+  OpiAst *cmd;
+  if ($1.p.len == 0) {
+    cmd = opi_ast_const(opi_string_drain_with_len($1.s.data, $1.s.len - 1));
+    cod_vec_destroy($1.p);
+  } else {
+    char *fmt = $1.s.data;
+    OpiAst *p[$1.p.len + 1];
+    p[0] = opi_ast_const(opi_string_drain_with_len($1.s.data, $1.s.len - 1));
+    for (size_t i = 0; i < $1.p.len; ++i)
+      p[i + 1] = $1.p.data[i];
+    cod_vec_destroy($1.p);
+    cmd = opi_ast_apply(opi_ast_var("format"), p, $1.p.len + 1);
+  }
+  $$ = opi_ast_apply(opi_ast_var("shell"), &cmd, 1);
+  $$->apply.loc = location(&@$);
+};
+shell_aux: '`' fmt '`' { $$ = $2; cod_vec_push($$.s, 0); };
+
+qr: qr_aux {
+  OpiAst *str;
+  if ($1.p.len == 0) {
+    str = opi_ast_const(opi_string_drain_with_len($1.s.data, $1.s.len - 1));
+    cod_vec_destroy($1.p);
+  } else {
+    char *fmt = $1.s.data;
+    OpiAst *p[$1.p.len + 1];
+    p[0] = opi_ast_const(opi_string_drain_with_len($1.s.data, $1.s.len - 1));
+    for (size_t i = 0; i < $1.p.len; ++i)
+      p[i + 1] = $1.p.data[i];
+    cod_vec_destroy($1.p);
+    str = opi_ast_apply(opi_ast_var("format"), p, $1.p.len + 1);
+  }
+  $$ = opi_ast_apply(opi_ast_var("regex"), &str, 1);
+  $$->apply.loc = location(&@$);
+};
+qr_aux: 'r' fmt 'q' { $$ = $2; cod_vec_push($$.s, 0); };
+
+sr: S qr string {
+  OpiAst *p[] = { $2, $3, opi_ast_const(opi_string_drain($1)) };
+  $$ = opi_ast_apply(opi_ast_var("__builtin_sr"), p, 3);
+};
 
 fmt
   : {

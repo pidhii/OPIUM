@@ -389,7 +389,7 @@ opi_t opi_nil;
 typedef struct OpiString_s {
   OpiHeader header;
   char *str;
-  size_t size;
+  size_t len;
 } OpiString;
 
 extern
@@ -402,16 +402,16 @@ void
 opi_string_cleanup(void);
 
 opi_t
-opi_string(const char *str);
+opi_string_new(const char *str);
 
 opi_t
-opi_string2(const char *str, size_t len);
+opi_string_new_with_len(const char *str, size_t len);
 
 opi_t
-opi_string_move(char *str);
+opi_string_drain(char *str);
 
 opi_t
-opi_string_move2(char *str, size_t len);
+opi_string_drain_with_len(char *str, size_t len);
 
 opi_t
 opi_string_from_char(char c);
@@ -421,6 +421,32 @@ opi_string_get_value(opi_t x);
 
 size_t
 opi_string_get_length(opi_t x);
+
+/* ==========================================================================
+ * RegEx
+ */
+extern opi_type_t
+opi_regex_type;
+
+#define OPI_OVECTOR_SIZE 0x100
+
+extern int
+opi_ovector[OPI_OVECTOR_SIZE];
+
+void
+opi_regex_init(void);
+
+void
+opi_regex_cleanup(void);
+
+opi_t
+opi_regex_new(const char *pattern, int options, const char** errptr);
+
+int
+opi_regex_exec(opi_t x, const char *str, size_t len, size_t offs, int opt);
+
+int
+opi_regex_get_capture_cout(opi_t x);
 
 /* ==========================================================================
  * Boolean
@@ -500,10 +526,13 @@ void
 opi_table_cleanup(void);
 
 opi_t
-opi_table(void);
+opi_table(opi_t l, int replace);
 
 opi_t
 opi_table_at(opi_t tab, opi_t key, opi_t *err);
+
+opi_t
+opi_table_pairs(opi_t tab);
 
 int
 opi_table_insert(opi_t tab, opi_t key, opi_t val, int replace, opi_t *err);
@@ -645,7 +674,7 @@ opi_lazy_get_value(opi_t x)
 {
   OpiLazy *lazy = opi_as_ptr(x);
   if (!lazy->is_ready) {
-    opi_t val = opi_apply(lazy->cell, 0);
+    opi_t val = opi_fn_apply(lazy->cell, 0);
     opi_inc_rc(val);
     opi_unref(lazy->cell);
     lazy->cell = val;
@@ -653,6 +682,54 @@ opi_lazy_get_value(opi_t x)
   }
   return lazy->cell;
 }
+
+/* ==========================================================================
+ * Vectors
+ */
+typedef struct OpiSVector_s OpiSVector;
+typedef struct OpiDVector_s OpiDVector;
+
+extern
+opi_type_t opi_svector_type, opi_dvector_type;
+
+void
+opi_vectors_init(void);
+
+void
+opi_vectors_cleanup(void);
+
+opi_t
+opi_svector_new(const float *data, size_t size);
+
+opi_t
+opi_dvector_new(const double *data, size_t size);
+
+opi_t
+opi_svector_new_moved(float *data, size_t size);
+
+opi_t
+opi_dvector_new_moved(double *data, size_t size);
+
+opi_t
+opi_svector_new_raw(size_t size);
+
+opi_t
+opi_dvector_new_raw(size_t size);
+
+opi_t
+opi_svector_new_filled(float fill, size_t size);
+
+opi_t
+opi_dvector_new_filled(double fill, size_t size);
+
+const float*
+opi_svector_get_data(opi_t x);
+
+const double*
+opi_dvector_get_data(opi_t x);
+
+size_t
+opi_vector_get_size(opi_t x);
 
 /* ==========================================================================
  * AST
@@ -777,6 +854,11 @@ opi_ast_or(OpiAst *x, OpiAst *y);
 
 OpiAst*
 opi_ast_eor(OpiAst *try, OpiAst *els, const char *ename);
+
+OpiAst*
+opi_ast_when(OpiAst *test_expr,
+    const char *then_bind, OpiAst *then_expr,
+    const char *else_bind, OpiAst *else_expr);
 
 OpiAst*
 opi_ast_return(OpiAst *val);
@@ -1100,6 +1182,9 @@ typedef enum OpiOpc_e {
 #define OPI_BINOP_REG_OUT(insn) (insn)->reg[0]
 #define OPI_BINOP_REG_LHS(insn) (insn)->reg[1]
 #define OPI_BINOP_REG_RHS(insn) (insn)->reg[2]
+
+  OPI_OPC_GOTO,
+#define OPI_GOTO_ARG_TO(insn) (insn)->ptr[0]
 } OpiOpc;
 
 typedef struct OpiFlatInsn_s {
@@ -1236,6 +1321,9 @@ opi_insn_guard(int in);
 
 OpiInsn*
 opi_insn_binop(OpiOpc opc, int out, int lhs, int rhs);
+
+OpiInsn*
+opi_insn_goto(OpiInsn *label);
 
 typedef enum OpiValType_e {
   // Value is "born" in local scope with RC petentionaly set to zero at the
@@ -1398,8 +1486,52 @@ opi_bytecode_guard(OpiBytecode *bc, int cell);
 int
 opi_bytecode_binop(OpiBytecode *bc, OpiOpc opc, int lhs, int rhs);
 
+void
+opi_bytecode_goto(OpiBytecode *bc, OpiInsn *label);
+
 #define OPI_VM_REG_MAX 0x200
 opi_t
 opi_vm(OpiBytecode *bc);
+
+#define OPI_FN()                                                         \
+  struct { int nargs, iarg; opi_t arg[opi_nargs]; opi_t ret; } opi_this; \
+  opi_this.nargs = opi_nargs;                                            \
+  opi_this.iarg = 0;                                                     \
+  for (size_t i = 0; i < opi_nargs; ++i)                                 \
+    opi_inc_rc(opi_this.arg[i] = opi_pop());
+
+#define OPI_UNREF_ARGS()                   \
+  for (int i = 0; i < opi_this.nargs; ++i) \
+    opi_unref(opi_this.arg[i]);
+
+#define OPI_THROW(error_string)                     \
+  do {                                              \
+    OPI_UNREF_ARGS();                               \
+    return opi_undefined(opi_symbol(error_string)); \
+  } while (0)
+
+#define OPI_ARG(ident, arg_type)                           \
+  opi_assert(opi_this.iarg < opi_this.nargs);              \
+  opi_t ident = opi_this.arg[opi_this.iarg++];             \
+  if (arg_type && opi_unlikely(ident->type != arg_type)) { \
+    OPI_UNREF_ARGS()                                       \
+    OPI_THROW("type-error");                               \
+  }
+
+#define OPI_RETURN(return_value)             \
+  do {                                       \
+    opi_inc_rc(opi_this.ret = return_value); \
+    OPI_UNREF_ARGS()                         \
+    opi_dec_rc(opi_this.ret);                \
+    return opi_this.ret;                     \
+  } while (0)
+
+#define OPI_NUM(x) opi_number_get_value(x)
+#define OPI_STR(x) opi_string_get_value(x)
+#define OPI_STRLEN(x) opi_string_get_length(x)
+#define OPI_SYM(x) opi_symbol_get_string(x)
+#define OPI_SVEC(x) opi_svector_get_data(x)
+#define OPI_DVEC(x) opi_dvector_get_data(x)
+#define OPI_VECSZ(x) opi_vector_get_size(x)
 
 #endif

@@ -86,34 +86,53 @@ add_executable (opium
   ${CMAKE_SOURCE_DIR}/main.c
   $<TARGET_OBJECTS:opium_object_lib>)
 target_include_directories (opium PUBLIC ${LIBJIT_ROOT}/install/include)
-target_link_libraries (opium libjit -lm -ldl)
+target_link_libraries (opium libjit -lm -ldl -lpcre)
 install (
-  TARGETS
-    opium
-  DESTINATION
-    bin)
+  TARGETS opium
+  DESTINATION bin)
 
 set (LIBS_ROOT ${CMAKE_SOURCE_DIR}/libs)
 
+################################################################################
+#                                    base
+#
+# build library
 add_library (opium_base_dl SHARED ${LIBS_ROOT}/base/base.c)
 set_target_properties (opium_base_dl
   PROPERTIES
     PREFIX ""
     OUTPUT_NAME base)
+# install library
 install (
-  TARGETS
-    opium_base_dl
-  DESTINATION
-    lib/opium/baselib)
+  TARGETS opium_base_dl
+  DESTINATION lib/opium/baselib)
+# install scripts
 install (
   FILES
     ${LIBS_ROOT}/base/base.opi
     ${LIBS_ROOT}/base/common.opi
     ${LIBS_ROOT}/base/list-base.opi
-  DESTINATION
-    lib/opium/baselib)
+  DESTINATION lib/opium/baselib)
+# install symlink
 install (
-  FILES
-    ${LIBS_ROOT}/base/base
-  DESTINATION
-    lib/opium)
+  FILES ${LIBS_ROOT}/base/base
+  DESTINATION lib/opium)
+
+################################################################################
+#                                  codeine
+#
+# install headers
+install (
+  DIRECTORY
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/codeine/include
+  DESTINATION .)
+
+################################################################################
+#                                   doctor
+#
+# install doctor
+install (
+  PROGRAMS ${CMAKE_SOURCE_DIR}/doctor.opi
+  DESTINATION bin
+  RENAME doctor)

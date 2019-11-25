@@ -337,6 +337,29 @@ opi_ast_eor(OpiAst *try, OpiAst *els, const char *ename)
 }
 
 OpiAst*
+opi_ast_when(OpiAst *test_expr,
+    const char *then_bind, OpiAst *then_expr,
+    const char *else_bind, OpiAst *else_expr)
+{
+  char *tmp = " when tmp ";
+
+  char *then_vars[] = { (char*)then_bind };
+  char *else_vars[] = { (char*)else_bind };
+
+  char *fields[] = { "what" };
+
+  if (test_expr->tag == OPI_AST_APPLY)
+    test_expr->apply.eflag = FALSE;
+
+  return
+    opi_ast_let(&tmp, &test_expr, 1,
+      opi_ast_match("undefined", else_vars, fields, 1, opi_ast_var(tmp),
+        else_expr ? else_expr : opi_ast_return(opi_ast_var(tmp)),
+        opi_ast_let(then_vars, (OpiAst*[]){ opi_ast_var(tmp) }, 1,
+          then_expr)));
+}
+
+OpiAst*
 opi_ast_binop(int opc, OpiAst *lhs, OpiAst *rhs)
 {
   OpiAst *node = malloc(sizeof(OpiAst));

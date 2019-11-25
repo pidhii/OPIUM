@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <string.h>
+#include <ctype.h>
 
 static opi_t
 length(void)
@@ -33,7 +34,7 @@ substr(void)
     while (opi_nargs--)
       opi_drop(opi_pop());
     return opi_undefined(opi_symbol("arity-error"));
-  } 
+  }
 
   opi_t str = opi_pop();
   opi_t start = opi_pop();
@@ -80,7 +81,7 @@ substr(void)
     return opi_undefined(opi_symbol("out-of-range"));
   }
 
-  opi_t ret = opi_string2(s + from, to - from);
+  opi_t ret = opi_string_new_with_len(s + from, to - from);
   opi_drop(str);
   opi_drop(start);
   if (end)
@@ -101,10 +102,10 @@ chop(void)
   if (isspace(s[len - 1])) {
     if (str->rc == 0) {
       *(char*)(s + len - 1) = 0;
-      opi_as(str, OpiString).size -= 1;
+      opi_as(str, OpiString).len -= 1;
       return str;
     } else {
-      return opi_string2(s, len - 1);
+      return opi_string_new_with_len(s, len - 1);
     }
   } else {
     return str;
@@ -129,10 +130,10 @@ chomp(void)
   if (newlen != len) {
     if (str->rc == 0) {
       *(char*)(s + newlen) = 0;
-      opi_as(str, OpiString).size = newlen;
+      opi_as(str, OpiString).len = newlen;
       return str;
     } else {
-      return opi_string2(s, newlen);
+      return opi_string_new_with_len(s, newlen);
     }
   } else {
     return str;
@@ -157,7 +158,7 @@ ltrim(void)
   if (p == s) {
     return str;
   } else {
-    opi_t ret = opi_string2(p, len - (p - s));
+    opi_t ret = opi_string_new_with_len(p, len - (p - s));
     opi_drop(str);
     return ret;
   }
@@ -219,7 +220,7 @@ open_(void)
   opi_drop(mode);
 
   if (!fs)
-    return opi_undefined(opi_string(strerror(errno)));
+    return opi_undefined(opi_string_new(strerror(errno)));
   else
     return opi_file(fs, fclose);
 }
@@ -243,13 +244,41 @@ popen_(void)
   opi_drop(mode);
 
   if (!fs)
-    return opi_undefined(opi_string(strerror(errno)));
+    return opi_undefined(opi_string_new(strerror(errno)));
   else
     return opi_file(fs, pclose);
 }
 
 static opi_t
-getline_(void)
+concat(void)
+{
+  opi_t l = opi_pop();
+  size_t len = 0;
+  for (opi_t it = l; it->type == opi_pair_type; it = opi_cdr(it)) {
+    opi_t s = opi_car(it);
+    if (opi_unlikely(s->type != opi_string_type)) {
+      opi_drop(l);
+      return opi_undefined(opi_symbol("type-error"));
+    }
+    len += OPI_STRLEN(s);
+  }
+
+  char *str = malloc(len + 1);
+  char *p = str;
+  for (opi_t it = l; it->type == opi_pair_type; it = opi_cdr(it)) {
+    opi_t s = opi_car(it);
+    size_t slen = OPI_STRLEN(s);
+    memcpy(p, OPI_STR(s), slen);
+    p += slen;
+  }
+  *p = 0;
+
+  opi_drop(l);
+  return opi_string_drain_with_len(str, len);
+}
+
+static opi_t
+readline(void)
 {
   opi_t file = opi_pop();
   if (opi_unlikely(file->type != opi_file_type)) {
@@ -267,56 +296,141 @@ getline_(void)
   opi_drop(file);
 
   if (nrd < 0) {
+    free(lineptr);
     if (err)
-      return opi_undefined(opi_string(strerror(err)));
+      return opi_undefined(opi_string_new(strerror(err)));
     else
       return opi_false;
   } else {
-    return opi_string_move2(lineptr, nrd);
+    return opi_string_drain_with_len(lineptr, nrd);
   }
 }
 
 static opi_t
-getdelim_(void)
+read(void)
 {
-  opi_t file = opi_pop();
-  opi_t delim = opi_pop();
-  if (opi_unlikely(file->type != opi_file_type
-                || delim->type != opi_string_type)) {
-    opi_drop(file);
-    opi_drop(delim);
-    return opi_undefined(opi_symbol("type-error"));
-  }
-
-  int d;
-  if (opi_string_get_length(delim) == 0) {
-    d = EOF;
-  } else if (opi_string_get_length(delim) == 1) {
-    d = opi_string_get_value(delim)[0];
-  } else {
-    opi_drop(file);
-    opi_drop(delim);
-    return opi_undefined(opi_symbol("domain-error"));
-  }
-  opi_drop(delim);
-
+  OPI_FN()
+  OPI_ARG(file, opi_file_type)
   FILE *fs = opi_file_get_value(file);
-  char *lineptr = NULL;
-  size_t n;
 
-  errno = 0;
-  ssize_t nrd = getdelim(&lineptr, &n, d, fs);
-  int err = errno;
-  opi_drop(file);
+  if (opi_nargs == 2) {
+    OPI_ARG(size, opi_number_type)
+    size_t n = OPI_NUM(size);
+    char *buf = malloc(n + 1);
+    size_t nrd = fread(buf, 1, n, fs);
+    if (nrd == 0) {
+      free(buf);
+      if (feof(fs))
+        OPI_RETURN(opi_false);
+      else
+        OPI_THROW("i/o-error");
+    }
+    buf[nrd] = 0;
+    OPI_RETURN(opi_string_drain_with_len(buf, nrd));
 
-  if (nrd < 0) {
-    if (err)
-      return opi_undefined(opi_string(strerror(err)));
-    else
-      return opi_false;
+  } else if (opi_nargs == 1) {
+    cod_vec(opi_t) bufs;
+    cod_vec_init(bufs);
+
+    while (TRUE) {
+      char *buf = malloc(0x400);
+      size_t nrd = fread(buf, 1, 0x400 - 1, fs);
+
+      if (nrd == 0) {
+        free(buf);
+        if (feof(fs)) {
+          opi_t l = opi_nil;
+          for (int i = bufs.len - 1; i >= 0; --i)
+            l = opi_cons(bufs.data[i], l);
+          cod_vec_destroy(bufs);
+          opi_nargs = 1;
+          opi_push(l);
+          opi_t ret = concat();
+          OPI_RETURN(ret);
+
+        } else {
+          for (size_t i = 0; i < bufs.len; ++i)
+            opi_drop(bufs.data[i]);
+          cod_vec_destroy(bufs);
+          OPI_THROW("i/o-error");
+        }
+      }
+      buf[nrd] = 0;
+      opi_t s = opi_string_drain_with_len(buf, nrd);
+      cod_vec_push(bufs, s);
+    }
+
   } else {
-    return opi_string_move2(lineptr, nrd);
+    OPI_THROW("arity-error");
   }
+}
+
+static opi_t
+match(void)
+{
+  OPI_FN()
+  OPI_ARG(regex, opi_regex_type)
+  OPI_ARG(str, opi_string_type)
+
+  const char *subj = OPI_STR(str);
+  int ns = opi_regex_exec(regex, subj, OPI_STRLEN(str), 0, 0);
+  if (opi_unlikely(ns == 0))
+    OPI_THROW("regex-memory-limit");
+  else if (opi_unlikely(ns < 0))
+    OPI_RETURN(opi_false);
+
+  opi_t l = opi_nil;
+  for (int i = (ns - 1)*2; i >= 0; i -= 2) {
+    size_t len = opi_ovector[i + 1] - opi_ovector[i];
+    opi_t s = opi_string_new_with_len(subj + opi_ovector[i], len);
+    l = opi_cons(s, l);
+  }
+  OPI_RETURN(l);
+}
+
+static opi_t
+split(void)
+{
+  OPI_FN()
+  OPI_ARG(regex, opi_regex_type)
+  OPI_ARG(str, opi_string_type)
+
+  if (opi_regex_get_capture_cout(regex) != 0)
+    OPI_THROW("regex-error");
+
+  cod_vec(opi_t) buf;
+  cod_vec_init(buf);
+
+  const char *subj = OPI_STR(str);
+  int len = OPI_STRLEN(str);
+  int offs = 0;
+  while (offs < len) {
+    int ns = opi_regex_exec(regex, subj, OPI_STRLEN(str), offs, 0);
+    if (opi_unlikely(ns == 0)) {
+      for (size_t i = 0; i < buf.len; ++i)
+        opi_drop(buf.data[i]);
+      cod_vec_destroy(buf);
+      OPI_THROW("regex-memory-limit");
+    } else if (opi_unlikely(ns < 0)) {
+      // TODO: can calculate length
+      opi_t s = opi_string_new(subj + offs);
+      cod_vec_push(buf, s);
+      break;
+    }
+    opi_assert(ns == 1);
+
+    size_t len = opi_ovector[0] - offs;
+    opi_t s = opi_string_new_with_len(subj + offs, len);
+    cod_vec_push(buf, s);
+
+    offs = opi_ovector[1];
+  }
+
+  opi_t l = opi_nil;
+  for (int i = buf.len - 1; i >= 0; --i)
+    l = opi_cons(buf.data[i], l);
+  cod_vec_destroy(buf);
+  OPI_RETURN(l);
 }
 
 int
@@ -329,13 +443,17 @@ opium_library(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "chop"  , opi_fn("chop"  , chop   , 1));
   opi_builder_def_const(bldr, "chomp" , opi_fn("chomp" , chomp  , 1));
   opi_builder_def_const(bldr, "ltrim" , opi_fn("ltrim" , ltrim  , 1));
+  opi_builder_def_const(bldr, "concat", opi_fn("concat", concat, 1));
 
   opi_builder_def_const(bldr, "revappend", opi_fn("revappend", revappend, 2));
 
   opi_builder_def_const(bldr, "__builtin_open", opi_fn("__builtin_open", open_, 2));
   opi_builder_def_const(bldr, "__builtin_popen", opi_fn("__builtin_popen", popen_, 2));
-  opi_builder_def_const(bldr, "getline", opi_fn("getline", getline_, 1));
-  opi_builder_def_const(bldr, "getdelim", opi_fn("getdelim", getdelim_, 2));
+  opi_builder_def_const(bldr, "read", opi_fn("read", read, -2));
+  opi_builder_def_const(bldr, "readline", opi_fn("readline", readline, 1));
+
+  opi_builder_def_const(bldr, "match", opi_fn("match", match, 2));
+  opi_builder_def_const(bldr, "split", opi_fn("split", split, 2));
 
   return 0;
 }

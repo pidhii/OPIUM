@@ -13,9 +13,8 @@ struct opi_hash_map_elt {
 };
 
 struct opi_hash_map {
-  // must use 32-bit integers to fit in cell (128 bits for data)
-  uint32_t size;
-  uint32_t cap;
+  size_t size;
+  size_t cap;
   struct opi_hash_map_elt *data;
 };
 

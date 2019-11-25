@@ -2,6 +2,7 @@
 
 #include <string.h>
 #include <dlfcn.h>
+#include <errno.h>
 
 void
 opi_context_init(OpiContext *ctx)
@@ -55,7 +56,10 @@ opi_is_dl(const char *path)
 
   FILE *fs = fopen(path, "r");
   opi_assert(fs);
-  opi_assert(fread(header, 1, 4, fs) == 4);
+  if (fread(header, 1, 4, fs) != 4) {
+    opi_error("%s\n", strerror(errno));
+    abort();
+  }
   opi_assert(fclose(fs) == 0);
 
   return memcmp(header, elf_header, sizeof(elf_header)) == 0;

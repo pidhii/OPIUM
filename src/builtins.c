@@ -3,52 +3,7 @@
 #include <math.h>
 #include <string.h>
 #include <errno.h>
-
-#define BINOP(name, op)                                                               \
-  static opi_t                                                                        \
-  name(void)                                                                          \
-  {                                                                                   \
-    opi_t lhs = opi_pop();                                                            \
-    opi_t rhs = opi_pop();                                                            \
-    if (opi_unlikely(lhs->type != opi_number_type || rhs->type != opi_number_type)) { \
-      opi_drop(lhs);                                                                  \
-      opi_drop(rhs);                                                                  \
-      return opi_undefined(opi_symbol("type-error"));                                 \
-    }                                                                                 \
-    opi_t ret = opi_number(opi_number_get_value(lhs) op opi_number_get_value(rhs));   \
-    opi_drop(lhs);                                                                    \
-    opi_drop(rhs);                                                                    \
-    return ret;                                                                       \
-  }
-
-#define BINOP_CMP(name, op)                                                           \
-  static opi_t                                                                        \
-  name(void)                                                                          \
-  {                                                                                   \
-    opi_t lhs = opi_pop();                                                            \
-    opi_t rhs = opi_pop();                                                            \
-    if (opi_unlikely(lhs->type != opi_number_type || rhs->type != opi_number_type)) { \
-      opi_drop(lhs);                                                                  \
-      opi_drop(rhs);                                                                  \
-      return opi_undefined(opi_symbol("type-error"));                                 \
-    }                                                                                 \
-    int tmp = opi_number_get_value(lhs) op opi_number_get_value(rhs);                 \
-    opi_drop(lhs);                                                                    \
-    opi_drop(rhs);                                                                    \
-    return tmp ? opi_true : opi_false;                                                \
-  }
-
-BINOP(add, +)
-BINOP(sub, -)
-BINOP(mul, *)
-BINOP(div_, /)
-
-BINOP_CMP(lt, <)
-BINOP_CMP(gt, >)
-BINOP_CMP(le, <=)
-BINOP_CMP(ge, >=)
-BINOP_CMP(eq, ==)
-BINOP_CMP(ne, !=)
+#include <ctype.h>
 
 static opi_t
 is_(void)
@@ -81,14 +36,6 @@ equal_(void)
   opi_drop(x);
   opi_drop(y);
   return ret;
-}
-
-static opi_t
-cons_(void)
-{
-  opi_t car = opi_pop();
-  opi_t cdr = opi_pop();
-  return opi_cons(car, cdr);
 }
 
 static opi_t
@@ -129,6 +76,7 @@ null_(void)
   opi_drop(x);
   return ret;
 }
+
 static opi_t
 print(void)
 {
@@ -251,7 +199,7 @@ format(void)
     goto error;
 
   opi_unref(port);
-  err = opi_string(ptr);
+  err = opi_string_new(ptr);
   free(ptr);
   goto end;
 
@@ -324,26 +272,8 @@ static opi_t
 table(void)
 {
   opi_t l = opi_pop();
-  opi_inc_rc(l);
-  opi_t tab = opi_table();
-
-  opi_t err;
-  for (opi_t it = l; it->type == opi_pair_type; it = opi_cdr(it)) {
-    opi_t kv = opi_car(it);
-    if (opi_unlikely(kv->type != opi_pair_type)) {
-      opi_unref(l);
-      opi_drop(tab);
-      return opi_undefined(opi_symbol("type-error"));
-    }
-    err = NULL;
-    opi_table_insert(tab, opi_car(kv), opi_cdr(kv), TRUE, &err);
-    if (opi_unlikely(err)) {
-      opi_unref(l);
-      opi_drop(tab);
-      return err;
-    }
-  }
-  opi_unref(l);
+  opi_t tab = opi_table(l, FALSE);
+  opi_drop(l);
   return tab;
 }
 
@@ -363,11 +293,26 @@ table_ref(void)
 
   opi_t err = NULL;
   opi_t x = opi_table_at(tab, key, &err);
-  opi_t ret = x ? x : err;
+  opi_t ret = x ? opi_cdr(x) : err;
 
   opi_inc_rc(ret);
   opi_unref(tab);
   opi_unref(key);
+  opi_dec_rc(ret);
+  return ret;
+}
+
+static opi_t
+pairs(void)
+{
+  opi_t tab = opi_pop();
+  if (opi_unlikely(tab->type != opi_table_type)) {
+    opi_drop(tab);
+    return opi_undefined(opi_symbol("type-error"));
+  }
+  opi_t ret = opi_table_pairs(tab);
+  opi_inc_rc(ret);
+  opi_drop(tab);
   opi_dec_rc(ret);
   return ret;
 }
@@ -490,36 +435,24 @@ static opi_t
 force(void)
 {
   opi_t lazy = opi_pop();
+  opi_inc_rc(lazy);
   if (opi_unlikely(lazy->type != opi_lazy_type)) {
-    opi_drop(lazy);
+    opi_unref(lazy);
     return opi_undefined(opi_symbol("type-error"));
   }
   opi_t ret = opi_lazy_get_value(lazy);
-  // does it optimize?
-  if (lazy->rc == 0) {
-    opi_inc_rc(ret);
-    opi_drop(lazy);
-    opi_dec_rc(ret);
-  }
+  opi_inc_rc(ret);
+  opi_unref(lazy);
+  opi_dec_rc(ret);
   return ret;
 }
 
 static opi_t
 concat(void)
 {
-  opi_t s1 = opi_pop();
-  opi_inc_rc(s1);
-  opi_t s2 = opi_pop();
-  opi_inc_rc(s2);
-
-  if (opi_unlikely(s1->type != opi_string_type
-                || s2->type != opi_string_type))
-  {
-    opi_unref(s1);
-    opi_unref(s2);
-    return opi_undefined(opi_symbol("type-error"));
-  }
-
+  OPI_FN()
+  OPI_ARG(s1, opi_string_type)
+  OPI_ARG(s2, opi_string_type)
   size_t l1 = opi_string_get_length(s1);
   size_t l2 = opi_string_get_length(s2);
   char *buf = malloc(l1 + l2 + 1);
@@ -529,7 +462,7 @@ concat(void)
 
   opi_unref(s1);
   opi_unref(s2);
-  return opi_string_move2(buf, l1 + l2);
+  return opi_string_drain_with_len(buf, l1 + l2);
 }
 
 #define TYPE_PRED(name, ty)                          \
@@ -549,7 +482,11 @@ TYPE_PRED(undefined_p, opi_undefined_type)
 TYPE_PRED(number_p, opi_number_type)
 TYPE_PRED(symbol_p, opi_symbol_type)
 TYPE_PRED(fn_p, opi_fn_type)
-
+TYPE_PRED(svector_p, opi_svector_type)
+TYPE_PRED(dvector_p, opi_dvector_type)
+TYPE_PRED(FILE_p, opi_file_type)
+TYPE_PRED(table_p, opi_table_type)
+TYPE_PRED(lazy_p, opi_lazy_type)
 
 struct vaarg_data {
   opi_t f;
@@ -642,7 +579,7 @@ shell(void)
   opi_drop(cmd);
 
   if (!fs)
-    return opi_undefined(opi_string(strerror(errno)));
+    return opi_undefined(opi_string_new(strerror(errno)));
 
   cod_vec(char) buf;
   cod_vec_init(buf);
@@ -654,7 +591,7 @@ shell(void)
       if (errno) {
         pclose(fs);
         cod_vec_destroy(buf);
-        return opi_undefined(opi_string(strerror(errno)));
+        return opi_undefined(opi_string_new(strerror(errno)));
 
       } else {
         errno = 0;
@@ -664,13 +601,13 @@ shell(void)
           if (err)
             return opi_undefined(opi_symbol("shell-error"));
           else
-            return opi_undefined(opi_string(strerror(errno)));
+            return opi_undefined(opi_string_new(strerror(errno)));
         }
         if (buf.len > 0 && buf.data[buf.len - 1] == '\n')
           buf.data[buf.len - 1] = 0;
         else
           cod_vec_push(buf, '\0');
-        return opi_string_move2(buf.data, buf.len - 1);
+        return opi_string_drain_with_len(buf.data, buf.len - 1);
       }
     }
     cod_vec_push(buf, c);
@@ -694,7 +631,7 @@ loadfile(void)
   opi_drop(path);
   if (!fs) {
     opi_drop(srcd);
-    return opi_undefined(opi_string(strerror(errno)));
+    return opi_undefined(opi_string_new(strerror(errno)));
   }
 
   opi_error = 0;
@@ -755,6 +692,161 @@ exit_(void)
   exit(e);
 }
 
+static opi_t
+dvector(void)
+{
+  cod_vec(double) buf;
+  cod_vec_init(buf);
+  opi_t l = opi_pop();
+  for (opi_t it = l; it->type == opi_pair_type; it = opi_cdr(it)) {
+    opi_t x = opi_car(it);
+    if (opi_unlikely(x->type != opi_number_type)) {
+      cod_vec_destroy(buf);
+      opi_drop(l);
+      return opi_undefined(opi_symbol("type-error"));
+    }
+    cod_vec_push(buf, OPI_NUM(x));
+  }
+  opi_drop(l);
+  return opi_dvector_new_moved(buf.data, buf.len);
+}
+
+static opi_t
+svector(void)
+{
+  cod_vec(float) buf;
+  cod_vec_init(buf);
+  opi_t l = opi_pop();
+  for (opi_t it = l; it->type == opi_pair_type; it = opi_cdr(it)) {
+    opi_t x = opi_car(it);
+    if (opi_unlikely(x->type != opi_number_type)) {
+      cod_vec_destroy(buf);
+      opi_drop(l);
+      return opi_undefined(opi_symbol("type-error"));
+    }
+    cod_vec_push(buf, OPI_NUM(x));
+  }
+  opi_drop(l);
+  return opi_svector_new_moved(buf.data, buf.len);
+}
+
+static opi_t
+regex(void)
+{
+  opi_t pattern = opi_pop();
+  opi_assert(pattern->type == opi_string_type);
+
+  const char *err;
+  opi_t regex = opi_regex_new(OPI_STR(pattern), 0, &err);
+  if (regex == NULL) {
+    opi_error("%s\n", err);
+    abort();
+  }
+  return regex;
+}
+
+typedef cod_vec(char) string_t;
+
+static int
+replace(int n, const char *src, const char *p, string_t* out)
+{
+  for (; *p; ++p) {
+    if (*p == '\\') {
+      ++p;
+
+      if (*p == 0) {
+        cod_vec_push(*out, '\\');
+        return 0;
+      }
+
+      if (isdigit(*p)) {
+        char *endptr;
+        int i = strtoul(p, &endptr, 10);
+        if (i >= n)
+          return -1;
+
+        int idx = i*2;
+        for (int i = opi_ovector[idx]; i < opi_ovector[idx + 1]; ++i)
+          cod_vec_push(*out, src[i]);
+
+        p = endptr - 1;
+        continue;
+      }
+
+      cod_vec_push(*out, '\\');
+      if (*p != '\\') {
+        cod_vec_push(*out, '\\');
+        cod_vec_push(*out, *p);
+      }
+      continue;
+    }
+
+    cod_vec_push(*out, *p);
+  }
+
+  return 0;
+}
+
+static opi_t
+search_replace(void)
+{
+  OPI_FN()
+  OPI_ARG(re, opi_regex_type)
+  OPI_ARG(pat_, opi_string_type);
+  OPI_ARG(opt_, opi_string_type);
+  OPI_ARG(str_, opi_string_type);
+
+  const char *pat = OPI_STR(pat_);
+  const char *str = OPI_STR(str_);
+  int len = OPI_STRLEN(str_);
+  const char *opt = OPI_STR(opt_);
+
+  int g = !!strchr(opt, 'g');
+
+  string_t out;
+  cod_vec_init(out);
+
+  int offs = 0;
+  while (offs < len) {
+    int n = opi_regex_exec(re, str, len, offs, 0);
+
+    if (n < 0)
+      break;
+    opi_assert(n != 0);
+
+    int start = opi_ovector[0];
+    int end = opi_ovector[1];
+
+    for (int i = offs; i < start; ++i)
+      cod_vec_push(out, str[i]);
+    if (replace(n, str, pat, &out)) {
+      cod_vec_destroy(out);
+      OPI_THROW("regex-error");
+    }
+    offs = end;
+
+    if (!g)
+      break;
+  }
+
+  while (offs < len)
+    cod_vec_push(out, str[offs++]);
+  cod_vec_push(out, 0);
+  OPI_RETURN(opi_string_drain_with_len(out.data, out.len));
+}
+
+static opi_t
+number(void)
+{
+  OPI_FN()
+  OPI_ARG(str, opi_string_type)
+  char *endptr;
+  long double num = strtold(OPI_STR(str), &endptr);
+  if (endptr == OPI_STR(str))
+    OPI_THROW("format-error");
+  OPI_RETURN(opi_number(num));
+}
+
 void
 opi_builtins(OpiBuilder *bldr)
 {
@@ -766,14 +858,27 @@ opi_builtins(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "number?", opi_fn("number?", number_p, 1));
   opi_builder_def_const(bldr, "symbol?", opi_fn("symbol?", symbol_p, 1));
   opi_builder_def_const(bldr, "fn?", opi_fn("fn?", fn_p, 1));
+  opi_builder_def_const(bldr, "lazy?", opi_fn("lazy?", lazy_p, 1));
+  opi_builder_def_const(bldr, "svector?", opi_fn("svector?", svector_p, 1));
+  opi_builder_def_const(bldr, "dvector?", opi_fn("dvector?", dvector_p, 1));
+  opi_builder_def_const(bldr, "FILE?", opi_fn("FILE?", FILE_p, 1));
+  opi_builder_def_const(bldr, "table?", opi_fn("table?", table_p, 1));
 
   opi_builder_def_const(bldr, ".", opi_fn(".", compose, 2));
   opi_builder_def_const(bldr, "++", opi_fn("++", concat, 2));
   opi_builder_def_const(bldr, "car", opi_fn("car", car_, 1));
   opi_builder_def_const(bldr, "cdr", opi_fn("cdr", cdr_, 1));
+
   opi_builder_def_const(bldr, "list", opi_fn("list", list, -1));
   opi_builder_def_const(bldr, "table", opi_fn("table", table, 1));
+  opi_builder_def_const(bldr, "dvector", opi_fn("dvector", dvector, 1));
+  opi_builder_def_const(bldr, "svector", opi_fn("svector", svector, 1));
+  opi_builder_def_const(bldr, "number", opi_fn("number", number, 1));
+
+  opi_builder_def_const(bldr, "regex", opi_fn("regex", regex, 1));
+
   opi_builder_def_const(bldr, "#", opi_fn("#", table_ref, 2));
+  opi_builder_def_const(bldr, "pairs", opi_fn("pairs", pairs, 1));
   opi_builder_def_const(bldr, "is", opi_fn("is", is_, 2));
   opi_builder_def_const(bldr, "eq", opi_fn("eq", eq_, 2));
   opi_builder_def_const(bldr, "equal", opi_fn("equal", equal_, 2));
@@ -803,4 +908,6 @@ opi_builtins(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "loadfile", loadfile_fn);
 
   opi_builder_def_const(bldr, "exit", opi_fn("exit", exit_, 1));
+
+  opi_builder_def_const(bldr, "__builtin_sr", opi_fn("search_replace", search_replace, 4));
 }

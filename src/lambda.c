@@ -1,44 +1,44 @@
 #include "opium/opium.h"
 #include "opium/lambda.h"
 
-static inline void
-lam_destroy(OpiFn *fn)
+extern inline void
+opi_lam_destroy(OpiFn *fn)
 {
-  struct opi_lambda *lam = fn->data;
+  OpiLambda *lam = fn->data;
   for (size_t i = 0; i < lam->ncaps; ++i) {
     if (lam->caps[i]->rc > 0)
       opi_unref(lam->caps[i]);
   }
 }
 
-static inline void
-lam_free(OpiFn *fn)
+extern inline void
+opi_lam_free(OpiFn *fn)
 {
-  struct opi_lambda *lam = fn->data;
+  OpiLambda *lam = fn->data;
   free(lam);
   opi_fn_delete(fn);
 }
 
-static inline void
-lam_delete(OpiFn *fn)
+extern inline void
+opi_lam_delete(OpiFn *fn)
 {
-  lam_destroy(fn);
-  lam_free(fn);
+  opi_lam_destroy(fn);
+  opi_lam_free(fn);
 }
 
 extern inline void
-opi_scope_dropout(struct opi_scope *scp)
+opi_scope_dropout(OpiRecScope *scp)
 {
   if (--scp->rc == 0) {
     size_t nnz = 0;
-    for (size_t i = 0; i < scp->nlams; ++i)
-      nnz += !!scp->lams[i]->header.rc;
+    for (size_t i = 0; i < scp->nrefs; ++i)
+      nnz += !!scp->refs[i].val->rc;
 
     if (nnz == 0) {
-      for (size_t i = 0; i < scp->nlams; ++i)
-        lam_destroy(scp->lams[i]);
-      for (size_t i = 0; i < scp->nlams; ++i)
-        lam_free(scp->lams[i]);
+      for (size_t i = 0; i < scp->nrefs; ++i)
+        scp->refs[i].destroy(scp->refs[i].val);
+      for (size_t i = 0; i < scp->nrefs; ++i)
+        scp->refs[i].free(scp->refs[i].val);
       free(scp);
     } else {
       scp->rc = nnz;
@@ -49,17 +49,17 @@ opi_scope_dropout(struct opi_scope *scp)
 void
 opi_lambda_delete(OpiFn *fn)
 {
-  struct opi_lambda *lam = fn->data;
+  OpiLambda *lam = fn->data;
   if (lam->scp)
     opi_scope_dropout(lam->scp);
   else
-    lam_delete(fn);
+    opi_lam_delete(fn);
 }
 
 opi_t
 opi_lambda_fn(void)
 {
-  struct opi_lambda *lam = opi_fn_get_data(opi_current_fn);
+  OpiLambda *lam = opi_fn_get_data(opi_current_fn);
   return opi_vm(lam->bc);
 }
 

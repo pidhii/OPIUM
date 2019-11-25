@@ -102,6 +102,7 @@ opi_insn_delete1(OpiInsn *insn)
     case OPI_OPC_TEST:
     case OPI_OPC_GUARD:
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
+    case OPI_OPC_GOTO:
       break;
 
     case OPI_OPC_ENDSCP:
@@ -567,6 +568,15 @@ opi_insn_binop(OpiOpc opc, int out, int lhs, int rhs)
   return insn;
 }
 
+OpiInsn*
+opi_insn_goto(OpiInsn *label)
+{
+  OpiInsn *insn = malloc(sizeof(OpiInsn));
+  insn->opc = OPI_OPC_GOTO;
+  insn->ptr[0] = label;
+  return insn;
+}
+
 int
 opi_insn_is_using(OpiInsn *insn, int vid)
 {
@@ -583,6 +593,7 @@ opi_insn_is_using(OpiInsn *insn, int vid)
     case OPI_OPC_BEGSCP:
     case OPI_OPC_IF:
     case OPI_OPC_GUARD:
+    case OPI_OPC_GOTO:
       return FALSE;
 
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
@@ -667,6 +678,7 @@ opi_insn_is_killing(OpiInsn *insn, int vid)
     case OPI_OPC_TEST:
     case OPI_OPC_GUARD:
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
+    case OPI_OPC_GOTO:
       return FALSE;
 
     // ignore manual RC-management
@@ -717,6 +729,7 @@ opi_insn_is_creating(OpiInsn *insn, int vid)
     case OPI_OPC_TESTTY:
     case OPI_OPC_TEST:
     case OPI_OPC_GUARD:
+    case OPI_OPC_GOTO:
       return FALSE;
 
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
@@ -980,4 +993,8 @@ opi_bytecode_binop(OpiBytecode *bc, OpiOpc opc, int lhs, int rhs)
   opi_bytecode_write(bc, opi_insn_binop(opc, out, lhs, rhs));
   return out;
 }
+
+void
+opi_bytecode_goto(OpiBytecode *bc, OpiInsn *label)
+{ opi_bytecode_write(bc, opi_insn_goto(label)); }
 

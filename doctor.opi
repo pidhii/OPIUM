@@ -1,0 +1,143 @@
+#!/bin/env opium
+
+{- Function: Show help and exit. -}
+let helpAndExit out err =
+  fprintf out "\
+usage: %{car ARGV} [OPTIONS] COMMAND
+
+OPTIONS:
+  path <opium-path>
+  force
+
+COMMANDS:
+  help
+  install <path>
+";
+  exit err
+
+{- Function: Parse command-line arguments into table. -}
+let rec parseArgs args =
+  unless let arg:args = args then nil
+  else if arg eq "help" then helpAndExit stdout 0
+  else if arg eq "force" then ('force: true) : parseArgs args
+  else if arg eq "install" then
+    if let path:args = args then ('install: path) : parseArgs args
+    else begin
+      fprintf stderr "error: missing path argument to install\n";
+      exit 1;
+    end
+  else if arg eq "remove" then
+    if let name:args = args then ('remove: name) : parseArgs args
+    else begin
+      fprintf stderr "error: missing argument to remove\n";
+      exit 1;
+    end
+  else if arg eq "path" then
+    if let path:args = args then ('path: path) : parseArgs args
+    else begin
+      fprintf stderr "error: missing opium-path argument\n";
+      exit 1;
+    end
+  else begin
+    fprintf stderr "error: unknown command-line option\n";
+    exit 1;
+  end
+
+{- Function: Get full path given a relative one. -}
+let realpath path = `test -e '%{path}' && realpath '%{path}'`
+
+
+{- Global: Parsed command-line options. -}
+let ARGS = table $ parseArgs $ cdr ARGV
+
+{- Global: Force mode. -}
+let FORCE = ARGS#force or false
+
+{- Global: Path to opium libraries. -}
+let installPath = ARGS#path or ENV#OPIUM_PATH or begin
+  fprintf stderr "error: path to opium libraries not set\n";
+  exit 1;
+end
+
+
+{- Function: Install package. -}
+let install () = begin
+  let packageRoot = realpath ARGS#install or begin
+      fprintf stderr "error: failed to resolve package directory\n";
+      exit 1;
+    end
+  in
+
+  -- find install-script
+  let installScript = "%{packageRoot}/install.opi" in
+  `test -f %{installScript}` or begin
+    fprintf stderr "error: missing install-script\n";
+    exit 1;
+  end
+
+  -- load installer
+  let installEnv = [installPath packageRoot] in
+  let config = loadfile installScript installEnv in
+  print "package %{config#name}";
+
+  -- resolve fields
+  let packageName = config#name in
+  let packageMain = config#main in
+  let packageFiles = config#files or [packageMain] in
+  let packageBuild = config#build or \_ -> nil in
+  let packagePostinstall = config#postinstall or \_ -> nil in
+
+  print "building...";
+  -- build package
+  packageBuild packageRoot;
+
+  print "installing...";
+  -- create package's private directory for dependencies
+  let packageDirName = "%{packageName}-dir" in
+  let packageInstallPath = "%{installPath}/%{packageDirName}" in
+  `mkdir %{FORCE && "-p" || ""} %{packageInstallPath}` or begin
+    fprintf stderr "error: failed to create package directory,";
+    fprintf stderr " try force-option to proceed\n";
+    exit 1;
+  end
+  -- copy dependencies
+  let rec copy files =
+    unless let file:files = files then nil
+    else begin
+      `cp %{packageRoot}/%{file} %{packageInstallPath}` or begin
+        fprintf stderr "error: failed to copy \"%{file}\"\n";
+        exit 1;
+      end
+      copy files
+    end
+  in copy packageFiles;
+  -- create symlink to the main script
+  let rel_path = "%{packageDirName}/%{packageMain}" in
+  let link_path = "%{installPath}/%{packageName}" in
+  `ln -s %{FORCE && "-f" || ""} %{rel_path} %{link_path}`;
+
+  print "running post-install hooks...";
+  packagePostinstall packageRoot;
+
+  print "package %{packageName} was succesfully installed to %{installPath}";
+end
+
+
+{- Function: Reomve package. -}
+let remove () = begin
+  let packageName = ARGS#remove in
+  system "rm -rfv %{installPath}/%{packageName}{,-dir}";
+end
+
+
+{- MAIN: -}
+begin 
+  when ARGS#install then install ()
+  else when ARGS#remove then remove ()
+  else begin
+    fprintf stderr "error: neither of install nor remove commands specified, \n";
+    fprintf stderr "       see help for list of commands and options\n";
+    exit 1;
+  end
+end
+

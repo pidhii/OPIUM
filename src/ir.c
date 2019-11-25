@@ -84,6 +84,10 @@ opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "FILE", opi_file_type);
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
+  opi_builder_def_type(bldr, "svector", opi_svector_type);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
+  opi_builder_def_type(bldr, "dvector", opi_dvector_type);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
 }
 
 void
@@ -817,7 +821,7 @@ opi_build(OpiBuilder *bldr, OpiAst *ast, int mode)
         OpiAst *var_ast = opi_ast_var(decls->data[i]);
         OpiIr *var_ir = opi_builder_build_ir(bldr, var_ast);
         opi_ast_delete(var_ast);
-        OpiIr *nam_ir = opi_ir_const(opi_string(decls->data[i]));
+        OpiIr *nam_ir = opi_ir_const(opi_string_new(decls->data[i]));
         OpiIr *pair = opi_ir_binop(OPI_OPC_CONS, nam_ir, var_ir);
         list = opi_ir_binop(OPI_OPC_CONS, pair, list);
       }

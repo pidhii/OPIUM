@@ -10,7 +10,7 @@ opi_vm(OpiBytecode *bc)
 {
   opi_assert(bc->nvals <= OPI_VM_REG_MAX);
   opi_t r[OPI_VM_REG_MAX];
-  struct opi_scope *scp = NULL;
+  OpiRecScope *scp = NULL;
   size_t scpcnt = 0;
 
   OpiFlatInsn *ip = bc->tape;
@@ -121,7 +121,7 @@ opi_vm(OpiBytecode *bc)
         }
         if (opi_is_lambda(fn) & opi_test_arity(opi_fn_get_arity(fn), nargs)) {
           // Tail Call
-          struct opi_lambda *lam = opi_fn_get_data(fn);
+          OpiLambda *lam = opi_fn_get_data(fn);
           opi_current_fn = fn;
           bc = lam->bc;
           ip = bc->tape;
@@ -147,7 +147,7 @@ opi_vm(OpiBytecode *bc)
 
       case OPI_OPC_LDCAP:
       {
-        struct opi_lambda *data = opi_fn_get_data(opi_current_fn);
+        OpiLambda *data = opi_fn_get_data(opi_current_fn);
         r[OPI_LDCAP_REG_OUT(ip)] = data->caps[OPI_LDCAP_ARG_IDX(ip)];
         break;
       }
@@ -164,7 +164,7 @@ opi_vm(OpiBytecode *bc)
       {
         OpiFnInsnData *data = OPI_FINFN_ARG_DATA(ip);
         size_t ncaps = data->ncaps;
-        struct opi_lambda *lam = opi_lambda_allocate(ncaps);
+        OpiLambda *lam = opi_lambda_allocate(ncaps);
         lam->bc = data->bc;
         lam->ncaps = ncaps;
         for (size_t i = 0; i < ncaps; ++i)
@@ -175,7 +175,7 @@ opi_vm(OpiBytecode *bc)
         opi_fn_set_data(fn, lam, opi_lambda_delete);
 
         if ((lam->scp = scp))
-          scp->lams[scpcnt++] = (void*)fn;
+          opi_rec_scope_set(scp, scpcnt++, (void*)fn, (void*)opi_lam_destroy, (void*)opi_lam_free);
 
         break;
       }
@@ -209,21 +209,22 @@ opi_vm(OpiBytecode *bc)
         ip = OPI_JMP_ARG_TO(ip);
         continue;
 
+      case OPI_OPC_GOTO:
+        ip = OPI_GOTO_ARG_TO(ip);
+        continue;
+
       case OPI_OPC_DUP:
         r[OPI_DUP_REG_OUT(ip)] = r[OPI_DUP_REG_IN(ip)];
         break;
 
       case OPI_OPC_BEGSCP:
-        scp = malloc(sizeof(struct opi_scope) + sizeof(struct opi_fn*) * OPI_BEGSCP_ARG_N(ip));
-        scp->nlams = OPI_BEGSCP_ARG_N(ip);
+        scp = opi_rec_scope(OPI_BEGSCP_ARG_N(ip));
         scpcnt = 0;
         break;
 
       case OPI_OPC_ENDSCP:
-        opi_assert(scpcnt == scp->nlams);
-        for (size_t i = 0; i < scpcnt; ++i)
-          scp->lams[i]->header.rc = 1;
-        scp->rc = scpcnt;
+        opi_assert(scpcnt == scp->nrefs);
+        opi_rec_scope_finalize(scp);
         scp = NULL;
         break;
 

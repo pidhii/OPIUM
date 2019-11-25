@@ -49,23 +49,6 @@ opi_bytecode_find_creating(OpiBytecode *bc, int vid)
   return ret;
 }
 
-int
-opi_bytecode_find_last_users(OpiBytecode *bc, int vid, struct cod_ptrvec *vec)
-{
-  OpiInsn *buf = NULL;;
-  int test(OpiInsn *insn, void *data) {
-    if (insn) {
-      if (opi_insn_is_using(insn, vid))
-        buf = insn;
-    } else {
-      if (buf)
-        cod_ptrvec_push(vec, buf, NULL);
-    }
-    return TRUE;
-  }
-  return opi_bytecode_while(bc, test, NULL);
-}
-
 struct trace { OpiInsn *start, *end; };
 
 static OpiInsn*
@@ -96,35 +79,6 @@ check_end(OpiBytecode *bc, OpiInsn *begin, OpiInsn *end)
 
       int a = check_end(bc, then_trace.start, then_trace.end);
       int b = check_end(bc, else_trace.start, else_trace.end);
-      int c = check_end(bc, cont_start, end);
-      return c || (a && b);
-    }
-
-    if (ip->opc == OPI_OPC_JMP) {
-      ip = OPI_JMP_ARG_TO(ip);
-      continue;
-    }
-
-    if (opi_insn_is_end(ip))
-      return TRUE;
-  }
-
-  return FALSE;
-}
-
-
-static int
-kill_end(OpiBytecode *bc, OpiInsn *begin, OpiInsn *end, int vid)
-{
-  for (OpiInsn *ip = begin; ip != end; ip = ip->next) {
-    if (ip->opc == OPI_OPC_IF) {
-      struct trace then_trace, else_trace;
-      OpiInsn *cont_start;
-
-      cont_start = split_if(ip, &then_trace, &else_trace);
-
-      int a = check_end(bc, then_trace.start, then_trace.end);
-      int b = check_end(bc, then_trace.start, then_trace.end);
       int c = check_end(bc, cont_start, end);
       return c || (a && b);
     }
