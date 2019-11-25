@@ -155,9 +155,6 @@ kill_value_aux(OpiBytecode *bc, OpiInsn *begin, OpiInsn *end, int vid)
       ip = OPI_JMP_ARG_TO(ip);
       continue;
     }
-
-    if (opi_insn_is_end(ip))
-      break;
   }
 
   if (last_user == NULL) {

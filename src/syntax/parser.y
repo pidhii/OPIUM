@@ -80,10 +80,12 @@ int opi_start_token;
   struct cod_strvec *strvec;
   struct cod_ptrvec *ptrvec;
 
+  OpiAstPattern *pattern;
   struct {
-    struct cod_strvec *fields;
-    struct cod_strvec *vars;
-  } matches;
+    struct cod_strvec fields;
+    cod_vec(OpiAstPattern*) patterns;
+  } patterns;
+  cod_vec(OpiAstPattern*) pattvec;
 
   cod_vec(char) s;
   struct {
@@ -108,12 +110,6 @@ int opi_start_token;
   cod_ptrvec_destroy($$, NULL);
   free($$);
 } <ptrvec>
-%destructor {
-  cod_strvec_destroy($$.vars);
-  cod_strvec_destroy($$.fields);
-  free($$.vars);
-  free($$.fields);
-} <matches>
 %destructor {
   cod_vec_destroy($$.s);
   for (size_t i = 0; i < $$.p.len; ++i)
@@ -186,7 +182,9 @@ int opi_start_token;
 %type<ast> def_aux vadef_aux anydef_aux
 %type<ast> lambda valambda anylambda
 %type<str> refstr
-%type<matches> matches matches_aux
+%type<pattern> pattern
+%type<patterns> patterns
+%type<pattvec> list_pattern_aux
 %type<strvec> fields
 %type<ast> string shell qr sr
 %type<fmt> string_aux shell_aux qr_aux
@@ -278,59 +276,12 @@ Stmnt
     $$ = opi_ast_let($2->vars.data, (OpiAst**)$2->vals.data, $2->vars.size, $4);
     binds_delete($2);
   }
-  | LET refstr '{' matches '}' '=' Expr IN Expr {
-    OpiAst *body[] = {
-      opi_ast_match($2, $4.vars->data, $4.fields->data, $4.vars->size, $7, NULL, NULL),
-      $9
-    };
+  | LET pattern '=' Expr IN Expr {
+    OpiAst *body[] = { opi_ast_match($2, $4, NULL, NULL), $6 };
     $$ = opi_ast_block(body, 2);
-    free($2);
-    cod_strvec_destroy($4.vars);
-    cod_strvec_destroy($4.fields);
-    free($4.vars);
-    free($4.fields);
   }
-  | LET SYMBOL ':' SYMBOL '=' Expr IN Expr {
-    char *flds[] = { "car", "cdr" };
-    char *vars[] = { $2, $4 };
-    OpiAst *body[] = {
-      opi_ast_match("pair", vars, flds, 2, $6, NULL, NULL),
-      $8
-    };
-    $$ = opi_ast_block(body, 2);
-    free($2);
-    free($4);
-  }
-  | IF LET refstr '{' matches '}' '=' Expr THEN Expr ELSE Expr {
-    $$ = opi_ast_match($3, $5.vars->data, $5.fields->data, $5.vars->size, $8, $10, $12),
-    free($3);
-    cod_strvec_destroy($5.vars);
-    cod_strvec_destroy($5.fields);
-    free($5.vars);
-    free($5.fields);
-  }
-  | IF LET SYMBOL ':' SYMBOL '=' Expr THEN Expr ELSE Expr {
-    char *flds[] = { "car", "cdr" };
-    char *vars[] = { $3, $5 };
-    $$ = opi_ast_match("pair", vars, flds, 2, $7, $9, $11),
-    free($3);
-    free($5);
-  }
-  | UNLESS LET refstr '{' matches '}' '=' Expr THEN Expr ELSE Expr {
-    $$ = opi_ast_match($3, $5.vars->data, $5.fields->data, $5.vars->size, $8, $12, $10),
-    free($3);
-    cod_strvec_destroy($5.vars);
-    cod_strvec_destroy($5.fields);
-    free($5.vars);
-    free($5.fields);
-  }
-  | UNLESS LET SYMBOL ':' SYMBOL '=' Expr THEN Expr ELSE Expr {
-    char *flds[] = { "car", "cdr" };
-    char *vars[] = { $3, $5 };
-    $$ = opi_ast_match("pair", vars, flds, 2, $7, $11, $9),
-    free($3);
-    free($5);
-  }
+  | IF LET pattern '=' Expr THEN Expr ELSE Expr { $$ = opi_ast_match($3, $5, $7, $9); }
+  | UNLESS LET pattern '=' Expr THEN Expr ELSE Expr { $$ = opi_ast_match($3, $5, $9, $7); }
   | RETURN Expr {
     $$ = opi_ast_return($2);
   }
@@ -514,43 +465,70 @@ when
   }
 ;
 
-matches
-  : {
-    cod_strvec_init($$.fields = malloc(sizeof(struct cod_strvec)));
-    cod_strvec_init($$.vars = malloc(sizeof(struct cod_strvec)));
+pattern
+  : SYMBOL { $$ = opi_ast_pattern_new_ident($1); free($1); }
+  | '(' pattern ')' { $$ = $2; }
+  | refstr '{' '}' {
+    $$ = opi_ast_pattern_new_unpack($1, NULL, NULL, 0);
+    free($1);
   }
-  | matches_aux
+  | refstr '{' patterns SYMBOL '}' {
+    cod_strvec_push(&$3.fields, $4);
+    cod_vec_push($3.patterns, opi_ast_pattern_new_ident($4));
+    free($4);
+    $$ = opi_ast_pattern_new_unpack($1, $3.patterns.data, $3.fields.data, $3.fields.size);
+    free($1);
+    cod_strvec_destroy(&$3.fields);
+    cod_vec_destroy($3.patterns);
+  }
+  | refstr '{' patterns SYMBOL ':' pattern '}' {
+    cod_strvec_push(&$3.fields, $4);
+    cod_vec_push($3.patterns, $6);
+    free($4);
+    $$ = opi_ast_pattern_new_unpack($1, $3.patterns.data, $3.fields.data, $3.fields.size);
+    cod_strvec_destroy(&$3.fields);
+    cod_vec_destroy($3.patterns);
+    free($1);
+  }
+  | pattern ':' pattern {
+    char *fields[] = { "car", "cdr" };
+    OpiAstPattern *pats[] = { $1, $3 };
+    $$ = opi_ast_pattern_new_unpack("pair", pats, fields, 2);
+  }
+  | '[' list_pattern_aux ']' {
+    OpiAstPattern *pat = opi_ast_pattern_new_ident("");
+    for (int i = $2.len - 1; i >= 0; --i) {
+      char *fields[] = { "car", "cdr" };
+      OpiAstPattern *pats[] = { $2.data[i], pat };
+      pat = opi_ast_pattern_new_unpack("pair", pats, fields, 2);
+    }
+    $$ = pat;
+    cod_vec_destroy($2);
+  }
 ;
 
-matches_aux
-  : SYMBOL ':' SYMBOL {
-    cod_strvec_init($$.fields = malloc(sizeof(struct cod_strvec)));
-    cod_strvec_init($$.vars = malloc(sizeof(struct cod_strvec)));
-    cod_strvec_push($$.fields, $1);
-    cod_strvec_push($$.vars, $3);
-    free($1);
-    free($3);
+list_pattern_aux
+  : { cod_vec_init($$); }
+  | list_pattern_aux pattern { $$ = $1; cod_vec_push($$, $2); }
+;
+
+patterns
+  : {
+    cod_strvec_init(&$$.fields);
+    cod_vec_init($$.patterns);
   }
-  | SYMBOL {
-    cod_strvec_init($$.fields = malloc(sizeof(struct cod_strvec)));
-    cod_strvec_init($$.vars = malloc(sizeof(struct cod_strvec)));
-    cod_strvec_push($$.fields, $1);
-    cod_strvec_push($$.vars, $1);
-    free($1);
-  }
-  | matches_aux ',' SYMBOL ':' SYMBOL {
+  | patterns SYMBOL ':' pattern ',' {
     $$ = $1;
-    cod_strvec_push($$.fields, $3);
-    cod_strvec_push($$.vars, $5);
-    free($3);
-    free($5);
-  }
-  | matches_aux ',' SYMBOL {
+    cod_strvec_push(&$$.fields, $2);
+    cod_vec_push($$.patterns, $4);
+    free($2);
+  } 
+  | patterns SYMBOL ',' {
     $$ = $1;
-    cod_strvec_push($$.fields, $3);
-    cod_strvec_push($$.vars, $3);
-    free($3);
-  }
+    cod_strvec_push(&$$.fields, $2);
+    cod_vec_push($$.patterns, opi_ast_pattern_new_ident($2));
+    free($2);
+  } 
 ;
 
 anylambda: lambda | valambda;
@@ -668,21 +646,7 @@ block_stmnt_only
     $$ = opi_ast_let($2->vars.data, (OpiAst**)$2->vals.data, $2->vars.size, NULL);
     binds_delete($2);
   }
-  | LET refstr '{' matches '}' '=' Expr {
-    $$ = opi_ast_match($2, $4.vars->data, $4.fields->data, $4.vars->size, $7, NULL, NULL),
-    free($2);
-    cod_strvec_destroy($4.vars);
-    cod_strvec_destroy($4.fields);
-    free($4.vars);
-    free($4.fields);
-  }
-  | LET SYMBOL ':' SYMBOL '=' Expr {
-    char *flds[] = { "car", "cdr" };
-    char *vars[] = { $2, $4 };
-    $$ = opi_ast_match("pair", vars, flds, 2, $6, NULL, NULL),
-    free($2);
-    free($4);
-  }
+  | LET pattern '=' Expr { $$ = opi_ast_match($2, $4, NULL, NULL); }
   | LOAD string {
     opi_assert($2->tag == OPI_AST_CONST);
     $$ = opi_ast_load(OPI_STR($2->cnst));

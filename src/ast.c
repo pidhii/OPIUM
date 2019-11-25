@@ -79,13 +79,7 @@ opi_ast_delete(OpiAst *node)
       break;
 
     case OPI_AST_MATCH:
-      free(node->match.type);
-      for (size_t i = 0; i < node->match.n; ++i) {
-        free(node->match.vars[i]);
-        free(node->match.fields[i]);
-      }
-      free(node->match.vars);
-      free(node->match.fields);
+      opi_ast_pattern_delete(node->match.pattern);
       opi_ast_delete(node->match.expr);
       if (node->match.then)
         opi_ast_delete(node->match.then);
@@ -268,24 +262,74 @@ opi_ast_load(const char *path)
   return node;
 }
 
+OpiAstPattern*
+opi_ast_pattern_new_ident(const char *ident)
+{
+  OpiAstPattern *p = malloc(sizeof(OpiAstPattern));
+  p->tag = OPI_PATTERN_IDENT;
+  p->ident = strdup(ident);
+  return p;
+}
+
+OpiAstPattern*
+opi_ast_pattern_new_unpack(const char *type, OpiAstPattern **subs, char **fields,
+    size_t n)
+{
+  OpiAstPattern *p = malloc(sizeof(OpiAstPattern));
+  p->tag = OPI_PATTERN_UNPACK;
+  p->unpack.type = strdup(type);
+  p->unpack.subs = malloc(sizeof(OpiAstPattern*) * n);
+  p->unpack.fields = malloc(sizeof(char*) * n);
+  for (size_t i = 0; i < n; ++i) {
+    p->unpack.subs[i] = subs[i];
+    p->unpack.fields[i] = strdup(fields[i]);
+  }
+  p->unpack.n = n;
+  return p;
+}
+
+void
+opi_ast_pattern_delete(OpiAstPattern *pattern)
+{
+  switch (pattern->tag) {
+    case OPI_PATTERN_IDENT:
+      free(pattern->ident);
+      break;
+
+    case OPI_PATTERN_UNPACK:
+      free(pattern->unpack.type);
+      for (size_t i = 0; i < pattern->unpack.n; ++i) {
+        opi_ast_pattern_delete(pattern->unpack.subs[i]);
+        free(pattern->unpack.fields[i]);
+      }
+      free(pattern->unpack.subs);
+      free(pattern->unpack.fields);
+      break;
+  }
+  free(pattern);
+}
+
 OpiAst*
-opi_ast_match(const char *type, char **vars, char **fields, size_t n,
-    OpiAst *expr, OpiAst *then, OpiAst *els)
+opi_ast_match(OpiAstPattern *pattern, OpiAst *expr, OpiAst *then, OpiAst *els)
 {
   OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_MATCH;
-  node->match.type = strdup(type);
-  node->match.vars = malloc(sizeof(char*) * n);
-  node->match.fields = malloc(sizeof(char*) * n);
-  for (size_t i = 0; i < n; ++i) {
-    node->match.vars[i] = strdup(vars[i]);
-    node->match.fields[i] = strdup(fields[i]);
-  }
-  node->match.n = n;
+  node->match.pattern = pattern;
   node->match.expr = expr;
   node->match.then = then;
   node->match.els = els;
   return node;
+}
+
+OpiAst*
+opi_ast_match_new_simple(const char *type, char **vars, char **fields, size_t n,
+    OpiAst *expr, OpiAst *then, OpiAst *els)
+{
+  OpiAstPattern *subs[n];
+  for (size_t i = 0; i < n; ++i)
+    subs[i] = opi_ast_pattern_new_ident(vars[i]);
+  OpiAstPattern *unpack = opi_ast_pattern_new_unpack(type, subs, fields, n);
+  return opi_ast_match(unpack, expr, then, els);
 }
 
 OpiAst*
@@ -332,7 +376,7 @@ opi_ast_eor(OpiAst *try, OpiAst *els, const char *ename)
     try->apply.eflag = FALSE;
   return
     opi_ast_let(&var, &try, 1,
-      opi_ast_match("undefined", vars, fields, 1, opi_ast_var(" eor tmp "),
+      opi_ast_match_new_simple("undefined", vars, fields, 1, opi_ast_var(" eor tmp "),
         els, opi_ast_var(" eor tmp ")));
 }
 
@@ -353,7 +397,7 @@ opi_ast_when(OpiAst *test_expr,
 
   return
     opi_ast_let(&tmp, &test_expr, 1,
-      opi_ast_match("undefined", else_vars, fields, 1, opi_ast_var(tmp),
+      opi_ast_match_new_simple("undefined", else_vars, fields, 1, opi_ast_var(tmp),
         else_expr ? else_expr : opi_ast_return(opi_ast_var(tmp)),
         opi_ast_let(then_vars, (OpiAst*[]){ opi_ast_var(tmp) }, 1,
           then_expr)));

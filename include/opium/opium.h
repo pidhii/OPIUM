@@ -751,6 +751,30 @@ typedef enum OpiAstTag_e {
   OPI_AST_BINOP,
 } OpiAstTag;
 
+typedef enum OpiPatternTag_e {
+  OPI_PATTERN_IDENT,
+  OPI_PATTERN_UNPACK,
+} OpiPatternTag;
+
+typedef struct OpiAstPattern_s OpiAstPattern;
+struct OpiAstPattern_s {
+  OpiPatternTag tag;
+  union {
+    char *ident;
+    struct { char *type, **fields; OpiAstPattern **subs; size_t n; } unpack;
+  };
+};
+
+OpiAstPattern*
+opi_ast_pattern_new_ident(const char *ident);
+
+OpiAstPattern*
+opi_ast_pattern_new_unpack(const char *type, OpiAstPattern **subs, char **fields,
+    size_t n);
+
+void
+opi_ast_pattern_delete(OpiAstPattern *pattern);
+
 typedef struct OpiAst_s OpiAst;
 struct OpiAst_s {
   OpiAstTag tag;
@@ -763,7 +787,7 @@ struct OpiAst_s {
     struct { OpiAst *test, *then, *els; } iff;
     struct { OpiAst **exprs; size_t n; int drop; char *namespace; } block;
     char *load;
-    struct { char *type, **vars, **fields; size_t n; OpiAst *then, *els, *expr; } match;
+    struct { OpiAstPattern *pattern; OpiAst *then, *els, *expr; } match;
     struct { char *typename, **fields; size_t nfields; } strct;
     struct { char *old, *new; } use;
     OpiAst *ret;
@@ -840,8 +864,12 @@ OpiAst*
 opi_ast_load(const char *path);
 
 OpiAst*
-opi_ast_match(const char *type, char **vars, char **fields, size_t n,
+opi_ast_match(OpiAstPattern *pattern, OpiAst *expr, OpiAst *then, OpiAst *els);
+
+OpiAst*
+opi_ast_match_new_simple(const char *type, char **vars, char **fields, size_t n,
     OpiAst *expr, OpiAst *then, OpiAst *els);
+
 
 OpiAst*
 opi_ast_struct(const char *typename, char** fields, size_t nfields);
@@ -1011,6 +1039,22 @@ typedef enum OpiIrTag_e {
   OPI_IR_BINOP,
 } OpiIrTag;
 
+typedef struct OpiIrPattern_s OpiIrPattern;
+struct OpiIrPattern_s {
+  OpiPatternTag tag;
+  struct { opi_type_t type; OpiIrPattern **subs; size_t *offs, n; } unpack;
+};
+
+OpiIrPattern*
+opi_ir_pattern_new_ident(void);
+
+OpiIrPattern*
+opi_ir_pattern_new_unpack(opi_type_t type, OpiIrPattern **subs, size_t *offs,
+    size_t n);
+
+void
+opi_ir_pattern_delete(OpiIrPattern *pattern);
+
 typedef struct OpiIr_s OpiIr;
 struct OpiIr_s {
   OpiIrTag tag;
@@ -1022,7 +1066,7 @@ struct OpiIr_s {
     struct { OpiIr **vals; size_t n; OpiIr *body; } let;
     struct { OpiIr *test, *then, *els; } iff;
     struct { OpiIr **exprs; size_t n; int drop; } block;
-    struct { opi_type_t type; size_t *offs, n; OpiIr *expr, *then, *els; } match;
+    struct { OpiIrPattern *pattern; OpiIr *expr, *then, *els; } match;
     OpiIr *ret;
     struct { int opc; OpiIr *lhs, *rhs; } binop;
   };
@@ -1074,8 +1118,7 @@ opi_ir_block_set_drop(OpiIr *block, int drop)
 { block->block.drop = drop; }
 
 OpiIr*
-opi_ir_match(opi_type_t type, size_t *offs, size_t n, OpiIr *expr,
-    OpiIr *then, OpiIr *els);
+opi_ir_match(OpiIrPattern *pattern, OpiIr *expr, OpiIr *then, OpiIr *els);
 
 OpiIr*
 opi_ir_return(OpiIr *val);
@@ -1183,8 +1226,11 @@ typedef enum OpiOpc_e {
 #define OPI_BINOP_REG_LHS(insn) (insn)->reg[1]
 #define OPI_BINOP_REG_RHS(insn) (insn)->reg[2]
 
-  OPI_OPC_GOTO,
-#define OPI_GOTO_ARG_TO(insn) (insn)->ptr[0]
+  OPI_OPC_VAR,
+#define OPI_VAR_REG(insn) (insn)->reg[0]
+  OPI_OPC_SET,
+#define OPI_SET_REG(insn) (insn)->reg[0]
+#define OPI_SET_ARG_VAL(insn) (insn)->reg[1]
 } OpiOpc;
 
 typedef struct OpiFlatInsn_s {
@@ -1323,7 +1369,10 @@ OpiInsn*
 opi_insn_binop(OpiOpc opc, int out, int lhs, int rhs);
 
 OpiInsn*
-opi_insn_goto(OpiInsn *label);
+opi_insn_var(int reg);
+
+OpiInsn*
+opi_insn_set(int reg, int val);
 
 typedef enum OpiValType_e {
   // Value is "born" in local scope with RC petentionaly set to zero at the
@@ -1486,8 +1535,11 @@ opi_bytecode_guard(OpiBytecode *bc, int cell);
 int
 opi_bytecode_binop(OpiBytecode *bc, OpiOpc opc, int lhs, int rhs);
 
+int
+opi_bytecode_var(OpiBytecode *bc);
+
 void
-opi_bytecode_goto(OpiBytecode *bc, OpiInsn *label);
+opi_bytecode_set(OpiBytecode *bc, int reg, int val);
 
 #define OPI_VM_REG_MAX 0x200
 opi_t

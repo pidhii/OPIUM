@@ -102,6 +102,87 @@ trace(void)
   return err;
 }
 
+static void
+emit_match_with_leak(int val, OpiIrPattern *pattern, OpiBytecode *bc, struct stack *stack)
+{
+  switch (pattern->tag) {
+    case OPI_PATTERN_IDENT:
+    {
+      // declare variable
+      stack_push(stack, val);
+      return;
+    }
+
+    case OPI_PATTERN_UNPACK:
+    {
+      // test type
+      int test = opi_bytecode_testty(bc, val, pattern->unpack.type);
+      opi_bytecode_guard(bc, test);
+
+      // emit sub-patterns on the field
+      for (size_t i = 0; i < pattern->unpack.n; ++i) {
+        int field = opi_bytecode_ldfld(bc, val, pattern->unpack.offs[i]);
+        emit_match_with_leak(field, pattern->unpack.subs[i], bc, stack);
+      }
+    }
+  }
+}
+
+typedef cod_vec(OpiIf) iffs_t;
+
+static void
+emit_match_with_then(int expr, OpiIrPattern *pattern, OpiBytecode *bc,
+    struct stack *stack, iffs_t *iffs)
+{
+  // start if-statement
+  OpiIf iff;
+  int test = opi_bytecode_testty(bc, expr, pattern->unpack.type);
+  opi_bytecode_if(bc, test, &iff);
+  cod_vec_push(*iffs, iff);
+
+  // evaluate sub-patterns
+  for (int i = 0; i < (int)pattern->unpack.n; ++i) {
+    OpiIrPattern *sub = pattern->unpack.subs[i];
+
+    int field = opi_bytecode_ldfld(bc, expr, pattern->unpack.offs[i]);
+    if (sub->tag == OPI_PATTERN_UNPACK)
+      emit_match_with_then(field, pattern->unpack.subs[i], bc, stack, iffs);
+    else
+      stack_push(stack, field);
+  }
+}
+
+static int
+emit_match_onelevel_with_then(OpiIr *then, OpiIr *els, int expr,
+    OpiIrPattern *pattern, OpiBytecode *bc, struct stack *stack, int tc)
+{
+  // IF
+  OpiIf iff;
+  // PHI
+  int phi = opi_bytecode_phi(bc);
+  // THEN
+  int test = opi_bytecode_testty(bc, expr, pattern->unpack.type);
+  opi_bytecode_if(bc, test, &iff);
+  // load fields
+  int vals[pattern->unpack.n];
+  for (size_t i = 0; i < pattern->unpack.n; ++i)
+    vals[i] = opi_bytecode_ldfld(bc, expr, pattern->unpack.offs[i]);
+  // declare values
+  for (size_t i = 0; i < pattern->unpack.n; ++i)
+    stack_push(stack, vals[i]);
+  int then_ret = emit(then, bc, stack, tc);
+  stack_pop(stack, pattern->unpack.n);
+  opi_bytecode_dup(bc, phi, then_ret);
+  // ELSE
+  opi_bytecode_if_else(bc, &iff);
+  int else_ret = emit(els, bc, stack, tc);
+  opi_bytecode_dup(bc, phi, else_ret);
+  // END IF
+  opi_bytecode_if_end(bc, &iff);
+
+  return phi;
+}
+
 static int
 emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
 {
@@ -253,47 +334,60 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
       // evaluate expr
       int expr = emit(ir->match.expr, bc, stack, FALSE);
 
-      // test type
-      int test = opi_bytecode_testty(bc, expr, ir->match.type);
-
       if (ir->match.then == NULL) {
-        opi_bytecode_guard(bc, test);
-
-        // load fields
-        int vals[ir->match.n];
-        for (size_t i = 0; i < ir->match.n; ++i)
-          vals[i] = opi_bytecode_ldfld(bc, expr, ir->match.offs[i]);
-
-        // declare values
-        for (size_t i = 0; i < ir->match.n; ++i)
-          stack_push(stack, vals[i]);
-
+        // match pattern
+        emit_match_with_leak(expr, ir->match.pattern, bc, stack);
         return opi_bytecode_const(bc, opi_nil);
 
       } else {
-        // IF
-        OpiIf iff;
-        // PHI
+        // special case for bare identifier
+        if (ir->match.pattern->tag == OPI_PATTERN_IDENT) {
+          stack_push(stack, expr);
+          int ret = emit(ir->match.then, bc, stack, tc);
+          stack_pop(stack, 1);
+          return ret;
+        }
+
+        // special case for 1-level pattern
+        OpiIrPattern *pattern = ir->match.pattern;
+        int is_onelevel = TRUE;
+        for (size_t i = 0; i <  pattern->unpack.n; ++i) {
+          if (pattern->unpack.subs[i]->tag != OPI_PATTERN_IDENT) {
+            is_onelevel = FALSE;
+            break;
+          }
+        }
+        if (is_onelevel) {
+          return emit_match_onelevel_with_then(ir->match.then, ir->match.els,
+              expr, pattern, bc, stack, tc);
+        }
+
+        // general case with nested unpacks
+        int var = opi_bytecode_var(bc);
+        opi_bytecode_set(bc, var, 1);
         int phi = opi_bytecode_phi(bc);
-        // THEN
-        opi_bytecode_if(bc, test, &iff);
-        // load fields
-        int vals[ir->match.n];
-        for (size_t i = 0; i < ir->match.n; ++i)
-          vals[i] = opi_bytecode_ldfld(bc, expr, ir->match.offs[i]);
-        // declare values
-        for (size_t i = 0; i < ir->match.n; ++i)
-          stack_push(stack, vals[i]);
+        iffs_t iffs;
+        cod_vec_init(iffs);
+        emit_match_with_then(expr, ir->match.pattern, bc, stack, &iffs);
+        opi_bytecode_set(bc, var, 0);
+        // TODO: should be able to return right from here if this is in
+        // tail-call position
         int then_ret = emit(ir->match.then, bc, stack, tc);
-        stack_pop(stack, ir->match.n);
         opi_bytecode_dup(bc, phi, then_ret);
-        // ELSE
-        opi_bytecode_if_else(bc, &iff);
+        // close if-statements
+        for (int i = iffs.len - 1; i >= 0; --i) {
+          OpiIf *iff = iffs.data + i;
+          opi_bytecode_if_else(bc, iff);
+          opi_bytecode_if_end(bc, iff);
+        }
+        cod_vec_destroy(iffs);
+
+        OpiIf iff;
+        opi_bytecode_if(bc, var, &iff);
         int else_ret = emit(ir->match.els, bc, stack, tc);
         opi_bytecode_dup(bc, phi, else_ret);
-        // END IF
+        opi_bytecode_if_else(bc, &iff);
         opi_bytecode_if_end(bc, &iff);
-
         return phi;
       }
     }

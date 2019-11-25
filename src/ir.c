@@ -402,6 +402,62 @@ build_error()
   return opi_ir_return(opi_ir_const(opi_symbol("build-error")));
 }
 
+static OpiIrPattern*
+build_pattern(OpiBuilder *bldr, OpiAstPattern *pattern)
+{
+  switch (pattern->tag) {
+    case OPI_PATTERN_IDENT:
+    {
+      // declare variable
+      opi_builder_push_decl(bldr, pattern->ident);
+      return opi_ir_pattern_new_ident();
+    }
+
+    case OPI_PATTERN_UNPACK:
+    {
+      // resolve type
+      const char *typename = opi_builder_assoc(bldr, pattern->unpack.type);
+      if (!typename)
+        return NULL;
+      opi_type_t type = opi_builder_find_type(bldr, typename);
+      if (type == NULL) {
+        opi_error("no such type, '%s'\n", pattern->unpack.type);
+        return NULL;
+      }
+
+      // match sub-patterns
+      size_t offsets[pattern->unpack.n];
+      OpiIrPattern *subs[pattern->unpack.n];
+      for (size_t i = 0; i < pattern->unpack.n; ++i) {
+        // resolve field index
+        int field_idx;
+        if (pattern->unpack.fields[i][0] == '#')
+          // index is set explicitly
+          field_idx = atoi(pattern->unpack.fields[i] + 1);
+        else
+          // find index by field-name
+          field_idx = opi_type_get_field_idx(type, pattern->unpack.fields[i]);
+        opi_assert(field_idx >= 0);
+
+        // get field offset
+        offsets[i] = opi_type_get_field_offset(type, field_idx);
+
+        // build sub-pattern
+        if (!(subs[i] = build_pattern(bldr, pattern->unpack.subs[i]))) {
+          // error
+          while (i--)
+            opi_ir_pattern_delete(subs[i]);
+          return NULL;
+        }
+      }
+
+      // create IR-pattern
+      return opi_ir_pattern_new_unpack(type, subs, offsets, pattern->unpack.n);
+    }
+  }
+  abort();
+}
+
 OpiIr*
 opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
 {
@@ -692,48 +748,30 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
 
     case OPI_AST_MATCH:
     {
-      // find type
-      const char *typename = opi_builder_assoc(bldr, ast->match.type);
-      if (!typename)
-        return build_error();
-
-      opi_type_t type = opi_builder_find_type(bldr, typename);
-      if (type == NULL) {
-        opi_error("no such type, '%s'\n", ast->match.type);
-        return build_error();
-      }
-
-      // load fields
-      size_t offsets[ast->match.n];
-      for (size_t i = 0; i < ast->match.n; ++i) {
-        int field_idx;
-        if (ast->match.fields[i][0] == '#')
-          field_idx = atoi(ast->match.fields[i] + 1);
-        else
-          field_idx = opi_type_get_field_idx(type, ast->match.fields[i]);
-        opi_assert(field_idx >= 0);
-        offsets[i] = opi_type_get_field_offset(type, field_idx);
-      }
-
       // evaluate expr
       OpiIr *expr = opi_builder_build_ir(bldr, ast->match.expr);
 
-      // declare variables
-      for (size_t i = 0; i < ast->match.n; ++i)
-        opi_builder_push_decl(bldr, ast->match.vars[i]);
+      // build pattern
+      size_t ndecls_start = bldr->decls.size;
+      OpiIrPattern *pattern = build_pattern(bldr, ast->match.pattern);
+      size_t ndecls = bldr->decls.size - ndecls_start;
+      if (!pattern) {
+        opi_ir_delete(expr);
+        return build_error();
+      }
 
       OpiIr *then = NULL, *els = NULL;
       if (ast->match.then) {
         // eval then-branch
         then = opi_builder_build_ir(bldr, ast->match.then);
         // hide variables
-        for (size_t i = 0; i < ast->match.n; ++i)
+        while (ndecls--)
           opi_builder_pop_decl(bldr);
         // eval else-branch
         els = opi_builder_build_ir(bldr, ast->match.els);
       }
 
-      return opi_ir_match(type, offsets, ast->match.n, expr, then, els);
+      return opi_ir_match(pattern, expr, then, els);
     }
 
     case OPI_AST_STRUCT:
@@ -898,7 +936,7 @@ opi_ir_delete(OpiIr *node)
       break;
 
     case OPI_IR_MATCH:
-      free(node->match.offs);
+      opi_ir_pattern_delete(node->match.pattern);
       opi_ir_delete(node->match.expr);
       if (node->match.then)
         opi_ir_delete(node->match.then);
@@ -1008,16 +1046,49 @@ opi_ir_block(OpiIr **exprs, size_t n)
   return node;
 }
 
+OpiIrPattern*
+opi_ir_pattern_new_ident(void)
+{
+  OpiIrPattern *pattern = malloc(sizeof(OpiIrPattern));
+  pattern->tag = OPI_PATTERN_IDENT;
+  return pattern;
+}
+
+OpiIrPattern*
+opi_ir_pattern_new_unpack(opi_type_t type, OpiIrPattern **subs, size_t *offs,
+    size_t n)
+{
+  OpiIrPattern *pattern = malloc(sizeof(OpiIrPattern));
+  pattern->tag = OPI_PATTERN_UNPACK;
+  pattern->unpack.type = type;
+  pattern->unpack.subs = malloc(sizeof(OpiIrPattern*) * n);
+  pattern->unpack.offs = malloc(sizeof(size_t) * n);
+  for (size_t i = 0; i < n; ++i) {
+    pattern->unpack.subs[i] = subs[i];
+    pattern->unpack.offs[i] = offs[i];
+  }
+  pattern->unpack.n = n;
+  return pattern;
+}
+
+void
+opi_ir_pattern_delete(OpiIrPattern *pattern)
+{
+  if (pattern->tag == OPI_PATTERN_UNPACK) {
+    for (size_t i = 0; i < pattern->unpack.n; ++i)
+      opi_ir_pattern_delete(pattern->unpack.subs[i]);
+    free(pattern->unpack.subs);
+    free(pattern->unpack.offs);
+  }
+  free(pattern);
+}
+
 OpiIr*
-opi_ir_match(opi_type_t type, size_t *offs, size_t n, OpiIr *expr,
-    OpiIr *then, OpiIr *els)
+opi_ir_match(OpiIrPattern *pattern, OpiIr *expr, OpiIr *then, OpiIr *els)
 {
   OpiIr *node = malloc(sizeof(OpiIr));
   node->tag = OPI_IR_MATCH;
-  node->match.type = type;
-  node->match.offs = malloc(sizeof(size_t) * n);
-  memcpy(node->match.offs, offs, sizeof(size_t) * n);
-  node->match.n = n;
+  node->match.pattern = pattern;
   node->match.expr = expr;
   node->match.then = then;
   node->match.els = els;

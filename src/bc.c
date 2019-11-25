@@ -102,7 +102,8 @@ opi_insn_delete1(OpiInsn *insn)
     case OPI_OPC_TEST:
     case OPI_OPC_GUARD:
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
-    case OPI_OPC_GOTO:
+    case OPI_OPC_VAR:
+    case OPI_OPC_SET:
       break;
 
     case OPI_OPC_ENDSCP:
@@ -569,11 +570,21 @@ opi_insn_binop(OpiOpc opc, int out, int lhs, int rhs)
 }
 
 OpiInsn*
-opi_insn_goto(OpiInsn *label)
+opi_insn_var(int reg)
 {
   OpiInsn *insn = malloc(sizeof(OpiInsn));
-  insn->opc = OPI_OPC_GOTO;
-  insn->ptr[0] = label;
+  insn->opc = OPI_OPC_VAR;
+  OPI_VAR_REG(insn) = reg;
+  return insn;
+}
+
+OpiInsn*
+opi_insn_set(int reg, int val)
+{
+  OpiInsn *insn = malloc(sizeof(OpiInsn));
+  insn->opc = OPI_OPC_SET;
+  OPI_SET_REG(insn) = reg;
+  OPI_SET_ARG_VAL(insn) = val;
   return insn;
 }
 
@@ -593,7 +604,8 @@ opi_insn_is_using(OpiInsn *insn, int vid)
     case OPI_OPC_BEGSCP:
     case OPI_OPC_IF:
     case OPI_OPC_GUARD:
-    case OPI_OPC_GOTO:
+    case OPI_OPC_VAR:
+    case OPI_OPC_SET:
       return FALSE;
 
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
@@ -678,7 +690,8 @@ opi_insn_is_killing(OpiInsn *insn, int vid)
     case OPI_OPC_TEST:
     case OPI_OPC_GUARD:
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
-    case OPI_OPC_GOTO:
+    case OPI_OPC_VAR:
+    case OPI_OPC_SET:
       return FALSE;
 
     // ignore manual RC-management
@@ -729,7 +742,8 @@ opi_insn_is_creating(OpiInsn *insn, int vid)
     case OPI_OPC_TESTTY:
     case OPI_OPC_TEST:
     case OPI_OPC_GUARD:
-    case OPI_OPC_GOTO:
+    case OPI_OPC_VAR:
+    case OPI_OPC_SET:
       return FALSE;
 
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
@@ -994,7 +1008,15 @@ opi_bytecode_binop(OpiBytecode *bc, OpiOpc opc, int lhs, int rhs)
   return out;
 }
 
+int
+opi_bytecode_var(OpiBytecode *bc)
+{
+  int reg = opi_bytecode_new_val(bc, OPI_VAL_GLOBAL);
+  opi_bytecode_write(bc, opi_insn_var(reg));
+  return reg;
+}
+
 void
-opi_bytecode_goto(OpiBytecode *bc, OpiInsn *label)
-{ opi_bytecode_write(bc, opi_insn_goto(label)); }
+opi_bytecode_set(OpiBytecode *bc, int reg, int val)
+{ opi_bytecode_write(bc, opi_insn_set(reg, val)); }
 

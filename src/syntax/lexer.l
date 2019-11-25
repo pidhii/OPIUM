@@ -285,7 +285,7 @@ is[ \n\t]+not { return ISNOT; }
 "$"|":" { return yytext[0]; }
 "->" { return RARROW; }
 "="|"+"|"-"|"*"|"/"|"%"|\. { return yytext[0]; }
-"["|"]"|"("|")"|"," { return yytext[0]; }
+"["|"]"|"("|")"|","|"|" { return yytext[0]; }
 "\\" { return FN; }
 
 "'"[^ \t\n(){}\[\]'\";,:]+ { yylval->opi = opi_symbol(yytext+1); return CONST; }

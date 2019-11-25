@@ -18,6 +18,11 @@ opi_vm(OpiBytecode *bc)
   while (1) {
     switch (ip->opc) {
       case OPI_OPC_NOP:
+      case OPI_OPC_VAR:
+        break;
+
+      case OPI_OPC_SET:
+        r[OPI_SET_REG(ip)] = (void*)OPI_SET_ARG_VAL(ip);
         break;
 
 #define NUM_BINOP(opc, op)                                                                               \
@@ -207,10 +212,6 @@ opi_vm(OpiBytecode *bc)
 
       case OPI_OPC_JMP:
         ip = OPI_JMP_ARG_TO(ip);
-        continue;
-
-      case OPI_OPC_GOTO:
-        ip = OPI_GOTO_ARG_TO(ip);
         continue;
 
       case OPI_OPC_DUP:
