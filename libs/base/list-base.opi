@@ -47,19 +47,29 @@ let foreach f l =
     else (f x; loop xs)
   in loop l
 
+{- Implemented in C (see: libs/base/base.c.)
+ - TODO: this one may perform be better with tracing JIT
+ -------------------------------------------------------------------------------
 let foldl f z l =
   let rec loop l acc =
     unless let x:xs = l then acc
     else loop xs $ f acc x
   in loop l z
+ -------------------------------------------------------------------------------
+ -}
 
 let foldr f z l = foldl (flip f) z (reverse l)
 
+{- Implemented in C (see: libs/base/base.c.)
+ - TODO: this one may perform be better with tracing JIT
+ -------------------------------------------------------------------------------
 let revfilter f l =
   let rec loop l acc =
     unless let x:xs = l then acc
     else loop xs $ if f x then x:acc else acc
   in loop l nil
+ -------------------------------------------------------------------------------
+ -}
 
 let filter = reverse . revfilter
 

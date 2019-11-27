@@ -103,7 +103,7 @@ main(int argc, char **argv, char **env)
   opi_t argv_ = opi_nil;
   for (int i = argc - 1; i >= optind; --i)
     argv_ = opi_cons(opi_string_new(argv[i]), argv_);
-  opi_builder_def_const(&builder, "ARGV", argv_);
+  opi_builder_def_const(&builder, "commandline", argv_);
   
   // Add environment variables.
   opi_t env_list = opi_nil;
@@ -118,7 +118,7 @@ main(int argc, char **argv, char **env)
     env_list = opi_cons(opi_cons(key, val), env_list);
   }
   opi_t env_ = opi_table(env_list, TRUE);
-  opi_builder_def_const(&builder, "ENV", env_);
+  opi_builder_def_const(&builder, "environment", env_);
 
   // change working direcotry to the source location
   /*opi_debug("chdir %s\n", dir);*/

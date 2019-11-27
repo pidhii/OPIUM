@@ -331,13 +331,13 @@ string_at(void)
     return opi_undefined(opi_symbol("type-error"));
   }
 
-  if (opi_unlikely(idx->type != opi_number_type)) {
+  if (opi_unlikely(idx->type != opi_num_type)) {
     opi_unref(str);
     opi_unref(idx);
     return opi_undefined(opi_symbol("type-error"));
   }
 
-  size_t k = opi_number_get_value(idx);
+  size_t k = opi_num_get_value(idx);
   if (opi_unlikely(k >= opi_string_get_length(str))) {
     opi_unref(str);
     opi_unref(idx);
@@ -435,11 +435,12 @@ static opi_t
 force(void)
 {
   opi_t lazy = opi_pop();
-  opi_inc_rc(lazy);
   if (opi_unlikely(lazy->type != opi_lazy_type)) {
-    opi_unref(lazy);
-    return opi_undefined(opi_symbol("type-error"));
+    return lazy;
+    /*opi_drop(lazy);*/
+    /*return opi_undefined(opi_symbol("type-error"));*/
   }
+  opi_inc_rc(lazy);
   opi_t ret = opi_lazy_get_value(lazy);
   opi_inc_rc(ret);
   opi_unref(lazy);
@@ -479,7 +480,7 @@ TYPE_PRED(boolean_p, opi_boolean_type)
 TYPE_PRED(pair_p, opi_pair_type)
 TYPE_PRED(string_p, opi_string_type)
 TYPE_PRED(undefined_p, opi_undefined_type)
-TYPE_PRED(number_p, opi_number_type)
+TYPE_PRED(number_p, opi_num_type)
 TYPE_PRED(symbol_p, opi_symbol_type)
 TYPE_PRED(fn_p, opi_fn_type)
 TYPE_PRED(svector_p, opi_svector_type)
@@ -530,13 +531,13 @@ vaarg(void)
   opi_t nmin = opi_pop();
   opi_t f = opi_pop();
 
-  if (opi_unlikely(nmin->type != opi_number_type || f->type != opi_fn_type)) {
+  if (opi_unlikely(nmin->type != opi_num_type || f->type != opi_fn_type)) {
     opi_drop(nmin);
     opi_drop(f);
     return opi_undefined(opi_symbol("type-error"));
   }
 
-  size_t ari = opi_number_get_value(nmin);
+  size_t ari = opi_num_get_value(nmin);
   opi_drop(nmin);
 
   if (opi_unlikely(!opi_test_arity(opi_fn_get_arity(f), ari + 1))) {
@@ -563,7 +564,7 @@ system_(void)
   }
   int err = system(opi_string_get_value(cmd));
   opi_drop(cmd);
-  return opi_number(err);
+  return opi_num_new(err);
 }
 
 static opi_t
@@ -679,11 +680,11 @@ static opi_t
 exit_(void)
 {
   opi_t err = opi_pop();
-  if (err->type != opi_number_type) {
+  if (err->type != opi_num_type) {
     opi_drop(err);
     return opi_undefined(opi_symbol("type-error"));
   }
-  long double e = opi_number_get_value(err);
+  long double e = opi_num_get_value(err);
   opi_drop(err);
   if (e < 0 || e > 255) {
     opi_drop(err);
@@ -700,7 +701,7 @@ dvector(void)
   opi_t l = opi_pop();
   for (opi_t it = l; it->type == opi_pair_type; it = opi_cdr(it)) {
     opi_t x = opi_car(it);
-    if (opi_unlikely(x->type != opi_number_type)) {
+    if (opi_unlikely(x->type != opi_num_type)) {
       cod_vec_destroy(buf);
       opi_drop(l);
       return opi_undefined(opi_symbol("type-error"));
@@ -719,7 +720,7 @@ svector(void)
   opi_t l = opi_pop();
   for (opi_t it = l; it->type == opi_pair_type; it = opi_cdr(it)) {
     opi_t x = opi_car(it);
-    if (opi_unlikely(x->type != opi_number_type)) {
+    if (opi_unlikely(x->type != opi_num_type)) {
       cod_vec_destroy(buf);
       opi_drop(l);
       return opi_undefined(opi_symbol("type-error"));
@@ -844,7 +845,60 @@ number(void)
   long double num = strtold(OPI_STR(str), &endptr);
   if (endptr == OPI_STR(str))
     OPI_THROW("format-error");
-  OPI_RETURN(opi_number(num));
+  OPI_RETURN(opi_num_new(num));
+}
+
+static opi_t
+next(void)
+{
+  opi_t g = opi_pop();
+  if (g->type != opi_gen_type) {
+    return g;
+  }
+
+  OpiGen *gen = opi_as_ptr(g);
+  if (gen->is_done) {
+    /*opi_debug("next (1)\n");*/
+    opi_t ret = opi_cons(gen->val, gen->next);
+    opi_drop(g);
+    return ret;
+
+  } else {
+    if (g->rc == 0) {
+      /*opi_debug("next (2)\n");*/
+      opi_t this = gen->val;
+      opi_t next = opi_vm_continue(gen->state);
+      if (next) {
+        gen->val = next; // incremented by VM
+        opi_dec_rc(this);
+        return opi_cons(this, g);
+      } else {
+        opi_t ret = opi_cons(this, opi_nil);
+        gen->is_done = TRUE;
+        opi_state_destroy(gen->state);
+        free(gen->state);
+        gen->next = NULL;
+        opi_drop(g);
+        return ret;
+      }
+
+    } else {
+      /*opi_debug("next (3)\n");*/
+      opi_t next = opi_vm_continue(gen->state); // incremented by VM
+      if (next) {
+        opi_t next_gen = opi_gen_new(next, gen->state);
+        gen->is_done = TRUE;
+        opi_inc_rc(gen->next = next_gen);
+        return opi_cons(gen->val, next_gen);
+      } else {
+        gen->is_done = TRUE;
+        opi_state_destroy(gen->state);
+        free(gen->state);
+        opi_inc_rc(gen->next = opi_nil);
+        return opi_cons(gen->val, opi_nil);
+      }
+    }
+  }
 }
 
 void
@@ -910,4 +964,6 @@ opi_builtins(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "exit", opi_fn("exit", exit_, 1));
 
   opi_builder_def_const(bldr, "__builtin_sr", opi_fn("search_replace", search_replace, 4));
+
+  opi_builder_def_const(bldr, "next", opi_fn("next", next, 1));
 }

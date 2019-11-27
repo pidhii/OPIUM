@@ -10,7 +10,10 @@ set comments=sr:{-,mb:-,ex:-}
 
 set iskeyword+=?,'
 syn match opiIdentifier /\<[a-zA-Z_][a-zA-Z0-9_]*['?]?\>/
-syn match opiSymbol /'[^ \t\n(){}\[\]'";,:]\+/
+syn match opiType       /\<[A-Z][a-zA-Z0-9_]*\>/
+syn match opiSymbol     /'[^ \t\n(){}\[\]'";,:]\+/
+
+syn keyword opiType fn
 
 syn match opiIdentifier /\<\k\+::/he=e-2 contains=opiNamespaceDots nextgroup=opiIdentifier
 syn match opiNamespaceDots /::/
@@ -25,8 +28,6 @@ syn keyword opiUse use as
 
 syn keyword opiStruct struct nextgroup=opiStructName skipwhite skipnl
 syn match   opiStructName /\k\+/ contained
-
-syn keyword opiType  null  undefined  symbol  string  boolean  pair  fn  FILE
 
 syn region opiList matchgroup=opiType start=/\[/ matchgroup=opiType end=/\]/ skipwhite skipnl contains=TOP
 
@@ -44,6 +45,7 @@ syn keyword Function force
 syn keyword Function system shell
 syn keyword Function loadfile
 syn keyword Function exit
+syn keyword Function next
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Base:
@@ -68,18 +70,16 @@ syn keyword Function match split
 
 syn keyword opiKeyword let rec and or in return begin end
 syn keyword opiAssert assert
-syn keyword opiSpecial ARGV ENV
+syn keyword opiSpecial commandline environment
 
 syn keyword opiKeyword if unless when then else
-
+syn keyword opiKeyword yield
 syn keyword opiLazy lazy
 
 syn match opiOperator /[-+=*/%><&|.][-+=*/%><&|.!]*/
 syn match opiOperator /![-+=*/%><&|!.]\+/
 syn match opiOperator /:\|\$/
 syn keyword opiOperator is eq equal not
-
-syn match   opiKeyword /=>/
 
 syn match opiDelimiter /[,;()]/
 

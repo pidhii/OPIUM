@@ -134,7 +134,7 @@ int opi_start_token;
 
 %token<c>   CHAR
 %token<num> NUMBER
-%token<str> SYMBOL SHELL
+%token<str> SYMBOL TYPE SHELL
 %token<opi> CONST
 %token<str> S
 
@@ -145,7 +145,7 @@ int opi_start_token;
 
 %right ';'
 
-%right LAZY ASSERT
+%right LAZY ASSERT YIELD
 
 %left IF UNLESS WHEN
 %precedence THEN
@@ -174,15 +174,15 @@ int opi_start_token;
 %type<ast> Expr Stmnt
 
 %type<binds> binds recbinds
-%type<strvec> param param_aux
+%type<pattvec> param
 %type<ptrvec> arg arg_aux
 %type<ast> block block_stmnt block_stmnt_only block_expr
 %type<ptrvec> block_aux
 %type<ast> fn_aux vafn_aux anyfn_aux
 %type<ast> def_aux vadef_aux anydef_aux
 %type<ast> lambda valambda anylambda
-%type<str> refstr
-%type<pattern> pattern
+%type<str> Symbol Type SymbolOrType
+%type<pattern> pattern atomicPattern
 %type<patterns> patterns
 %type<pattvec> list_pattern_aux
 %type<strvec> fields
@@ -220,8 +220,8 @@ entry
 ;
 
 Atom
-  : NUMBER { $$ = opi_ast_const(opi_number($1)); }
-  | refstr { $$ = opi_ast_var($1); free($1); }
+  : NUMBER { $$ = opi_ast_const(opi_num_new($1)); }
+  | Symbol { $$ = opi_ast_var($1); free($1); }
   | CONST { $$ = opi_ast_const($1); }
   | string
   | shell
@@ -241,11 +241,29 @@ Atom
     $$->apply.loc = location(&@$);
     free($3);
   }
+  | Atom TABLEREF TYPE {
+    OpiAst *p[] = { $1, opi_ast_const(opi_symbol($3)) };
+    $$ = opi_ast_apply(opi_ast_var("#"), p, 2);
+    $$->apply.loc = location(&@$);
+    free($3);
+  }
 ;
 
-refstr
+SymbolOrType: Symbol | Type;
+Symbol
   : SYMBOL
-  | refstr DCOL SYMBOL {
+  | Symbol DCOL SYMBOL {
+    size_t len = strlen($1) + 2 + strlen($3);
+    $$ = malloc(len + 1);
+    sprintf($$, "%s::%s", $1, $3);
+    free($1);
+    free($3);
+  }
+;
+
+Type
+  : TYPE
+  | Symbol DCOL TYPE {
     size_t len = strlen($1) + 2 + strlen($3);
     $$ = malloc(len + 1);
     sprintf($$, "%s::%s", $1, $3);
@@ -260,6 +278,13 @@ Form
     $$ = opi_ast_apply($1, (OpiAst**)$2->data, $2->size);
     $$->apply.loc = location(&@$);
     cod_ptrvec_destroy($2, NULL);
+    free($2);
+  }
+  | Type arg {
+    $$ = opi_ast_apply(opi_ast_var($1), (OpiAst**)$2->data, $2->size);
+    $$->apply.loc = location(&@$);
+    cod_ptrvec_destroy($2, NULL);
+    free($1);
     free($2);
   }
 ;
@@ -286,6 +311,7 @@ Stmnt
     $$ = opi_ast_return($2);
   }
   | BEG Expr END { $$ = $2; }
+  | YIELD Expr { $$ = opi_ast_yield($2); }
 ;
 
 Expr
@@ -361,12 +387,12 @@ Expr
   | Expr SCAND Expr { $$ = opi_ast_and($1, $3); }
   | Expr SCOR Expr { $$ = opi_ast_or($1, $3); }
   | '-' Expr %prec UMINUS {
-    if ($2->tag == OPI_AST_CONST && $2->cnst->type == opi_number_type) {
-      long double x = opi_number_get_value($2->cnst);
-      opi_as($2->cnst, OpiNumber).val = -x;
+    if ($2->tag == OPI_AST_CONST && $2->cnst->type == opi_num_type) {
+      long double x = opi_num_get_value($2->cnst);
+      opi_as($2->cnst, OpiNum).val = -x;
       $$ = $2;
     } else {
-      OpiAst *p[] = { opi_ast_const(opi_number(0)), $2 };
+      OpiAst *p[] = { opi_ast_const(opi_num_new(0)), $2 };
       $$ = opi_ast_apply(opi_ast_var("-"), p, 2);
       $$->apply.loc = location(&@$);
     }
@@ -465,14 +491,14 @@ when
   }
 ;
 
-pattern
+atomicPattern
   : SYMBOL { $$ = opi_ast_pattern_new_ident($1); free($1); }
   | '(' pattern ')' { $$ = $2; }
-  | refstr '{' '}' {
+  | Type '{' '}' {
     $$ = opi_ast_pattern_new_unpack($1, NULL, NULL, 0);
     free($1);
   }
-  | refstr '{' patterns SYMBOL '}' {
+  | Type '{' patterns SYMBOL '}' {
     cod_strvec_push(&$3.fields, $4);
     cod_vec_push($3.patterns, opi_ast_pattern_new_ident($4));
     free($4);
@@ -481,7 +507,7 @@ pattern
     cod_strvec_destroy(&$3.fields);
     cod_vec_destroy($3.patterns);
   }
-  | refstr '{' patterns SYMBOL ':' pattern '}' {
+  | Type '{' patterns SYMBOL ':' pattern '}' {
     cod_strvec_push(&$3.fields, $4);
     cod_vec_push($3.patterns, $6);
     free($4);
@@ -490,26 +516,43 @@ pattern
     cod_vec_destroy($3.patterns);
     free($1);
   }
-  | pattern ':' pattern {
-    char *fields[] = { "car", "cdr" };
-    OpiAstPattern *pats[] = { $1, $3 };
-    $$ = opi_ast_pattern_new_unpack("pair", pats, fields, 2);
-  }
   | '[' list_pattern_aux ']' {
     OpiAstPattern *pat = opi_ast_pattern_new_ident("");
     for (int i = $2.len - 1; i >= 0; --i) {
       char *fields[] = { "car", "cdr" };
       OpiAstPattern *pats[] = { $2.data[i], pat };
-      pat = opi_ast_pattern_new_unpack("pair", pats, fields, 2);
+      pat = opi_ast_pattern_new_unpack("Cons", pats, fields, 2);
     }
     $$ = pat;
+    cod_vec_destroy($2);
+  }
+  | '[' ']' { $$ = opi_ast_pattern_new_unpack("Nil", NULL, NULL, 0); }
+;
+pattern
+  : atomicPattern
+  | pattern ':' pattern {
+    char *fields[] = { "car", "cdr" };
+    OpiAstPattern *pats[] = { $1, $3 };
+    $$ = opi_ast_pattern_new_unpack("Cons", pats, fields, 2);
+  }
+  | Type list_pattern_aux {
+    char *fields[$2.len];
+    char buf[0x10];
+    for (size_t i = 0; i < $2.len; ++i) {
+      sprintf(buf, "#%zu", i);
+      fields[i] = strdup(buf);
+    }
+    $$ = opi_ast_pattern_new_unpack($1, $2.data, fields, $2.len);
+    for (size_t i = 0; i < $2.len; ++i)
+      free(fields[i]);
+    free($1);
     cod_vec_destroy($2);
   }
 ;
 
 list_pattern_aux
-  : { cod_vec_init($$); }
-  | list_pattern_aux pattern { $$ = $1; cod_vec_push($$, $2); }
+  : atomicPattern { cod_vec_init($$); cod_vec_push($$, $1); }
+  | list_pattern_aux atomicPattern { $$ = $1; cod_vec_push($$, $2); }
 ;
 
 patterns
@@ -533,34 +576,15 @@ patterns
 
 anylambda: lambda | valambda;
 
-lambda
-  : FN fn_aux { $$ = $2; }
-  | '(' ')'  RARROW Expr { $$ = opi_ast_fn(0, 0, $4); }
-;
+lambda: FN fn_aux { $$ = $2; };
 
 valambda
   : FN vafn_aux { $$ = $2; }
 ;
 
 param
-  : '(' ')' {
-    $$ = malloc(sizeof(struct cod_strvec));
-    cod_strvec_init($$);
-  }
-  | param_aux
-;
-param_aux
-  : SYMBOL {
-    $$ = malloc(sizeof(struct cod_strvec));
-    cod_strvec_init($$);
-    cod_strvec_push($$, $1);
-    free($1);
-  }
-  | param_aux SYMBOL {
-    $$ = $1;
-    cod_strvec_push($$, $2);
-    free($2);
-  }
+  : '(' ')' { cod_vec_init($$); }
+  | list_pattern_aux { $$ = $1; }
 ;
 
 arg
@@ -660,24 +684,29 @@ block_stmnt_only
     opi_ast_block_set_drop($$, FALSE);
     free($2);
   }
-  | STRUCT SYMBOL '{' fields '}' {
+  | STRUCT TYPE '{' fields '}' {
     $$ = opi_ast_struct($2, $4->data, $4->size);
     free($2);
     cod_strvec_destroy($4);
     free($4);
   }
-  | USE refstr AS SYMBOL {
+  | USE Symbol AS SYMBOL {
     $$ = opi_ast_use($2, $4);
     free($2);
     free($4);
   }
-  | USE refstr {
+  | USE Type AS TYPE {
+    $$ = opi_ast_use($2, $4);
+    free($2);
+    free($4);
+  }
+  | USE SymbolOrType {
     char *p = strrchr($2, ':');
     opi_assert(p);
     $$ = opi_ast_use($2, p + 1);
     free($2);
   }
-  | USE refstr DCOL '*' {
+  | USE Symbol DCOL '*' {
     size_t len = strlen($2) + 2;
     char buf[len + 1];
     sprintf(buf, "%s::", $2);
@@ -708,9 +737,8 @@ anyfn_aux: fn_aux | vafn_aux;
 
 fn_aux
   : param RARROW Expr {
-    $$ = opi_ast_fn($1->data, $1->size, $3);
-    cod_strvec_destroy($1);
-    free($1);
+    $$ = opi_ast_fn_new_with_patterns($1.data, $1.len, $3);
+    cod_vec_destroy($1);
   }
 ;
 
@@ -718,19 +746,18 @@ vafn_aux
   : DOTDOT SYMBOL RARROW Expr {
     char *p[] = { $2 };
     OpiAst *fn = opi_ast_fn(p, 1, $4);
-    OpiAst *param[] = { opi_ast_const(opi_number(0)), fn };
+    OpiAst *param[] = { opi_ast_const(opi_num_new(0)), fn };
     $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
     $$->apply.loc = location(&@$);
     free($2);
   }
   | param DOTDOT SYMBOL RARROW Expr {
-    cod_strvec_push($1, $3);
-    OpiAst *fn = opi_ast_fn($1->data, $1->size, $5);
-    OpiAst *param[] = { opi_ast_const(opi_number($1->size - 1)), fn };
+    cod_vec_push($1, opi_ast_pattern_new_ident($3));
+    OpiAst *fn = opi_ast_fn_new_with_patterns($1.data, $1.len, $5);
+    OpiAst *param[] = { opi_ast_const(opi_num_new($1.len - 1)), fn };
     $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
     $$->apply.loc = location(&@$);
-    cod_strvec_destroy($1);
-    free($1);
+    cod_vec_destroy($1);
     free($3);
   }
 ;
@@ -739,9 +766,8 @@ anydef_aux: def_aux | vadef_aux;
 
 def_aux
   : param '=' Expr {
-    $$ = opi_ast_fn($1->data, $1->size, $3);
-    cod_strvec_destroy($1);
-    free($1);
+    $$ = opi_ast_fn_new_with_patterns($1.data, $1.len, $3);
+    cod_vec_destroy($1);
   }
 ;
 
@@ -749,19 +775,18 @@ vadef_aux
   : DOTDOT SYMBOL '=' Expr {
     char *p[] = { $2 };
     OpiAst *fn = opi_ast_fn(p, 1, $4);
-    OpiAst *param[] = { opi_ast_const(opi_number(0)), fn };
+    OpiAst *param[] = { opi_ast_const(opi_num_new(0)), fn };
     $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
     $$->apply.loc = location(&@$);
     free($2);
   }
   | param DOTDOT SYMBOL '=' Expr {
-    cod_strvec_push($1, $3);
-    OpiAst *fn = opi_ast_fn($1->data, $1->size, $5);
-    OpiAst *param[] = { opi_ast_const(opi_number($1->size - 1)), fn };
+    cod_vec_push($1, opi_ast_pattern_new_ident($3));
+    OpiAst *fn = opi_ast_fn_new_with_patterns($1.data, $1.len, $5);
+    OpiAst *param[] = { opi_ast_const(opi_num_new($1.len - 1)), fn };
     $$ = opi_ast_apply(opi_ast_var("vaarg"), param, 2);
     $$->apply.loc = location(&@$);
-    cod_strvec_destroy($1);
-    free($1);
+    cod_vec_destroy($1);
     free($3);
   }
 ;

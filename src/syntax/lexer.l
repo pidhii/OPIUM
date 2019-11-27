@@ -98,6 +98,7 @@ return { return RETURN; }
 fn { return FN; }
 lazy { return LAZY; }
 assert { return ASSERT; }
+yield { return YIELD; }
 
 begin {
   g_begin_cnt += 1;
@@ -289,7 +290,8 @@ is[ \n\t]+not { return ISNOT; }
 "\\" { return FN; }
 
 "'"[^ \t\n(){}\[\]'\";,:]+ { yylval->opi = opi_symbol(yytext+1); return CONST; }
-[a-zA-Z_][0-9a-zA-Z_]*['?]? { yylval->str = strdup(yytext); return SYMBOL; }
+[a-z_][0-9a-zA-Z_]*['?]? { yylval->str = strdup(yytext); return SYMBOL; }
+[A-Z][0-9a-zA-Z_]* { yylval->str = strdup(yytext); return TYPE; }
 
 . {
   opi_error("parse error: unexpected symbols, %s\n", yytext);

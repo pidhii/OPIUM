@@ -1,6 +1,20 @@
 #include "opium/opium.h"
 
-#define ALLOCATOR(n)                                         \
+#if defined(OPI_DEBUG_MODE)
+#warning Will use malloc for all allocations.
+# define ALLOCATOR(n)                                        \
+  static                                                     \
+  struct cod_ualloc_h##n##w g_allocator_h##n##w;             \
+                                                             \
+  void*                                                      \
+  opi_h##n##w()                                              \
+  { return malloc(sizeof(OpiH##n##w)); }                     \
+                                                             \
+  void                                                       \
+  opi_h##n##w_free(void *ptr)                                \
+  { free(ptr); }
+#else
+# define ALLOCATOR(n)                                        \
   static                                                     \
   struct cod_ualloc_h##n##w g_allocator_h##n##w;             \
                                                              \
@@ -11,6 +25,7 @@
   void                                                       \
   opi_h##n##w_free(void *ptr)                                \
   { cod_ualloc_h##n##w_free(&g_allocator_h##n##w, ptr); }
+#endif
 
 #define UALLOC_NAME h2w
 #define UALLOC_TYPE OpiH2w

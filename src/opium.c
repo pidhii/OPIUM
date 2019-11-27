@@ -98,7 +98,7 @@ opi_init(void)
 
   opi_undefined_init();
   opi_nil_init();
-  opi_number_init();
+  opi_num_init();
   opi_fn_init();
   opi_string_init();
   opi_boolean_init();
@@ -108,6 +108,7 @@ opi_init(void)
   opi_lazy_init();
   opi_table_init();
   opi_regex_init();
+  opi_gen_init();
   opi_vectors_init();
 }
 
@@ -115,7 +116,7 @@ void
 opi_cleanup(void)
 {
   opi_file_cleanup();
-  opi_number_cleanup();
+  opi_num_cleanup();
   opi_symbol_cleanup();
   opi_undefined_cleanup();
   opi_nil_cleanup();
@@ -126,6 +127,7 @@ opi_cleanup(void)
   opi_lazy_cleanup();
   opi_table_cleanup();
   opi_regex_cleanup();
+  opi_gen_cleanup();
   opi_vectors_cleanup();
 
   opi_lexer_cleanup();
@@ -197,7 +199,7 @@ new_type(const char *name)
 }
 
 opi_type_t
-opi_type(const char *name)
+opi_type_new(const char *name)
 {
   opi_type_t type = new_type(name);
   return type;
@@ -286,6 +288,14 @@ const char*
 opi_type_get_name(opi_type_t ty)
 { return ty->name; }
 
+size_t
+opi_type_get_nfields(opi_type_t ty)
+{ return ty->nfields; }
+
+char* const*
+opi_type_get_fields(opi_type_t ty)
+{ return ty->fields; }
+
 void*
 opi_type_get_data(opi_type_t ty)
 { return ty->data; }
@@ -315,19 +325,24 @@ opi_hashof(opi_t x)
 { return x->type->hash(x->type, x); }
 
 /******************************************************************************/
-opi_type_t opi_number_type;
+opi_type_t opi_num_type;
 
 static void
 number_write(opi_type_t ty, opi_t x, FILE *out)
 {
-  long double val = opi_as(x, OpiNumber).val;
-  fprintf(out, "%Lf", val);
+  long double val = opi_as(x, OpiNum).val;
+  long double i;
+  long double f = modfl(val, &i);
+  if (f == 0)
+    fprintf(out, "%.0Lf", i);
+  else
+    fprintf(out, "%Lf", val);
 }
 
 static void
 number_display(opi_type_t ty, opi_t x, FILE *out)
 {
-  long double val = opi_as(x, OpiNumber).val;
+  long double val = opi_as(x, OpiNum).val;
   long double i;
   long double f = modfl(val, &i);
   if (f == 0)
@@ -338,7 +353,7 @@ number_display(opi_type_t ty, opi_t x, FILE *out)
 
 static int
 number_eq(opi_type_t ty, opi_t x, opi_t y)
-{ return opi_number_get_value(x) == opi_number_get_value(y); }
+{ return opi_num_get_value(x) == opi_num_get_value(y); }
 
 static void
 number_delete(opi_type_t ty, opi_t cell)
@@ -346,22 +361,22 @@ number_delete(opi_type_t ty, opi_t cell)
 
 static size_t
 number_hash(opi_type_t type, opi_t x)
-{ return opi_number_get_value(x); }
+{ return opi_num_get_value(x); }
 
 void
-opi_number_init(void)
+opi_num_init(void)
 {
-  opi_number_type = opi_type("number");
-  opi_type_set_write(opi_number_type, number_write);
-  opi_type_set_display(opi_number_type, number_display);
-  opi_type_set_delete_cell(opi_number_type, number_delete);
-  opi_type_set_eq(opi_number_type, number_eq);
-  opi_type_set_hash(opi_number_type, number_hash);
+  opi_num_type = opi_type_new("Num");
+  opi_type_set_write(opi_num_type, number_write);
+  opi_type_set_display(opi_num_type, number_display);
+  opi_type_set_delete_cell(opi_num_type, number_delete);
+  opi_type_set_eq(opi_num_type, number_eq);
+  opi_type_set_hash(opi_num_type, number_hash);
 }
 
 void
-opi_number_cleanup(void)
-{ opi_type_delete(opi_number_type); }
+opi_num_cleanup(void)
+{ opi_type_delete(opi_num_type); }
 
 /******************************************************************************/
 struct symbol {
@@ -406,7 +421,7 @@ symbol_delete(opi_type_t ty, opi_t x)
 void
 opi_symbol_init(void)
 {
-  opi_symbol_type = opi_type("symbol");
+  opi_symbol_type = opi_type_new("Sym");
   opi_type_set_write(opi_symbol_type, symbol_write);
   opi_type_set_display(opi_symbol_type, symbol_display);
   opi_type_set_hash(opi_symbol_type, symbol_hash);
@@ -485,7 +500,7 @@ undefined_display(opi_type_t type, opi_t x, FILE *out)
 void
 opi_undefined_init(void)
 {
-  opi_undefined_type = opi_type("undefined");
+  opi_undefined_type = opi_type_new("undefined");
   opi_type_set_delete_cell(opi_undefined_type, undefined_delete);
   char *fields[] = { "what" };
   opi_type_set_fields(opi_undefined_type, offsetof(OpiUndefined, what), fields, 1);
@@ -509,7 +524,7 @@ opi_undefined(opi_t what)
 }
 
 /******************************************************************************/
-opi_type_t opi_null_type;
+opi_type_t opi_nil_type;
 
 OpiHeader g_nil;
 opi_t opi_nil;
@@ -521,11 +536,11 @@ nil_write(opi_type_t ty, opi_t x, FILE *out)
 void
 opi_nil_init(void)
 {
-  opi_null_type = opi_type("null");
-  opi_type_set_write(opi_null_type, nil_write);
+  opi_nil_type = opi_type_new("Nil");
+  opi_type_set_write(opi_nil_type, nil_write);
 
   opi_nil = &g_nil;
-  opi_init_cell(opi_nil, opi_null_type);
+  opi_init_cell(opi_nil, opi_nil_type);
   opi_inc_rc(opi_nil);
 }
 
@@ -533,7 +548,7 @@ void
 opi_nil_cleanup(void)
 {
   opi_unref(opi_nil);
-  opi_type_delete(opi_null_type);
+  opi_type_delete(opi_nil_type);
 }
 
 /******************************************************************************/
@@ -576,7 +591,7 @@ string_hash(opi_type_t ty, opi_t x)
 void
 opi_string_init(void)
 {
-  opi_string_type = opi_type("string");
+  opi_string_type = opi_type_new("Str");
   opi_type_set_display(opi_string_type, string_display);
   opi_type_set_write(opi_string_type, string_write);
   opi_type_set_delete_cell(opi_string_type, string_delete);
@@ -658,7 +673,7 @@ regex_delete(opi_type_t type, opi_t x)
 void
 opi_regex_init(void)
 {
-  opi_regex_type = opi_type("regex");
+  opi_regex_type = opi_type_new("regex");
   opi_type_set_delete_cell(opi_regex_type, regex_delete);
 }
 
@@ -713,7 +728,7 @@ boolean_write(opi_type_t ty, opi_t x, FILE *out)
 void
 opi_boolean_init(void)
 {
-  opi_boolean_type = opi_type("boolean");
+  opi_boolean_type = opi_type_new("Bool");
   opi_type_set_write(opi_boolean_type, boolean_write);
 
   opi_true = &g_true;
@@ -773,7 +788,7 @@ pair_delete(opi_type_t ty, opi_t x) {
 void
 opi_pair_init(void)
 {
-  opi_pair_type = opi_type("pair");
+  opi_pair_type = opi_type_new("Cons");
   opi_type_set_display(opi_pair_type, pair_display);
   opi_type_set_write(opi_pair_type, pair_write);
   opi_type_set_delete_cell(opi_pair_type, pair_delete);
@@ -807,7 +822,7 @@ table_delete(opi_type_t ty, opi_t x)
 void
 opi_table_init(void)
 {
-  opi_table_type = opi_type("table");
+  opi_table_type = opi_type_new("table");
   opi_type_set_delete_cell(opi_table_type, table_delete);
 }
 
@@ -937,7 +952,7 @@ file_delete(opi_type_t type, opi_t x)
 void
 opi_file_init(void)
 {
-  opi_file_type = opi_type("FILE");
+  opi_file_type = opi_type_new("File");
 
   opi_type_set_delete_cell(opi_file_type, file_delete);
 
@@ -991,9 +1006,9 @@ fn_display(opi_type_t type, opi_t cell, FILE *out)
 {
   OpiFn *fn = opi_as_ptr(cell);
   if (fn->name)
-    fprintf(out, "<function %s>", fn->name);
+    fprintf(out, "<Fn %s>", fn->name);
   else
-    fprintf(out, "<function>");
+    fprintf(out, "<Fn>");
 }
 
 static void
@@ -1014,7 +1029,7 @@ opi_fn_delete(OpiFn *fn)
 void
 opi_fn_init(void)
 {
-  opi_fn_type = opi_type("function");
+  opi_fn_type = opi_type_new("Fn");
   opi_type_set_display(opi_fn_type, fn_display);
   opi_type_set_delete_cell(opi_fn_type, fn_delete);
 }
@@ -1168,7 +1183,7 @@ lazy_delete(opi_type_t type, opi_t x)
 void
 opi_lazy_init(void)
 {
-  opi_lazy_type = opi_type("lazy");
+  opi_lazy_type = opi_type_new("lazy");
   opi_type_set_delete_cell(opi_lazy_type, lazy_delete);
 }
 
@@ -1184,6 +1199,45 @@ opi_lazy(opi_t x)
   lazy->is_ready = FALSE;
   opi_init_cell(lazy, opi_lazy_type);
   return (opi_t)lazy;
+}
+
+/******************************************************************************/
+opi_type_t
+opi_gen_type;
+
+void
+opi_state_destroy(OpiState *state)
+{
+  opi_unref(state->this_fn);
+}
+
+static void
+gen_delete(opi_type_t type, opi_t x)
+{
+  OpiGen *gen = opi_as_ptr(x);
+  if (gen->val)
+    opi_unref(gen->val);
+  if (!gen->is_done) {
+    opi_error("unfinished state\n");
+    opi_state_destroy(gen->state);
+  } else if (gen->next) {
+    opi_unref(gen->next);
+  }
+  free(gen->state);
+  free(gen);
+}
+
+void
+opi_gen_init(void)
+{
+  opi_gen_type = opi_type_new("Gen");
+  opi_type_set_delete_cell(opi_gen_type, gen_delete);
+}
+
+void
+opi_gen_cleanup(void)
+{
+  opi_type_delete(opi_gen_type);
 }
 
 /******************************************************************************/
@@ -1319,11 +1373,11 @@ DEFINE_VECTOR(double, d, OpiDVector, "%lf")
 void
 opi_vectors_init(void)
 {
-  opi_dvector_type = opi_type("dvector");
+  opi_dvector_type = opi_type_new("dvector");
   opi_type_set_delete_cell(opi_dvector_type, dvector_delete);
   opi_type_set_write(opi_dvector_type, dvector_write);
 
-  opi_svector_type = opi_type("svector");
+  opi_svector_type = opi_type_new("svector");
   opi_type_set_delete_cell(opi_svector_type, svector_delete);
   opi_type_set_write(opi_svector_type, svector_write);
 }

@@ -9,7 +9,7 @@ static opi_t
 length(void)
 {
   opi_t x = opi_pop();
-  opi_t ret = opi_number(opi_length(x));
+  opi_t ret = opi_num_new(opi_length(x));
   opi_drop(x);
   return ret;
 }
@@ -22,7 +22,7 @@ strlen_(void)
     opi_drop(str);
     return opi_undefined(opi_symbol("type-error"));
   }
-  opi_t ret = opi_number(opi_string_get_length(str));
+  opi_t ret = opi_num_new(opi_string_get_length(str));
   opi_drop(str);
   return ret;
 }
@@ -48,7 +48,7 @@ substr(void)
     return opi_undefined(opi_symbol("type-error"));
   }
 
-  if (opi_unlikely(start->type != opi_number_type)) {
+  if (opi_unlikely(start->type != opi_num_type)) {
     opi_drop(str);
     opi_drop(start);
     if (end)
@@ -56,7 +56,7 @@ substr(void)
     return opi_undefined(opi_symbol("type-error"));
   }
 
-  if (end && opi_unlikely(end->type != opi_number_type)) {
+  if (end && opi_unlikely(end->type != opi_num_type)) {
     opi_drop(str);
     opi_drop(start);
     opi_drop(end);
@@ -65,8 +65,8 @@ substr(void)
 
   const char *s = opi_string_get_value(str);
   ssize_t len = opi_string_get_length(str);
-  ssize_t from = opi_number_get_value(start);
-  ssize_t to = end ? opi_number_get_value(end) : len;
+  ssize_t from = opi_num_get_value(start);
+  ssize_t to = end ? opi_num_get_value(end) : len;
 
   if (from < 0)
     from = len + from;
@@ -184,7 +184,7 @@ strstr_(void)
     opi_drop(str);
     return opi_false;
   } else {
-    opi_t ret = opi_number(at - opi_string_get_value(str));
+    opi_t ret = opi_num_new(at - opi_string_get_value(str));
     opi_drop(str);
     return ret;
   }
@@ -314,7 +314,7 @@ read(void)
   FILE *fs = opi_file_get_value(file);
 
   if (opi_nargs == 2) {
-    OPI_ARG(size, opi_number_type)
+    OPI_ARG(size, opi_num_type)
     size_t n = OPI_NUM(size);
     char *buf = malloc(n + 1);
     size_t nrd = fread(buf, 1, n, fs);
@@ -339,14 +339,20 @@ read(void)
       if (nrd == 0) {
         free(buf);
         if (feof(fs)) {
-          opi_t l = opi_nil;
-          for (int i = bufs.len - 1; i >= 0; --i)
-            l = opi_cons(bufs.data[i], l);
-          cod_vec_destroy(bufs);
-          opi_nargs = 1;
-          opi_push(l);
-          opi_t ret = concat();
-          OPI_RETURN(ret);
+          if(bufs.len == 0) {
+            cod_vec_destroy(bufs);
+            OPI_RETURN(opi_false);
+
+          } else {
+            opi_t l = opi_nil;
+            for (int i = bufs.len - 1; i >= 0; --i)
+              l = opi_cons(bufs.data[i], l);
+            cod_vec_destroy(bufs);
+            opi_nargs = 1;
+            opi_push(l);
+            opi_t ret = concat();
+            OPI_RETURN(ret);
+          }
 
         } else {
           for (size_t i = 0; i < bufs.len; ++i)
@@ -433,6 +439,114 @@ split(void)
   OPI_RETURN(l);
 }
 
+static opi_t
+foldl(void)
+{
+  opi_t f = opi_pop();
+  opi_inc_rc(f);
+
+  opi_t acc = opi_pop();
+  opi_t l = opi_pop();
+
+  // Optimized for list with zero reference count
+  while ((l->type == opi_pair_type) & (l->rc == 0)) {
+    opi_t x = opi_car(l);
+    opi_t tmp = opi_cdr(l);
+
+    opi_h2w_free(l);
+    opi_dec_rc(x);
+    opi_dec_rc(tmp);
+
+    l = tmp;
+
+    opi_push(x);
+    opi_push(acc);
+    acc = opi_apply(f, 2);
+    if (opi_unlikely(acc->type == opi_undefined_type)) {
+      opi_unref(f);
+      return acc;
+    }
+  }
+
+  // Handle non-zero reference count
+  while (l->type == opi_pair_type) {
+    opi_t x = opi_car(l);
+    l = opi_cdr(l);
+
+    opi_push(x);
+    opi_push(acc);
+    acc = opi_apply(f, 2);
+    if (opi_unlikely(acc->type == opi_undefined_type)) {
+      opi_unref(f);
+      return acc;
+    }
+  }
+
+  opi_inc_rc(acc);
+  opi_drop(l);
+  opi_unref(f);
+  opi_dec_rc(acc);
+  return acc;
+}
+
+static opi_t
+revfilter(void)
+{
+  opi_t f = opi_pop();
+  opi_inc_rc(f);
+
+  opi_t l = opi_pop();
+
+  opi_t acc = opi_nil;
+
+  // Optimized for list with zero reference count
+  while ((l->type == opi_pair_type) & (l->rc == 0)) {
+    opi_t x = opi_car(l);
+    opi_t tmp = opi_cdr(l);
+
+    opi_h2w_free(l);
+    opi_dec_rc(tmp);
+
+    l = tmp;
+
+    opi_push(x);
+    opi_t p = opi_apply(f, 1);
+    if (opi_unlikely(p->type == opi_undefined_type)) {
+      opi_unref(f);
+      opi_drop(acc);
+      return p;
+    }
+
+    if (p != opi_false) {
+      acc = opi_cons(x, acc);
+      opi_dec_rc(x);
+    } else {
+      opi_unref(x);
+    }
+  }
+
+  // Handle non-zero reference count
+  while (l->type == opi_pair_type) {
+    opi_t x = opi_car(l);
+    l = opi_cdr(l);
+
+    opi_push(x);
+    opi_t p = opi_apply(f, 1);
+    if (opi_unlikely(p->type == opi_undefined_type)) {
+      opi_unref(f);
+      opi_drop(l);
+      return p;
+    }
+
+    if (p != opi_false)
+      acc = opi_cons(x, acc);
+  }
+
+  opi_drop(l);
+  opi_unref(f);
+  return acc;
+}
+
 int
 opium_library(OpiBuilder *bldr)
 {
@@ -454,6 +568,9 @@ opium_library(OpiBuilder *bldr)
 
   opi_builder_def_const(bldr, "match", opi_fn("match", match, 2));
   opi_builder_def_const(bldr, "split", opi_fn("split", split, 2));
+
+  opi_builder_def_const(bldr, "foldl", opi_fn("foldl", foldl, 3));
+  opi_builder_def_const(bldr, "revfilter", opi_fn("revfilter", revfilter, 2));
 
   return 0;
 }

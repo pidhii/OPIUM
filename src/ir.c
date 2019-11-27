@@ -45,7 +45,7 @@ opi_alist_pop(OpiAlist *a, size_t n)
 void
 opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
 {
-  bldr->is_derived = FALSE;
+  bldr->parent = NULL;
   bldr->ctx = ctx;
 
   cod_strvec_init(&bldr->decls);
@@ -64,25 +64,27 @@ opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
   cod_strvec_init(bldr->type_names = malloc(sizeof(struct cod_strvec)));
   cod_ptrvec_init(bldr->types = malloc(sizeof(struct cod_ptrvec)));
 
-  opi_builder_def_type(bldr, "undefined", opi_undefined_type);
+  opi_builder_def_type(bldr, "Undefined", opi_undefined_type);
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "number", opi_number_type);
+  opi_builder_def_type(bldr, "Num", opi_num_type);
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "symbol", opi_symbol_type);
+  opi_builder_def_type(bldr, "Sym", opi_symbol_type);
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "null", opi_null_type);
+  opi_builder_def_type(bldr, "Nil", opi_nil_type);
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "string", opi_string_type);
+  opi_builder_def_type(bldr, "Str", opi_string_type);
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "boolean", opi_boolean_type);
+  opi_builder_def_type(bldr, "Bool", opi_boolean_type);
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "pair", opi_pair_type);
+  opi_builder_def_type(bldr, "Cons", opi_pair_type);
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "fn", opi_fn_type);
+  opi_builder_def_type(bldr, "Fn", opi_fn_type);
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "lazy", opi_lazy_type);
+  opi_builder_def_type(bldr, "Lazy", opi_lazy_type);
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "FILE", opi_file_type);
+  opi_builder_def_type(bldr, "File", opi_file_type);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
+  opi_builder_def_type(bldr, "Gen", opi_gen_type);
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "svector", opi_svector_type);
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
@@ -93,7 +95,7 @@ opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
 void
 opi_builder_init_derived(OpiBuilder *bldr, OpiBuilder *parent)
 {
-  bldr->is_derived = TRUE;
+  bldr->parent = parent;
   bldr->ctx = parent->ctx;
 
   cod_strvec_init(&bldr->decls);
@@ -117,7 +119,7 @@ void
 opi_builder_destroy(OpiBuilder *bldr)
 {
   cod_strvec_destroy(&bldr->decls);
-  if (bldr->is_derived) {
+  if (opi_builder_is_derived(bldr)) {
     /*opi_alist_pop(bldr->alist, bldr->frame_offset);*/
     return;
   }
@@ -354,10 +356,6 @@ opi_builder_make_namespace(OpiBuilder *bldr, OpiScope *scp, const char *prefix)
   }
 }
 
-struct opi_struct_data {
-  size_t nfields;
-};
-
 static void
 opi_struct_data_delete(opi_type_t type)
 { free(opi_type_get_data(type)); }
@@ -368,11 +366,10 @@ struct opi_struct {
 };
 
 static void
-opi_struct_delete(opi_type_t ty, opi_t x)
+opi_struct_delete(opi_type_t type, opi_t x)
 {
   struct opi_struct *s = opi_as_ptr(x);
-  struct opi_struct_data *data = opi_type_get_data(ty);
-  size_t nfields = data->nfields;
+  size_t nfields = opi_type_get_nfields(type);
   for (size_t i = 0; i < nfields; ++i)
     opi_unref(s->data[i]);
   free(s);
@@ -382,8 +379,7 @@ static opi_t
 make_struct(void)
 {
   opi_type_t type = opi_fn_get_data(opi_current_fn);
-  struct opi_struct_data *data = opi_type_get_data(type);
-  size_t nfields = data->nfields;
+  size_t nfields = opi_type_get_nfields(type);
 
   struct opi_struct *s = malloc(sizeof(struct opi_struct) + sizeof(opi_t) * nfields);
   for (size_t i = 0; i < nfields; ++i) {
@@ -393,6 +389,22 @@ make_struct(void)
   opi_popn(nfields);
   opi_init_cell(s, type);
   return (opi_t)s;
+}
+
+static void
+write_struct(opi_type_t type, opi_t x, FILE *out)
+{
+  size_t nfields = opi_type_get_nfields(type);
+  struct opi_struct *s = opi_as_ptr(x);
+  char *const *fields = opi_type_get_fields(type);
+  fprintf(out, "%s { ", opi_type_get_name(type));
+  for (size_t i = 0; i < nfields; ++i) {
+    if (i != 0)
+      fputs(", ", out);
+    fprintf(out, "%s: ", fields[i]);
+    opi_write(s->data[i], out);
+  }
+  fputs(" }", out);
 }
 
 static OpiIr*
@@ -458,12 +470,22 @@ build_pattern(OpiBuilder *bldr, OpiAstPattern *pattern)
   abort();
 }
 
+int
+opi_builder_find_deep(OpiBuilder *bldr, const char *var)
+{
+  return cod_strvec_rfind(&bldr->decls, var) >= 0 ||
+         (bldr->parent && opi_builder_find_deep(bldr->parent, var));
+}
+
 OpiIr*
 opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
 {
   switch (ast->tag) {
     case OPI_AST_CONST:
       return opi_ir_const(ast->cnst);
+
+    case OPI_AST_YIELD:
+      return opi_ir_yield(opi_builder_build_ir(bldr, ast->yield));
 
     case OPI_AST_VAR:
     {
@@ -497,15 +519,19 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
         // # Found in local variables:
         offs = bldr->decls.size - var_idx;
 
+      } else if (opi_builder_find_deep(bldr, varname)) {
+        // # Add to captures:
+        // insert at the beginning of declarations => won't change other offsets
+        opi_builder_capture(bldr, varname);
+        offs = bldr->decls.size;
+
       } else if ((const_val = opi_builder_find_const(bldr, varname))) {
         // # Found constant definition:
         return opi_ir_const(const_val);
 
       } else  {
-        // # Otherwize, add to captures:
-        // insert at the beginning of declarations => won't change other offsets
-        opi_builder_capture(bldr, varname);
-        offs = bldr->decls.size;
+        opi_error("logic error: failed to resolve variable\n");
+        exit(EXIT_FAILURE);
       }
 
       return opi_ir_var(offs);
@@ -777,13 +803,11 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
     case OPI_AST_STRUCT:
     {
       // create type
-      opi_type_t type = opi_type(ast->strct.typename);
-      struct opi_struct_data *data = malloc(sizeof(struct opi_struct_data));
-      data->nfields = ast->strct.nfields;
-      opi_type_set_data(type, data, opi_struct_data_delete);
+      opi_type_t type = opi_type_new(ast->strct.typename);
       size_t offset = offsetof(struct opi_struct, data);
       opi_type_set_fields(type, offset, ast->strct.fields, ast->strct.nfields);
       opi_type_set_delete_cell(type, opi_struct_delete);
+      opi_type_set_write(type, write_struct);
 
       // create constructor
       opi_t ctor = opi_fn(ast->strct.typename, make_struct, ast->strct.nfields);
@@ -839,7 +863,12 @@ opi_build(OpiBuilder *bldr, OpiAst *ast, int mode)
     opi_ir_delete(ir);
     return NULL;
   }
-  opi_assert(bldr->frame_offset == 0);
+  if (bldr->frame_offset != 0) {
+    opi_error("logic error: captures at top-level\n");
+    for (int i = 0; i < bldr->frame_offset; ++i)
+      opi_trace("  %s\n", bldr->decls.data[i]);
+    exit(EXIT_FAILURE);
+  }
 
   OpiBytecode *bc = opi_bytecode();
 
@@ -893,6 +922,10 @@ opi_ir_delete(OpiIr *node)
   switch (node->tag) {
     case OPI_IR_CONST:
       opi_unref(node->cnst);
+      break;
+
+    case OPI_IR_YIELD:
+      opi_ir_delete(node->yield);
       break;
 
     case OPI_IR_VAR:
@@ -1112,6 +1145,15 @@ opi_ir_binop(int opc, OpiIr *lhs, OpiIr *rhs)
   node->binop.opc = opc;
   node->binop.lhs = lhs;
   node->binop.rhs = rhs;
+  return node;
+}
+
+OpiIr*
+opi_ir_yield(OpiIr *val)
+{
+  OpiIr *node = malloc(sizeof(OpiIr));
+  node->tag = OPI_IR_YIELD;
+  node->yield = val;
   return node;
 }
 

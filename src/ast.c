@@ -23,6 +23,10 @@ opi_ast_delete(OpiAst *node)
       opi_unref(node->cnst);
       break;
 
+    case OPI_AST_YIELD:
+      opi_ast_delete(node->yield);
+      break;
+
     case OPI_AST_VAR:
       free(node->var);
       break;
@@ -163,6 +167,50 @@ opi_ast_fn(char **args, size_t nargs, OpiAst *body)
 }
 
 OpiAst*
+opi_ast_fn_new_with_patterns(OpiAstPattern **args, size_t nargs, OpiAst *body)
+{
+  // special case when all arguments are identifiers
+  int all_ident = TRUE;
+  for (size_t i = 0; i < nargs; ++i) {
+    if (args[i]->tag != OPI_PATTERN_IDENT) {
+      all_ident = FALSE;
+      break;
+    }
+  }
+  if (all_ident) {
+    char *a[nargs];
+    for (size_t i = 0; i < nargs; ++i)
+      a[i] = args[i]->ident;
+    OpiAst *fn = opi_ast_fn(a, nargs, body);
+    for (size_t i = 0; i < nargs; ++i)
+      opi_ast_pattern_delete(args[i]);
+    return fn;
+  }
+
+  char *argnams[nargs];
+  OpiAst* block[nargs + 1];
+  int i_block = 0;
+  char buf[0x20];
+  for (size_t i = 0; i < nargs; ++i) {
+    if (args[i]->tag == OPI_PATTERN_IDENT) {
+      // don't need match
+      argnams[i] = args[i]->ident;
+      args[i]->ident = NULL;
+      opi_ast_pattern_delete(args[i]);
+    } else {
+      sprintf(buf, " fn arg %zu ", i);
+      argnams[i] = strdup(buf);
+      block[i_block++] = opi_ast_match(args[i], opi_ast_var(argnams[i]), NULL, NULL);
+    }
+  }
+  block[i_block] = body;
+  OpiAst *fn = opi_ast_fn(argnams, nargs, opi_ast_block(block, i_block + 1));
+  for (size_t i = 0; i < nargs; ++i)
+    free(argnams[i]);
+  return fn;
+}
+
+OpiAst*
 opi_ast_let(char **vars, OpiAst **vals, size_t n, OpiAst *body)
 {
   OpiAst *node = malloc(sizeof(OpiAst));
@@ -293,7 +341,8 @@ opi_ast_pattern_delete(OpiAstPattern *pattern)
 {
   switch (pattern->tag) {
     case OPI_PATTERN_IDENT:
-      free(pattern->ident);
+      if (pattern->ident)
+        free(pattern->ident);
       break;
 
     case OPI_PATTERN_UNPACK:
@@ -376,7 +425,7 @@ opi_ast_eor(OpiAst *try, OpiAst *els, const char *ename)
     try->apply.eflag = FALSE;
   return
     opi_ast_let(&var, &try, 1,
-      opi_ast_match_new_simple("undefined", vars, fields, 1, opi_ast_var(" eor tmp "),
+      opi_ast_match_new_simple("Undefined", vars, fields, 1, opi_ast_var(" eor tmp "),
         els, opi_ast_var(" eor tmp ")));
 }
 
@@ -397,7 +446,7 @@ opi_ast_when(OpiAst *test_expr,
 
   return
     opi_ast_let(&tmp, &test_expr, 1,
-      opi_ast_match_new_simple("undefined", else_vars, fields, 1, opi_ast_var(tmp),
+      opi_ast_match_new_simple("Undefined", else_vars, fields, 1, opi_ast_var(tmp),
         else_expr ? else_expr : opi_ast_return(opi_ast_var(tmp)),
         opi_ast_let(then_vars, (OpiAst*[]){ opi_ast_var(tmp) }, 1,
           then_expr)));
@@ -411,6 +460,15 @@ opi_ast_binop(int opc, OpiAst *lhs, OpiAst *rhs)
   node->binop.opc = opc;
   node->binop.lhs = lhs;
   node->binop.rhs = rhs;
+  return node;
+}
+
+OpiAst*
+opi_ast_yield(OpiAst *val)
+{
+  OpiAst *node = malloc(sizeof(OpiAst));
+  node->tag = OPI_AST_YIELD;
+  node->yield = val;
   return node;
 }
 

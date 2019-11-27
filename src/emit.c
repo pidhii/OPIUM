@@ -158,10 +158,10 @@ emit_match_onelevel_with_then(OpiIr *then, OpiIr *els, int expr,
 {
   // IF
   OpiIf iff;
+  int test = opi_bytecode_testty(bc, expr, pattern->unpack.type);
   // PHI
   int phi = opi_bytecode_phi(bc);
   // THEN
-  int test = opi_bytecode_testty(bc, expr, pattern->unpack.type);
   opi_bytecode_if(bc, test, &iff);
   // load fields
   int vals[pattern->unpack.n];
@@ -189,6 +189,13 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
   switch (ir->tag) {
     case OPI_IR_CONST:
       return opi_bytecode_const(bc, ir->cnst);
+
+    case OPI_IR_YIELD:
+    {
+      int val = emit(ir->yield, bc, stack, FALSE);
+      opi_bytecode_yield(bc, val);
+      return opi_bytecode_const(bc, opi_nil);
+    }
 
     case OPI_IR_VAR:
       if (stack->size < ir->var) {
@@ -363,6 +370,7 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
         }
 
         // general case with nested unpacks
+        int stack_start = stack->size;
         int var = opi_bytecode_var(bc);
         opi_bytecode_set(bc, var, 1);
         int phi = opi_bytecode_phi(bc);
@@ -374,6 +382,7 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
         // tail-call position
         int then_ret = emit(ir->match.then, bc, stack, tc);
         opi_bytecode_dup(bc, phi, then_ret);
+        stack_pop(stack, stack->size - stack_start);
         // close if-statements
         for (int i = iffs.len - 1; i >= 0; --i) {
           OpiIf *iff = iffs.data + i;

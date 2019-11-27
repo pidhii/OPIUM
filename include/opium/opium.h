@@ -64,7 +64,7 @@ typedef OpiType *opi_type_t;
 typedef struct OpiHeader_s OpiHeader;
 typedef OpiHeader *opi_t;
 
-typedef uintptr_t opi_rc_t;
+typedef struct OpiFlatInsn_s OpiFlatInsn;
 
 typedef struct OpiLocation_s {
   char *path;
@@ -113,7 +113,7 @@ extern
 opi_type_t opi_type_type;
 
 opi_type_t
-opi_type(const char *name);
+opi_type_new(const char *name);
 
 void
 opi_type_delete(opi_type_t ty);
@@ -154,12 +154,20 @@ opi_type_get_field_idx(opi_type_t ty, const char *field);
 size_t
 opi_type_get_field_offset(opi_type_t ty, size_t field_idx);
 
+size_t
+opi_type_get_nfields(opi_type_t ty);
+
+char* const*
+opi_type_get_fields(opi_type_t ty);
+
 void*
 opi_type_get_data(opi_type_t ty);
 
 /* ==========================================================================
  * Cell
  */
+typedef uint_fast32_t opi_rc_t;
+
 struct OpiHeader_s {
   OpiType *type;
   opi_rc_t rc;
@@ -289,32 +297,34 @@ opi_get(size_t offs)
 /* ==========================================================================
  * Number
  */
-typedef struct OpiNumber_s {
+typedef struct OpiNum_s {
   OpiHeader header;
   long double val;
-} OpiNumber;
+} OpiNum;
 
 extern
-opi_type_t opi_number_type;
+opi_type_t opi_num_type;
 
 void
-opi_number_init(void);
+opi_num_init(void);
 
 void
-opi_number_cleanup(void);
+opi_num_cleanup(void);
 
 static inline opi_t
-opi_number(long double x)
+opi_num_new(long double x)
 {
-  OpiNumber *num = opi_h2w();
-  opi_init_cell(num, opi_number_type);
+  OpiNum *num = opi_h2w();
+  opi_init_cell(num, opi_num_type);
   num->val = x;
   return (opi_t)num;
 }
 
 static inline long double
-opi_number_get_value(opi_t cell)
-{ return opi_as(cell, OpiNumber).val; }
+opi_num_get_value(opi_t cell)
+{
+  return opi_as(cell, OpiNum).val;
+}
 
 /* ==========================================================================
  * Symbol
@@ -372,7 +382,7 @@ opi_undefined_get_trace(opi_t x)
  * Nil
  */
 extern
-opi_type_t opi_null_type;
+opi_type_t opi_nil_type;
 
 void
 opi_nil_init(void);
@@ -684,6 +694,56 @@ opi_lazy_get_value(opi_t x)
 }
 
 /* ==========================================================================
+ * Generator
+ */
+extern opi_type_t
+opi_gen_type;
+
+typedef struct OpiState_s {
+  opi_t this_fn;
+  OpiBytecode *bc;
+  OpiFlatInsn *ip;
+  opi_t *reg;
+  size_t reg_cap;
+} OpiState;
+
+void
+opi_state_destroy(OpiState *state);
+
+typedef struct OpiGen_s {
+  OpiHeader header;
+  opi_t val;
+  union {
+    OpiState *state;
+    opi_t next;
+  };
+  int is_done;
+} OpiGen;
+
+void
+opi_gen_init(void);
+
+void
+opi_gen_cleanup(void);
+
+static inline opi_t
+opi_gen_new(opi_t val, OpiState *state)
+{
+  OpiGen *gen = malloc(sizeof(OpiGen));
+  gen->val = val; // incremented by VM
+  gen->state = state;
+  gen->is_done = FALSE;
+  opi_init_cell(gen, opi_gen_type);
+  return (opi_t)gen;
+}
+
+static inline opi_t
+opi_gen_get_val(opi_t gen)
+{
+  return opi_as(gen, OpiGen).val;
+}
+
+/* ==========================================================================
  * Vectors
  */
 typedef struct OpiSVector_s OpiSVector;
@@ -749,6 +809,7 @@ typedef enum OpiAstTag_e {
   OPI_AST_USE,
   OPI_AST_RETURN,
   OPI_AST_BINOP,
+  OPI_AST_YIELD,
 } OpiAstTag;
 
 typedef enum OpiPatternTag_e {
@@ -792,6 +853,7 @@ struct OpiAst_s {
     struct { char *old, *new; } use;
     OpiAst *ret;
     struct { int opc; OpiAst *lhs, *rhs; } binop;
+    OpiAst *yield;
   };
 };
 
@@ -835,6 +897,9 @@ opi_ast_apply(OpiAst *fn, OpiAst **args, size_t nargs);
 
 OpiAst*
 opi_ast_fn(char **args, size_t nargs, OpiAst *body);
+
+OpiAst*
+opi_ast_fn_new_with_patterns(OpiAstPattern **args, size_t nargs, OpiAst *body);
 
 OpiAst*
 opi_ast_let(char **vars, OpiAst **vals, size_t n, OpiAst *body);
@@ -894,6 +959,9 @@ opi_ast_return(OpiAst *val);
 OpiAst*
 opi_ast_binop(int opc, OpiAst *lhs, OpiAst *rhs);
 
+OpiAst*
+opi_ast_yield(OpiAst *val);
+
 /* ==========================================================================
  * Context
  */
@@ -947,8 +1015,9 @@ opi_alist_push(OpiAlist *a, const char *var, const char *map);
 void
 opi_alist_pop(OpiAlist *a, size_t n);
 
-typedef struct OpiBuilder_s {
-  int is_derived;
+typedef struct OpiBuilder_s OpiBuilder;
+struct OpiBuilder_s {
+  OpiBuilder *parent;
 
   OpiContext *ctx;
 
@@ -965,7 +1034,11 @@ typedef struct OpiBuilder_s {
 
   struct cod_strvec *type_names;
   struct cod_ptrvec *types;
-} OpiBuilder;
+};
+
+static inline int
+opi_builder_is_derived(const OpiBuilder *bldr)
+{ return bldr->parent != NULL; }
 
 void
 opi_builder_init(OpiBuilder *bldr, OpiContext *ctx);
@@ -996,6 +1069,9 @@ opi_builder_assoc(OpiBuilder *bldr, const char *var);
 
 const char*
 opi_builder_try_assoc(OpiBuilder *bldr, const char *var);
+
+int
+opi_builder_find_deep(OpiBuilder *bldr, const char *var);
 
 typedef struct OpiScope_s {
   size_t nvars1, ntypes1, vasize1;
@@ -1037,6 +1113,7 @@ typedef enum OpiIrTag_e {
   OPI_IR_MATCH,
   OPI_IR_RETURN,
   OPI_IR_BINOP,
+  OPI_IR_YIELD,
 } OpiIrTag;
 
 typedef struct OpiIrPattern_s OpiIrPattern;
@@ -1069,6 +1146,7 @@ struct OpiIr_s {
     struct { OpiIrPattern *pattern; OpiIr *expr, *then, *els; } match;
     OpiIr *ret;
     struct { int opc; OpiIr *lhs, *rhs; } binop;
+    OpiIr *yield;
   };
 };
 
@@ -1125,6 +1203,9 @@ opi_ir_return(OpiIr *val);
 
 OpiIr*
 opi_ir_binop(int opc, OpiIr *lhs, OpiIr *rhs);
+
+OpiIr*
+opi_ir_yield(OpiIr *val);
 
 /* ==========================================================================
  * Bytecode
@@ -1231,15 +1312,18 @@ typedef enum OpiOpc_e {
   OPI_OPC_SET,
 #define OPI_SET_REG(insn) (insn)->reg[0]
 #define OPI_SET_ARG_VAL(insn) (insn)->reg[1]
+
+  OPI_OPC_YIELD,
+#define OPI_YIELD_REG_RET(insn) (insn)->reg[0]
 } OpiOpc;
 
-typedef struct OpiFlatInsn_s {
+struct OpiFlatInsn_s {
   OpiOpc opc;
   union {
     uintptr_t reg[3];
     void *ptr[3];
   };
-} OpiFlatInsn;
+};
 
 typedef struct OpiInsn_s OpiInsn;
 struct OpiInsn_s {
@@ -1373,6 +1457,9 @@ opi_insn_var(int reg);
 
 OpiInsn*
 opi_insn_set(int reg, int val);
+
+OpiInsn*
+opi_insn_yield(int ret);
 
 typedef enum OpiValType_e {
   // Value is "born" in local scope with RC petentionaly set to zero at the
@@ -1541,9 +1628,14 @@ opi_bytecode_var(OpiBytecode *bc);
 void
 opi_bytecode_set(OpiBytecode *bc, int reg, int val);
 
-#define OPI_VM_REG_MAX 0x200
+void
+opi_bytecode_yield(OpiBytecode *bc, int ret);
+
 opi_t
 opi_vm(OpiBytecode *bc);
+
+opi_t
+opi_vm_continue(OpiState *state);
 
 #define OPI_FN()                                                         \
   struct { int nargs, iarg; opi_t arg[opi_nargs]; opi_t ret; } opi_this; \
@@ -1578,7 +1670,7 @@ opi_vm(OpiBytecode *bc);
     return opi_this.ret;                     \
   } while (0)
 
-#define OPI_NUM(x) opi_number_get_value(x)
+#define OPI_NUM(x) opi_num_get_value(x)
 #define OPI_STR(x) opi_string_get_value(x)
 #define OPI_STRLEN(x) opi_string_get_length(x)
 #define OPI_SYM(x) opi_symbol_get_string(x)

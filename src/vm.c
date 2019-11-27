@@ -5,15 +5,33 @@
 #include <string.h>
 #include <math.h>
 
+static opi_t
+vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t *r_stack, size_t r_cap,
+    opi_t this_fn, OpiState *stateptr);
+
+opi_t
+opi_vm_continue(OpiState *state)
+{
+  return vm(state->bc, state->ip, state->reg, NULL, state->reg_cap, state->this_fn, state);
+}
+
 opi_t
 opi_vm(OpiBytecode *bc)
 {
-  opi_assert(bc->nvals <= OPI_VM_REG_MAX);
-  opi_t r[OPI_VM_REG_MAX];
+  OpiFlatInsn *ip = bc->tape;
+  opi_t r_stack[bc->nvals];
+  size_t r_cap = bc->nvals;
+  opi_t *r = r_stack;
+  opi_t this_fn = opi_current_fn;
+  return vm(bc, ip, r, r_stack, r_cap, this_fn, NULL);
+}
+
+static opi_t
+vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t *r_stack, size_t r_cap,
+    opi_t this_fn, OpiState *stateptr)
+{
   OpiRecScope *scp = NULL;
   size_t scpcnt = 0;
-
-  OpiFlatInsn *ip = bc->tape;
 
   while (1) {
     switch (ip->opc) {
@@ -30,10 +48,10 @@ opi_vm(OpiBytecode *bc)
       {                                                                                                  \
         opi_t lhs = r[OPI_BINOP_REG_LHS(ip)];                                                            \
         opi_t rhs = r[OPI_BINOP_REG_RHS(ip)];                                                            \
-        if (opi_unlikely(lhs->type != opi_number_type || rhs->type != opi_number_type))                  \
+        if (opi_unlikely(lhs->type != opi_num_type || rhs->type != opi_num_type))                  \
           r[OPI_BINOP_REG_OUT(ip)] = opi_undefined(opi_symbol("type-error"));                            \
         else                                                                                             \
-          r[OPI_BINOP_REG_OUT(ip)] = opi_number(opi_number_get_value(lhs) op opi_number_get_value(rhs)); \
+          r[OPI_BINOP_REG_OUT(ip)] = opi_num_new(opi_num_get_value(lhs) op opi_num_get_value(rhs)); \
         break;                                                                                           \
       }
       NUM_BINOP(OPI_OPC_ADD, +)
@@ -44,10 +62,10 @@ opi_vm(OpiBytecode *bc)
       {
         opi_t lhs = r[OPI_BINOP_REG_LHS(ip)];
         opi_t rhs = r[OPI_BINOP_REG_RHS(ip)];
-        if (opi_unlikely(lhs->type != opi_number_type || rhs->type != opi_number_type))
+        if (opi_unlikely(lhs->type != opi_num_type || rhs->type != opi_num_type))
           r[OPI_BINOP_REG_OUT(ip)] = opi_undefined(opi_symbol("type-error"));
         else
-          r[OPI_BINOP_REG_OUT(ip)] = opi_number(fmodl(opi_number_get_value(lhs), opi_number_get_value(rhs)));
+          r[OPI_BINOP_REG_OUT(ip)] = opi_num_new(fmodl(opi_num_get_value(lhs), opi_num_get_value(rhs)));
         break;
       }
 
@@ -56,10 +74,10 @@ opi_vm(OpiBytecode *bc)
       {                                                                                                             \
         opi_t lhs = r[OPI_BINOP_REG_LHS(ip)];                                                                       \
         opi_t rhs = r[OPI_BINOP_REG_RHS(ip)];                                                                       \
-        if (opi_unlikely(lhs->type != opi_number_type || rhs->type != opi_number_type))                             \
+        if (opi_unlikely(lhs->type != opi_num_type || rhs->type != opi_num_type))                             \
           r[OPI_BINOP_REG_OUT(ip)] = opi_undefined(opi_symbol("type-error"));                                       \
         else                                                                                                        \
-          r[OPI_BINOP_REG_OUT(ip)] = opi_number_get_value(lhs) op opi_number_get_value(rhs) ? opi_true : opi_false; \
+          r[OPI_BINOP_REG_OUT(ip)] = opi_num_get_value(lhs) op opi_num_get_value(rhs) ? opi_true : opi_false; \
         break;                                                                                                      \
       }
       NUM_CMPOP(OPI_OPC_NUMEQ, ==)
@@ -127,10 +145,15 @@ opi_vm(OpiBytecode *bc)
         if (opi_is_lambda(fn) & opi_test_arity(opi_fn_get_arity(fn), nargs)) {
           // Tail Call
           OpiLambda *lam = opi_fn_get_data(fn);
-          opi_current_fn = fn;
+          this_fn = opi_current_fn = fn;
           bc = lam->bc;
           ip = bc->tape;
-          opi_assert(bc->nvals <= OPI_VM_REG_MAX);
+          if (bc->nvals > r_cap) {
+            if (r == r_stack)
+              r = malloc(sizeof(opi_t) * bc->nvals);
+            else
+              r = realloc(r, sizeof(opi_t) * (r_cap = bc->nvals));
+          }
           continue;
         } else {
           // Fall back to default APPLY
@@ -140,7 +163,49 @@ opi_vm(OpiBytecode *bc)
       }
 
       case OPI_OPC_RET:
-        return r[OPI_RET_REG_VAL(ip)];
+      {
+        opi_t ret = r[OPI_RET_REG_VAL(ip)];
+        if (r != r_stack)
+          free(r);
+        if (stateptr) {
+          opi_drop(ret);
+          return NULL;
+        } else {
+          return ret;
+        }
+      }
+
+      case OPI_OPC_YIELD:
+      {
+        if (r == r_stack) {
+          r = malloc(sizeof(opi_t) * r_cap);
+          memcpy(r, r_stack, sizeof(opi_t) * r_cap);
+        }
+
+        int is_cont = stateptr != NULL;
+
+        opi_t ret = r[OPI_YIELD_REG_RET(ip)];
+        opi_inc_rc(ret);
+
+        if (!is_cont)
+          stateptr = malloc(sizeof(OpiState));
+
+        opi_inc_rc(this_fn);
+        if (is_cont)
+          opi_unref(stateptr->this_fn);
+
+        stateptr->this_fn = this_fn;
+
+        stateptr->bc = bc;
+        stateptr->ip = ip + 1;
+        stateptr->reg = r;
+        stateptr->reg_cap = r_cap;
+
+        if (is_cont)
+          return ret;
+        else
+          return opi_gen_new(ret, stateptr);
+      }
 
       case OPI_OPC_PUSH:
         opi_push(r[OPI_PUSH_REG_VAL(ip)]);
