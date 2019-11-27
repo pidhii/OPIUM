@@ -104,7 +104,6 @@ opi_insn_delete1(OpiInsn *insn)
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
     case OPI_OPC_VAR:
     case OPI_OPC_SET:
-    case OPI_OPC_YIELD:
       break;
 
     case OPI_OPC_ENDSCP:
@@ -589,15 +588,6 @@ opi_insn_set(int reg, int val)
   return insn;
 }
 
-OpiInsn*
-opi_insn_yield(int ret)
-{
-  OpiInsn *insn = malloc(sizeof(OpiInsn));
-  insn->opc = OPI_OPC_YIELD;
-  OPI_YIELD_REG_RET(insn) = ret;
-  return insn;
-}
-
 int
 opi_insn_is_using(OpiInsn *insn, int vid)
 {
@@ -633,8 +623,6 @@ opi_insn_is_using(OpiInsn *insn, int vid)
     case OPI_OPC_APPLYTC:
       return (int)OPI_APPLY_REG_FN(insn) == vid;
 
-    case OPI_OPC_YIELD:
-      return (int)OPI_YIELD_REG_RET(insn) == vid;
     case OPI_OPC_RET:
       return (int)OPI_RET_REG_VAL(insn) == vid;
 
@@ -713,8 +701,6 @@ opi_insn_is_killing(OpiInsn *insn, int vid)
     case OPI_OPC_UNREF:
       return FALSE;
 
-    case OPI_OPC_YIELD:
-      return (int)OPI_YIELD_REG_RET(insn) == vid;
     case OPI_OPC_RET:
       return (int)OPI_RET_REG_VAL(insn) == vid;
 
@@ -758,7 +744,6 @@ opi_insn_is_creating(OpiInsn *insn, int vid)
     case OPI_OPC_GUARD:
     case OPI_OPC_VAR:
     case OPI_OPC_SET:
-    case OPI_OPC_YIELD:
       return FALSE;
 
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
@@ -1034,8 +1019,4 @@ opi_bytecode_var(OpiBytecode *bc)
 void
 opi_bytecode_set(OpiBytecode *bc, int reg, int val)
 { opi_bytecode_write(bc, opi_insn_set(reg, val)); }
-
-void
-opi_bytecode_yield(OpiBytecode *bc, int ret)
-{ opi_bytecode_write(bc, opi_insn_yield(ret)); }
 

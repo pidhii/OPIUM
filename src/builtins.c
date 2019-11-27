@@ -848,59 +848,6 @@ number(void)
   OPI_RETURN(opi_num_new(num));
 }
 
-static opi_t
-next(void)
-{
-  opi_t g = opi_pop();
-  if (g->type != opi_gen_type) {
-    return g;
-  }
-
-  OpiGen *gen = opi_as_ptr(g);
-  if (gen->is_done) {
-    /*opi_debug("next (1)\n");*/
-    opi_t ret = opi_cons(gen->val, gen->next);
-    opi_drop(g);
-    return ret;
-
-  } else {
-    if (g->rc == 0) {
-      /*opi_debug("next (2)\n");*/
-      opi_t this = gen->val;
-      opi_t next = opi_vm_continue(gen->state);
-      if (next) {
-        gen->val = next; // incremented by VM
-        opi_dec_rc(this);
-        return opi_cons(this, g);
-      } else {
-        opi_t ret = opi_cons(this, opi_nil);
-        gen->is_done = TRUE;
-        opi_state_destroy(gen->state);
-        free(gen->state);
-        gen->next = NULL;
-        opi_drop(g);
-        return ret;
-      }
-
-    } else {
-      /*opi_debug("next (3)\n");*/
-      opi_t next = opi_vm_continue(gen->state); // incremented by VM
-      if (next) {
-        opi_t next_gen = opi_gen_new(next, gen->state);
-        gen->is_done = TRUE;
-        opi_inc_rc(gen->next = next_gen);
-        return opi_cons(gen->val, next_gen);
-      } else {
-        gen->is_done = TRUE;
-        opi_state_destroy(gen->state);
-        free(gen->state);
-        opi_inc_rc(gen->next = opi_nil);
-        return opi_cons(gen->val, opi_nil);
-      }
-    }
-  }
-}
-
 void
 opi_builtins(OpiBuilder *bldr)
 {
@@ -964,6 +911,4 @@ opi_builtins(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "exit", opi_fn("exit", exit_, 1));
 
   opi_builder_def_const(bldr, "__builtin_sr", opi_fn("search_replace", search_replace, 4));
-
-  opi_builder_def_const(bldr, "next", opi_fn("next", next, 1));
 }

@@ -84,8 +84,6 @@ opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "File", opi_file_type);
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "Gen", opi_gen_type);
-  cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "svector", opi_svector_type);
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "dvector", opi_dvector_type);
@@ -483,9 +481,6 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
   switch (ast->tag) {
     case OPI_AST_CONST:
       return opi_ir_const(ast->cnst);
-
-    case OPI_AST_YIELD:
-      return opi_ir_yield(opi_builder_build_ir(bldr, ast->yield));
 
     case OPI_AST_VAR:
     {
@@ -924,10 +919,6 @@ opi_ir_delete(OpiIr *node)
       opi_unref(node->cnst);
       break;
 
-    case OPI_IR_YIELD:
-      opi_ir_delete(node->yield);
-      break;
-
     case OPI_IR_VAR:
       break;
 
@@ -1145,15 +1136,6 @@ opi_ir_binop(int opc, OpiIr *lhs, OpiIr *rhs)
   node->binop.opc = opc;
   node->binop.lhs = lhs;
   node->binop.rhs = rhs;
-  return node;
-}
-
-OpiIr*
-opi_ir_yield(OpiIr *val)
-{
-  OpiIr *node = malloc(sizeof(OpiIr));
-  node->tag = OPI_IR_YIELD;
-  node->yield = val;
   return node;
 }
 

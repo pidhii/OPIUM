@@ -98,7 +98,6 @@ return { return RETURN; }
 fn { return FN; }
 lazy { return LAZY; }
 assert { return ASSERT; }
-yield { return YIELD; }
 
 begin {
   g_begin_cnt += 1;

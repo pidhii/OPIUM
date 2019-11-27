@@ -190,13 +190,6 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
     case OPI_IR_CONST:
       return opi_bytecode_const(bc, ir->cnst);
 
-    case OPI_IR_YIELD:
-    {
-      int val = emit(ir->yield, bc, stack, FALSE);
-      opi_bytecode_yield(bc, val);
-      return opi_bytecode_const(bc, opi_nil);
-    }
-
     case OPI_IR_VAR:
       if (stack->size < ir->var) {
         opi_error("[ir:emit:var] try reference %zu/%zu\n", ir->var, stack->size);

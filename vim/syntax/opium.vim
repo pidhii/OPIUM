@@ -73,7 +73,6 @@ syn keyword opiAssert assert
 syn keyword opiSpecial commandline environment
 
 syn keyword opiKeyword if unless when then else
-syn keyword opiKeyword yield
 syn keyword opiLazy lazy
 
 syn match opiOperator /[-+=*/%><&|.][-+=*/%><&|.!]*/

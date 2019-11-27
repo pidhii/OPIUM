@@ -23,10 +23,6 @@ opi_ast_delete(OpiAst *node)
       opi_unref(node->cnst);
       break;
 
-    case OPI_AST_YIELD:
-      opi_ast_delete(node->yield);
-      break;
-
     case OPI_AST_VAR:
       free(node->var);
       break;
@@ -460,15 +456,6 @@ opi_ast_binop(int opc, OpiAst *lhs, OpiAst *rhs)
   node->binop.opc = opc;
   node->binop.lhs = lhs;
   node->binop.rhs = rhs;
-  return node;
-}
-
-OpiAst*
-opi_ast_yield(OpiAst *val)
-{
-  OpiAst *node = malloc(sizeof(OpiAst));
-  node->tag = OPI_AST_YIELD;
-  node->yield = val;
   return node;
 }
 

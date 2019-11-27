@@ -145,7 +145,7 @@ int opi_start_token;
 
 %right ';'
 
-%right LAZY ASSERT YIELD
+%right LAZY ASSERT
 
 %left IF UNLESS WHEN
 %precedence THEN
@@ -311,7 +311,6 @@ Stmnt
     $$ = opi_ast_return($2);
   }
   | BEG Expr END { $$ = $2; }
-  | YIELD Expr { $$ = opi_ast_yield($2); }
 ;
 
 Expr

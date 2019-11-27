@@ -108,7 +108,6 @@ opi_init(void)
   opi_lazy_init();
   opi_table_init();
   opi_regex_init();
-  opi_gen_init();
   opi_vectors_init();
 }
 
@@ -127,7 +126,6 @@ opi_cleanup(void)
   opi_lazy_cleanup();
   opi_table_cleanup();
   opi_regex_cleanup();
-  opi_gen_cleanup();
   opi_vectors_cleanup();
 
   opi_lexer_cleanup();
@@ -1199,45 +1197,6 @@ opi_lazy(opi_t x)
   lazy->is_ready = FALSE;
   opi_init_cell(lazy, opi_lazy_type);
   return (opi_t)lazy;
-}
-
-/******************************************************************************/
-opi_type_t
-opi_gen_type;
-
-void
-opi_state_destroy(OpiState *state)
-{
-  opi_unref(state->this_fn);
-}
-
-static void
-gen_delete(opi_type_t type, opi_t x)
-{
-  OpiGen *gen = opi_as_ptr(x);
-  if (gen->val)
-    opi_unref(gen->val);
-  if (!gen->is_done) {
-    opi_error("unfinished state\n");
-    opi_state_destroy(gen->state);
-  } else if (gen->next) {
-    opi_unref(gen->next);
-  }
-  free(gen->state);
-  free(gen);
-}
-
-void
-opi_gen_init(void)
-{
-  opi_gen_type = opi_type_new("Gen");
-  opi_type_set_delete_cell(opi_gen_type, gen_delete);
-}
-
-void
-opi_gen_cleanup(void)
-{
-  opi_type_delete(opi_gen_type);
 }
 
 /******************************************************************************/
