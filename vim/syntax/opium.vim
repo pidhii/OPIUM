@@ -9,18 +9,13 @@ endif
 set comments=sr:{-,mb:-,ex:-}
 
 set iskeyword+=?,'
-syn match opiIdentifier /\<[a-zA-Z_][a-zA-Z0-9_]*['?]?\>/
+syn match opiIdentifier /\<[a-z_][a-zA-Z0-9_]*['?]?\>/
 syn match opiType       /\<[A-Z][a-zA-Z0-9_]*\>/
 syn match opiSymbol     /'[^ \t\n(){}\[\]'";,:]\+/
 
+syn region opiModuleDef matchgroup=opiModule start=/\<module\>/ end=/\<end\>/ contains=TOP
+
 syn keyword opiType fn
-
-syn match opiIdentifier /\<\k\+::/he=e-2 contains=opiNamespaceDots nextgroup=opiIdentifier
-syn match opiNamespaceDots /::/
-
-syn keyword opiNamespace namespace nextgroup=opiNamespaceName skipwhite skipnl
-syn match   opiNamespaceName /\k\+/ contained nextgroup=opiBraces skipwhite skipnl
-syn region  opiBraces matchgroup=opiDelimiter start=/{/ end=/}/ contains=TOP skipwhite skipnl contained
 
 syn region opiTable matchgroup=Type start=/{/ end=/}/ contains=TOP skipwhite skipnl
 
@@ -180,10 +175,7 @@ syn match SpecialChar "\\%" containedin=String contained
 
 
 
-hi link opiNamespace     Define
-"hi link opiNamespaceName Identifier
-"hi link opiNamespaceDots Operator
-"hi link opiNamespaceRef  Identifier
+hi link opiModule Define
 hi link opiUse Define
 
 "hi link opiStruct     StorageClass

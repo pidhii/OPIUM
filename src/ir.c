@@ -488,17 +488,17 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       size_t offs;
 
       char *name0 = NULL;
-      char *p = strchr(ast->var, ':');
-      if (p && p[1] == ':') {
+      char *p = strchr(ast->var, '.');
+      if (p) {
         size_t len = p - ast->var;
         char namespace[len + 1];
         memcpy(namespace, ast->var, len);
         namespace[len] = 0;
         const char *map = opi_builder_try_assoc(bldr, namespace);
         if (map) {
-          len =  strlen(map) + 2 + strlen(p + 2);
+          len =  strlen(map) + 1 + strlen(p + 1);
           name0 = malloc(len + 1);
-          sprintf(name0, "%s::%s", map, p + 2);
+          sprintf(name0, "%s.%s", map, p + 1);
         }
       }
 
