@@ -153,7 +153,7 @@ int opi_start_token;
 %type<ast> if unless when
 %token LOAD
 %token DCOL
-%token NAMESPACE
+%token MODULE
 %token USE AS
 %nonassoc RETURN
 %token DOTDOT
@@ -200,7 +200,7 @@ int opi_start_token;
 %right ':' PLUSPLUS
 %right '+' '-'
 %left '*' '/' '%'
-%right COMPOSE
+%right '.'
 %right NOT
 %left TABLEREF
 
@@ -252,10 +252,10 @@ Atom
 SymbolOrType: Symbol | Type;
 Symbol
   : SYMBOL
-  | Symbol DCOL SYMBOL {
-    size_t len = strlen($1) + 2 + strlen($3);
+  | Type '.' SYMBOL {
+    size_t len = strlen($1) + 1 + strlen($3);
     $$ = malloc(len + 1);
-    sprintf($$, "%s::%s", $1, $3);
+    sprintf($$, "%s.%s", $1, $3);
     free($1);
     free($3);
   }
@@ -263,10 +263,10 @@ Symbol
 
 Type
   : TYPE
-  | Symbol DCOL TYPE {
-    size_t len = strlen($1) + 2 + strlen($3);
+  | Type '.' TYPE {
+    size_t len = strlen($1) + 1 + strlen($3);
     $$ = malloc(len + 1);
-    sprintf($$, "%s::%s", $1, $3);
+    sprintf($$, "%s.%s", $1, $3);
     free($1);
     free($3);
   }
@@ -404,7 +404,7 @@ Expr
   | Expr '/' Expr { $$ = opi_ast_binop(OPI_OPC_DIV, $1, $3); }
   | Expr '%' Expr { $$ = opi_ast_binop(OPI_OPC_MOD, $1, $3); }
   | Expr ':' Expr { $$ = opi_ast_binop(OPI_OPC_CONS, $1, $3); }
-  | Expr COMPOSE Expr {
+  | Expr '.' Expr {
     OpiAst *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("."), p, 2);
     $$->apply.loc = location(&@$);
@@ -565,13 +565,13 @@ patterns
     cod_strvec_push(&$$.fields, $2);
     cod_vec_push($$.patterns, $4);
     free($2);
-  } 
+  }
   | patterns SYMBOL ',' {
     $$ = $1;
     cod_strvec_push(&$$.fields, $2);
     cod_vec_push($$.patterns, opi_ast_pattern_new_ident($2));
     free($2);
-  } 
+  }
 ;
 
 anylambda: lambda | valambda;
@@ -676,10 +676,10 @@ block_stmnt_only
     $$ = opi_ast_load(OPI_STR($2->cnst));
     opi_ast_delete($2);
   }
-  | NAMESPACE SYMBOL '{' block '}' {
+  | MODULE TYPE '=' block END {
     $$ = $4;
-    char prefix[strlen($2) + 3];
-    sprintf(prefix, "%s::", $2);
+    char prefix[strlen($2) + 2];
+    sprintf(prefix, "%s.", $2);
     opi_ast_block_set_namespace($$, prefix);
     opi_ast_block_set_drop($$, FALSE);
     free($2);
@@ -701,15 +701,15 @@ block_stmnt_only
     free($4);
   }
   | USE SymbolOrType {
-    char *p = strrchr($2, ':');
+    char *p = strrchr($2, '.');
     opi_assert(p);
     $$ = opi_ast_use($2, p + 1);
     free($2);
   }
-  | USE Symbol DCOL '*' {
-    size_t len = strlen($2) + 2;
+  | USE Type '.' '*' {
+    size_t len = strlen($2) + 1;
     char buf[len + 1];
-    sprintf(buf, "%s::", $2);
+    sprintf(buf, "%s.", $2);
     $$ = opi_ast_use(buf, "*");
     free($2);
   }

@@ -90,7 +90,7 @@ in { return IN; }
 and { return AND; }
 or { return OR; }
 load { return LOAD; }
-namespace { return NAMESPACE; }
+module { return MODULE; }
 struct { return STRUCT; }
 use { return USE; }
 as { return AS; }
@@ -105,7 +105,7 @@ begin {
   return BEG;
 }
 end {
-  if (--g_begin_cnt)
+  if (g_begin_cnt && --g_begin_cnt)
     opi_start_token = ';';
   return END;
 }
@@ -214,7 +214,7 @@ is[ \n\t]+not { return ISNOT; }
 "/=" { return NUMNE; }
 "++" { return PLUSPLUS; }
 ".." { return DOTDOT; }
-"." { return COMPOSE; }
+"." { return '.'; }
 "#" { return TABLEREF; }
 
 "{" {
