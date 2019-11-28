@@ -5,28 +5,7 @@
 #include <string.h>
 #include <math.h>
 
-static opi_t
-vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t *r_stack, size_t r_cap,
-    opi_t this_fn, OpiState *stateptr);
-
-opi_t
-opi_vm_continue(OpiState *state)
-{
-  return vm(state->bc, state->ip, state->reg, NULL, state->reg_cap, state->this_fn, state);
-}
-
-opi_t
-opi_vm(OpiBytecode *bc)
-{
-  OpiFlatInsn *ip = bc->tape;
-  opi_t r_stack[bc->nvals];
-  size_t r_cap = bc->nvals;
-  opi_t *r = r_stack;
-  opi_t this_fn = opi_current_fn;
-  return vm(bc, ip, r, r_stack, r_cap, this_fn, NULL);
-}
-
-static opi_t
+static inline __attribute__((always_inline)) opi_t
 vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t *r_stack, size_t r_cap,
     opi_t this_fn, OpiState *stateptr)
 {
@@ -177,7 +156,7 @@ vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t *r_stack, size_t r_cap,
 
       case OPI_OPC_YIELD:
       {
-        if (r == r_stack) {
+        if (r_stack && r == r_stack) {
           r = malloc(sizeof(opi_t) * r_cap);
           memcpy(r, r_stack, sizeof(opi_t) * r_cap);
         }
@@ -314,5 +293,22 @@ vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t *r_stack, size_t r_cap,
 
     ip += 1;
   }
+}
+
+opi_t
+opi_vm_continue(OpiState *state)
+{
+  return vm(state->bc, state->ip, state->reg, NULL, state->reg_cap, state->this_fn, state);
+}
+
+opi_t
+opi_vm(OpiBytecode *bc)
+{
+  OpiFlatInsn *ip = bc->tape;
+  opi_t r_stack[bc->nvals];
+  size_t r_cap = bc->nvals;
+  opi_t *r = r_stack;
+  opi_t this_fn = opi_current_fn;
+  return vm(bc, ip, r, r_stack, r_cap, this_fn, NULL);
 }
 
