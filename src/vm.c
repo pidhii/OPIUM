@@ -146,12 +146,7 @@ vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t *r_stack, size_t r_cap,
         opi_t ret = r[OPI_RET_REG_VAL(ip)];
         if (r != r_stack)
           free(r);
-        if (stateptr) {
-          opi_drop(ret);
-          return NULL;
-        } else {
-          return ret;
-        }
+        return ret;
       }
 
       case OPI_OPC_YIELD:
@@ -163,8 +158,7 @@ vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t *r_stack, size_t r_cap,
 
         int is_cont = stateptr != NULL;
 
-        opi_t ret = r[OPI_YIELD_REG_RET(ip)];
-        opi_inc_rc(ret);
+        opi_drop(r[OPI_YIELD_REG_RET(ip)]);
 
         if (!is_cont)
           stateptr = malloc(sizeof(OpiState));
@@ -180,10 +174,7 @@ vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t *r_stack, size_t r_cap,
         stateptr->reg = r;
         stateptr->reg_cap = r_cap;
 
-        if (is_cont)
-          return ret;
-        else
-          return opi_gen_new(ret, stateptr);
+        return opi_gen_new(stateptr);
       }
 
       case OPI_OPC_PUSH:

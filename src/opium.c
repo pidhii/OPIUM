@@ -1215,16 +1215,15 @@ static void
 gen_delete(opi_type_t type, opi_t x)
 {
   OpiGen *gen = opi_as_ptr(x);
-  if (gen->val)
-    opi_unref(gen->val);
-  if (!gen->is_done) {
+  if (gen->is_done) {
+    if (gen->val)
+      opi_unref(gen->val);
+  } else {
     opi_error("unfinished state\n");
     opi_state_destroy(gen->state);
-  } else if (gen->next) {
-    opi_unref(gen->next);
+    free(gen->state);
   }
-  free(gen->state);
-  free(gen);
+  opi_h2w_free(gen);
 }
 
 void

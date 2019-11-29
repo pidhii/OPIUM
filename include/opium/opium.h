@@ -712,10 +712,9 @@ opi_state_destroy(OpiState *state);
 
 typedef struct OpiGen_s {
   OpiHeader header;
-  opi_t val;
   union {
     OpiState *state;
-    opi_t next;
+    opi_t val;
   };
   int is_done;
 } OpiGen;
@@ -727,20 +726,48 @@ void
 opi_gen_cleanup(void);
 
 static inline opi_t
-opi_gen_new(opi_t val, OpiState *state)
+opi_gen_new(OpiState *state)
 {
-  OpiGen *gen = malloc(sizeof(OpiGen));
-  gen->val = val; // incremented by VM
+  opi_assert(sizeof(OpiGen) == sizeof(OpiH2w));
+  OpiGen *gen = opi_h2w();
   gen->state = state;
   gen->is_done = FALSE;
   opi_init_cell(gen, opi_gen_type);
   return (opi_t)gen;
 }
 
+static inline int
+opi_gen_is_done(opi_t x)
+{
+  return opi_as(x, OpiGen).is_done;
+}
+
+static inline void
+opi_gen_continue(opi_t x)
+{
+  OpiGen *gen = opi_as_ptr(x);
+  
+  opi_t opi_vm_continue(OpiState *state);
+  opi_t val = opi_vm_continue(gen->state);
+  opi_assert(val->type != opi_gen_type);
+  opi_inc_rc(val);
+  gen->is_done = TRUE;
+  opi_state_destroy(gen->state);
+  free(gen->state);
+  gen->val = val;
+}
+
 static inline opi_t
-opi_gen_get_val(opi_t gen)
+opi_gen_get_value(opi_t gen)
 {
   return opi_as(gen, OpiGen).val;
+}
+
+static inline void
+opi_gen_force(opi_t x)
+{
+  if (!opi_gen_is_done(x))
+    opi_gen_continue(x);
 }
 
 /* ==========================================================================

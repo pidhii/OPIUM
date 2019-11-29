@@ -908,29 +908,16 @@ next(void)
   if (g->type != opi_gen_type)
     return g;
 
-  OpiGen *gen = opi_as_ptr(g);
-  if (gen->is_done) {
-    opi_drop(g);
-    return opi_undefined(opi_symbol("end"));
-  }
+  opi_gen_force(g);
 
-  opi_t this = gen->val;
-  opi_t next = opi_vm_continue(gen->state);
-  if (next) {
-    gen->val = next; // incremented by VM
+  opi_t ret = opi_gen_get_value(g);
+  if (g->rc == 0) {
+    OpiGen *gen = opi_as_ptr(g);
+    gen->val = NULL;
     opi_drop(g);
-    opi_dec_rc(this);
-    return this;
-
-  } else {
-    gen->is_done = TRUE;
-    opi_state_destroy(gen->state);
-    free(gen->state);
-    gen->next = NULL;
-    opi_drop(g);
-    opi_dec_rc(this);
-    return this;
+    opi_dec_rc(ret);
   }
+  return ret;
 }
 
 void
