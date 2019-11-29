@@ -63,7 +63,8 @@ syn keyword Function zero? positive? negative? even? odd?
 syn keyword Function match split
 
 
-syn keyword opiKeyword let rec and or in return begin end
+syn keyword opiKeyword let rec and or in return
+syn region opiBegin matchgroup=opiKeyword start=/\<begin\>/ end=/\<end\>/ contains=TOP
 syn keyword opiAssert assert
 syn keyword opiSpecial commandline environment
 
