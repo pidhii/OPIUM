@@ -6,35 +6,35 @@
 uint64_t
 opi_hash(const char* p, size_t n);
 
-struct opi_hash_map_elt {
+typedef struct OpiHashMapElt_s {
   size_t hash;
   opi_t key;
   opi_t val;
-};
+} OpiHashMapElt;
 
-struct opi_hash_map {
+typedef struct OpiHashMap_s {
   size_t size;
   size_t cap;
-  struct opi_hash_map_elt *data;
-};
+  OpiHashMapElt *data;
+} OpiHashMap;
 
 void
-opi_hash_map_init(struct opi_hash_map *map);
+opi_hash_map_init(OpiHashMap *map);
 
 void
-opi_hash_map_destroy(struct opi_hash_map *map);
+opi_hash_map_destroy(OpiHashMap *map);
 
 int
-opi_hash_map_find(struct opi_hash_map *map, opi_t key, size_t hash, struct opi_hash_map_elt* elt);
+opi_hash_map_find(OpiHashMap *map, opi_t key, size_t hash, OpiHashMapElt* elt);
 
 int
-opi_hash_map_find_is(struct opi_hash_map *map, opi_t key, size_t hash, struct opi_hash_map_elt* elt);
+opi_hash_map_find_is(OpiHashMap *map, opi_t key, size_t hash, OpiHashMapElt* elt);
 
 void
-opi_hash_map_insert(struct opi_hash_map *map, opi_t key, size_t hash, opi_t val, struct opi_hash_map_elt *elt);
+opi_hash_map_insert(OpiHashMap *map, opi_t key, size_t hash, opi_t val, OpiHashMapElt *elt);
 
 static inline size_t
-opi_hash_map_next(struct opi_hash_map *map, size_t iter)
+opi_hash_map_next(OpiHashMap *map, size_t iter)
 {
   for (size_t i = iter + 1; i < map->cap; ++i) {
     if (map->data[i].key != NULL)
@@ -44,7 +44,7 @@ opi_hash_map_next(struct opi_hash_map *map, size_t iter)
 }
 
 static inline size_t
-opi_hash_map_begin(struct opi_hash_map *map)
+opi_hash_map_begin(OpiHashMap *map)
 {
   for (size_t i = 0; i < map->cap; ++i) {
     if (map->data[i].key != NULL)
@@ -54,9 +54,9 @@ opi_hash_map_begin(struct opi_hash_map *map)
 }
 
 static inline int
-opi_hash_map_get(struct opi_hash_map *map, size_t iter, opi_t *key, opi_t *val)
+opi_hash_map_get(OpiHashMap *map, size_t iter, opi_t *key, opi_t *val)
 {
-  struct opi_hash_map_elt *elt = map->data + iter;
+  OpiHashMapElt *elt = map->data + iter;
   if (iter >= map->cap)
     return FALSE;
   if (key)

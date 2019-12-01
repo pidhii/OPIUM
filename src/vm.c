@@ -11,14 +11,11 @@ opi_vm(OpiBytecode *bc)
   OpiRecScope *scp = NULL;
   size_t scpcnt = 0;
 
-  OpiFlatInsn *ip = bc->tape;
-
   opi_t r_stack[bc->nvals];
   size_t r_cap = bc->nvals;
 
-  opi_t *r = r_stack;
-
-  opi_t this_fn = opi_current_fn;
+  register opi_t *restrict r = r_stack;
+  register OpiFlatInsn *ip = bc->tape;
 
   while (1) {
     switch (ip->opc) {
@@ -132,7 +129,7 @@ opi_vm(OpiBytecode *bc)
         if (opi_is_lambda(fn) & opi_test_arity(opi_fn_get_arity(fn), nargs)) {
           // Tail Call
           OpiLambda *lam = opi_fn_get_data(fn);
-          this_fn = opi_current_fn = fn;
+          opi_current_fn = fn;
           bc = lam->bc;
           ip = bc->tape;
           if (bc->nvals > r_cap) {

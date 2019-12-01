@@ -439,118 +439,365 @@ split(void)
   OPI_RETURN(l);
 }
 
+/*static opi_t*/
+/*foldl(void)*/
+/*{*/
+  /*opi_t f = opi_pop();*/
+  /*opi_inc_rc(f);*/
+
+  /*opi_t acc = opi_pop();*/
+  /*opi_t l = opi_pop();*/
+
+  /*// Optimized for list with zero reference count*/
+  /*while ((l->type == opi_pair_type) & (l->rc == 0)) {*/
+    /*opi_t x = opi_car(l);*/
+    /*opi_t tmp = opi_cdr(l);*/
+
+    /*opi_h2w_free(l);*/
+    /*opi_dec_rc(x);*/
+    /*opi_dec_rc(tmp);*/
+
+    /*l = tmp;*/
+
+    /*opi_push(x);*/
+    /*opi_push(acc);*/
+    /*acc = opi_apply(f, 2);*/
+    /*if (opi_unlikely(acc->type == opi_undefined_type)) {*/
+      /*opi_unref(f);*/
+      /*return acc;*/
+    /*}*/
+  /*}*/
+
+  /*// Handle non-zero reference count*/
+  /*while (l->type == opi_pair_type) {*/
+    /*opi_t x = opi_car(l);*/
+    /*l = opi_cdr(l);*/
+
+    /*opi_push(x);*/
+    /*opi_push(acc);*/
+    /*acc = opi_apply(f, 2);*/
+    /*if (opi_unlikely(acc->type == opi_undefined_type)) {*/
+      /*opi_unref(f);*/
+      /*return acc;*/
+    /*}*/
+  /*}*/
+
+  /*opi_inc_rc(acc);*/
+  /*opi_drop(l);*/
+  /*opi_unref(f);*/
+  /*opi_dec_rc(acc);*/
+  /*return acc;*/
+/*}*/
+
+/*static opi_t*/
+/*revfilter(void)*/
+/*{*/
+  /*opi_t f = opi_pop();*/
+  /*opi_inc_rc(f);*/
+
+  /*opi_t l = opi_pop();*/
+
+  /*opi_t acc = opi_nil;*/
+
+  /*// Optimized for list with zero reference count*/
+  /*while ((l->type == opi_pair_type) & (l->rc == 0)) {*/
+    /*opi_t x = opi_car(l);*/
+    /*opi_t tmp = opi_cdr(l);*/
+
+    /*opi_h2w_free(l);*/
+    /*opi_dec_rc(tmp);*/
+
+    /*l = tmp;*/
+
+    /*opi_push(x);*/
+    /*opi_t p = opi_apply(f, 1);*/
+    /*if (opi_unlikely(p->type == opi_undefined_type)) {*/
+      /*opi_unref(f);*/
+      /*opi_drop(acc);*/
+      /*return p;*/
+    /*}*/
+
+    /*if (p != opi_false) {*/
+      /*acc = opi_cons(x, acc);*/
+      /*opi_dec_rc(x);*/
+    /*} else {*/
+      /*opi_unref(x);*/
+    /*}*/
+  /*}*/
+
+  /*// Handle non-zero reference count*/
+  /*while (l->type == opi_pair_type) {*/
+    /*opi_t x = opi_car(l);*/
+    /*l = opi_cdr(l);*/
+
+    /*opi_push(x);*/
+    /*opi_t p = opi_apply(f, 1);*/
+    /*if (opi_unlikely(p->type == opi_undefined_type)) {*/
+      /*opi_unref(f);*/
+      /*opi_drop(l);*/
+      /*return p;*/
+    /*}*/
+
+    /*if (p != opi_false)*/
+      /*acc = opi_cons(x, acc);*/
+  /*}*/
+
+  /*opi_drop(l);*/
+  /*opi_unref(f);*/
+  /*return acc;*/
+/*}*/
+
 static opi_t
-foldl(void)
+Array(void)
 {
-  opi_t f = opi_pop();
-  opi_inc_rc(f);
-
-  opi_t acc = opi_pop();
-  opi_t l = opi_pop();
-
-  // Optimized for list with zero reference count
-  while ((l->type == opi_pair_type) & (l->rc == 0)) {
-    opi_t x = opi_car(l);
-    opi_t tmp = opi_cdr(l);
-
-    opi_h2w_free(l);
-    opi_dec_rc(x);
-    opi_dec_rc(tmp);
-
-    l = tmp;
-
-    opi_push(x);
-    opi_push(acc);
-    acc = opi_apply(f, 2);
-    if (opi_unlikely(acc->type == opi_undefined_type)) {
-      opi_unref(f);
-      return acc;
-    }
-  }
-
-  // Handle non-zero reference count
-  while (l->type == opi_pair_type) {
-    opi_t x = opi_car(l);
-    l = opi_cdr(l);
-
-    opi_push(x);
-    opi_push(acc);
-    acc = opi_apply(f, 2);
-    if (opi_unlikely(acc->type == opi_undefined_type)) {
-      opi_unref(f);
-      return acc;
-    }
-  }
-
-  opi_inc_rc(acc);
-  opi_drop(l);
-  opi_unref(f);
-  opi_dec_rc(acc);
-  return acc;
+  size_t n = opi_nargs;
+  opi_t arr = opi_array_new_empty(n);
+  while (opi_nargs--)
+    opi_array_push(arr, opi_pop());
+  return arr;
 }
 
 static opi_t
-revfilter(void)
+Array_init(void)
 {
-  opi_t f = opi_pop();
-  opi_inc_rc(f);
+  OPI_FN()
+  OPI_ARG(size, opi_num_type);
+  OPI_ARG(f, opi_fn_type);
+  size_t n = OPI_NUM(size);
+  opi_t arr = opi_array_new_empty(n);
+  for (size_t i = 0; i < n; ++i ) {
+    opi_push(opi_num_new(i));
+    opi_t val = opi_apply(f, 1);
+    if (opi_unlikely(val->type == opi_undefined_type)) {
+      opi_drop(arr);
+      OPI_RETURN(val);
+    }
+    opi_array_push(arr, val);
+  }
+  OPI_RETURN(arr);
+}
+
+static opi_t
+Array_length(void)
+{
+  opi_t arr = opi_pop();
+  if (opi_unlikely(arr->type != opi_array_type)) {
+    opi_drop(arr);
+    return opi_undefined(opi_symbol("type-error"));
+  }
+  opi_t ret = opi_num_new(opi_array_get_length(arr));
+  opi_drop(arr);
+  return ret;
+}
+
+static opi_t
+Array_get(void)
+{
+  opi_t arr = opi_pop();
+  opi_inc_rc(arr);
+
+  opi_t nth = opi_pop();
+  opi_inc_rc(nth);
+
+  if (opi_unlikely(arr->type != opi_array_type ||
+                   nth->type != opi_num_type))
+  {
+    opi_unref(arr);
+    opi_unref(nth);
+    return opi_undefined(opi_symbol("type-error"));
+  }
+
+  size_t i = OPI_NUM(nth);
+  if (opi_unlikely(i >= opi_array_get_length(arr))) {
+    opi_unref(arr);
+    opi_unref(nth);
+    return opi_undefined(opi_symbol("out-of-range"));
+  }
+
+  opi_t ret = opi_array_get_data(arr)[i];
+  opi_inc_rc(ret);
+  opi_unref(arr);
+  opi_unref(nth);
+  opi_dec_rc(ret);
+  return ret;
+}
+
+static opi_t
+Array_push(void)
+{
+  opi_t arr = opi_pop();
+  opi_inc_rc(arr);
+
+  opi_t x = opi_pop();
+  opi_inc_rc(x);
+
+  if (opi_unlikely(arr->type != opi_array_type)) {
+    opi_unref(arr);
+    opi_unref(x);
+    return opi_undefined(opi_symbol("type-error"));
+  }
+
+  opi_dec_rc(arr);
+  opi_dec_rc(x);
+  if (arr->rc == 0) {
+    opi_array_push(arr, x);
+    return arr;
+  } else {
+    return opi_array_push_with_copy(arr, x);
+  }
+}
+
+static opi_t
+Array_toList(void)
+{
+  opi_t arr = opi_pop();
+  if (opi_unlikely(arr->type != opi_array_type)) {
+    opi_drop(arr);
+    return opi_undefined(opi_symbol("type-error"));
+  }
+  opi_t l = opi_nil;
+  opi_t *data = opi_array_get_data(arr);
+  for (int i = opi_array_get_length(arr) - 1; i >= 0; --i)
+    l = opi_cons(data[i], l);
+  opi_drop(arr);
+  return l;
+}
+
+static opi_t
+Array_toRevList(void)
+{
+  opi_debug("Array.toRevList\n");
+  opi_t arr = opi_pop();
+  if (opi_unlikely(arr->type != opi_array_type)) {
+    opi_drop(arr);
+    return opi_undefined(opi_symbol("type-error"));
+  }
+  opi_t l = opi_nil;
+  opi_t *data = opi_array_get_data(arr);
+  size_t n = opi_array_get_length(arr);
+  for (size_t i = 0; i < n; ++i)
+    l = opi_cons(l, data[i]);
+  opi_drop(arr);
+  return l;
+}
+
+static opi_t
+Seq_iter(void)
+{
+  OPI_FN()
+  OPI_ARG(f, opi_fn_type)
+  OPI_ARG(s, opi_seq_type)
+
+  int is_drain = s->rc == 1;
+  size_t cnt = 0;
+  opi_t x;
+  while ((x = opi_seq_next(s, &cnt, is_drain))) {
+
+    if (opi_unlikely(x->type == opi_undefined_type))
+      OPI_RETURN(x);
+
+    opi_push(x);
+    opi_t ret = opi_apply(f, 1);
+    if (opi_unlikely(ret->type == opi_undefined_type))
+      OPI_RETURN(ret);
+
+    opi_drop(ret);
+  }
+
+  opi_unref(f);
+  opi_unref(s);
+  return opi_nil;
+}
+
+static opi_t
+Seq_map(void)
+{
+  OPI_FN()
+  OPI_ARG(f, opi_fn_type)
+  OPI_ARG(s, opi_seq_type)
+
+  typedef struct MapIter_s {
+    opi_t f, s;
+    size_t cnt;
+  } MapIter;
+
+  void map_iter_delete(OpiIter *iter) {
+    MapIter *self = (void*)iter;
+    opi_unref(self->f);
+    opi_unref(self->s);
+    free(self);
+  }
+
+  opi_t map_iter_next(OpiIter *iter, int drain) {
+    MapIter *self = (void*)iter;
+    opi_t x = opi_seq_next(self->s, &self->cnt, drain);
+    if (x == NULL)
+      return NULL;
+    if (x->type == opi_undefined_type)
+      return x;
+    opi_push(x);
+    return opi_apply(self->f, 1);
+  }
+
+  MapIter *iter = malloc(sizeof(MapIter));
+  iter->f = f;
+  iter->s = s;
+  iter->cnt = 0;
+  return opi_seq_new((OpiIter*)iter, map_iter_next, map_iter_delete);
+}
+
+static opi_t
+List_toSeq(void)
+{
+  typedef struct ListIter_s {
+    opi_t l;
+  } ListIter;
+
+  opi_t list_iter_next(OpiIter *self, int drain) {
+    ListIter *iter = (void*)self;
+    opi_t l = iter->l;
+    if (opi_unlikely(l->type != opi_pair_type))
+      return NULL;
+    opi_t val = opi_car(l);
+    opi_inc_rc(val);
+    opi_inc_rc(iter->l = opi_cdr(l));
+    opi_unref(l);
+    opi_dec_rc(val);
+    return val;
+  }
+
+  void list_iter_delete(OpiIter *self) {
+    ListIter *iter = (void*)self;
+    opi_unref(iter->l);
+    free(iter);
+  }
 
   opi_t l = opi_pop();
-
-  opi_t acc = opi_nil;
-
-  // Optimized for list with zero reference count
-  while ((l->type == opi_pair_type) & (l->rc == 0)) {
-    opi_t x = opi_car(l);
-    opi_t tmp = opi_cdr(l);
-
-    opi_h2w_free(l);
-    opi_dec_rc(tmp);
-
-    l = tmp;
-
-    opi_push(x);
-    opi_t p = opi_apply(f, 1);
-    if (opi_unlikely(p->type == opi_undefined_type)) {
-      opi_unref(f);
-      opi_drop(acc);
-      return p;
-    }
-
-    if (p != opi_false) {
-      acc = opi_cons(x, acc);
-      opi_dec_rc(x);
-    } else {
-      opi_unref(x);
-    }
-  }
-
-  // Handle non-zero reference count
-  while (l->type == opi_pair_type) {
-    opi_t x = opi_car(l);
-    l = opi_cdr(l);
-
-    opi_push(x);
-    opi_t p = opi_apply(f, 1);
-    if (opi_unlikely(p->type == opi_undefined_type)) {
-      opi_unref(f);
-      opi_drop(l);
-      return p;
-    }
-
-    if (p != opi_false)
-      acc = opi_cons(x, acc);
-  }
-
-  opi_drop(l);
-  opi_unref(f);
-  return acc;
+  ListIter *iter = malloc(sizeof(ListIter));
+  opi_inc_rc(iter->l = l);
+  return opi_seq_new((OpiIter*)iter, list_iter_next, list_iter_delete);
 }
 
 int
 opium_library(OpiBuilder *bldr)
 {
   opi_builder_def_const(bldr, "length", opi_fn("length", length , 1));
+  opi_builder_def_const(bldr, "revappend", opi_fn("revappend", revappend, 2));
+  /*opi_builder_def_const(bldr, "foldl", opi_fn("foldl", foldl, 3));*/
+  /*opi_builder_def_const(bldr, "revfilter", opi_fn("revfilter", revfilter, 2));*/
+
+  opi_builder_def_const(bldr, "Seq.iter", opi_fn(0, Seq_iter, 2));
+  opi_builder_def_const(bldr, "Seq.map", opi_fn(0, Seq_map, 2));
+
+  opi_builder_def_const(bldr, "List.toSeq", opi_fn(0, List_toSeq, 1));
+
+  opi_builder_def_const(bldr, "Array", opi_fn(0, Array, -1));
+  opi_builder_def_const(bldr, "Array.init", opi_fn(0, Array_init, 2));
+  opi_builder_def_const(bldr, "Array.get", opi_fn(0, Array_get, 2));
+  opi_builder_def_const(bldr, "Array.push", opi_fn(0, Array_push, 2));
+  opi_builder_def_const(bldr, "Array.toList", opi_fn(0, Array_toList, 1));
+  opi_builder_def_const(bldr, "Array.toRevList", opi_fn(0, Array_toList, 1));
+
   opi_builder_def_const(bldr, "strlen", opi_fn("strlen", strlen_, 1));
   opi_builder_def_const(bldr, "substr", opi_fn("substr", substr ,-3));
   opi_builder_def_const(bldr, "strstr", opi_fn("strstr", strstr_, 2));
@@ -558,19 +805,13 @@ opium_library(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "chomp" , opi_fn("chomp" , chomp  , 1));
   opi_builder_def_const(bldr, "ltrim" , opi_fn("ltrim" , ltrim  , 1));
   opi_builder_def_const(bldr, "concat", opi_fn("concat", concat, 1));
-
-  opi_builder_def_const(bldr, "revappend", opi_fn("revappend", revappend, 2));
+  opi_builder_def_const(bldr, "match", opi_fn("match", match, 2));
+  opi_builder_def_const(bldr, "split", opi_fn("split", split, 2));
 
   opi_builder_def_const(bldr, "__builtin_open", opi_fn("__builtin_open", open_, 2));
   opi_builder_def_const(bldr, "__builtin_popen", opi_fn("__builtin_popen", popen_, 2));
   opi_builder_def_const(bldr, "read", opi_fn("read", read, -2));
   opi_builder_def_const(bldr, "readline", opi_fn("readline", readline, 1));
-
-  opi_builder_def_const(bldr, "match", opi_fn("match", match, 2));
-  opi_builder_def_const(bldr, "split", opi_fn("split", split, 2));
-
-  opi_builder_def_const(bldr, "foldl", opi_fn("foldl", foldl, 3));
-  opi_builder_def_const(bldr, "revfilter", opi_fn("revfilter", revfilter, 2));
 
   return 0;
 }

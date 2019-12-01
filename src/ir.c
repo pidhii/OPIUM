@@ -84,6 +84,8 @@ opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "File", opi_file_type);
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
+  opi_builder_def_type(bldr, "Array", opi_array_type);
+  cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "svector", opi_svector_type);
   cod_ptrvec_pop(&bldr->ctx->types, NULL);
   opi_builder_def_type(bldr, "dvector", opi_dvector_type);

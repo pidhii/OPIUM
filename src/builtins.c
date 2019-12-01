@@ -350,44 +350,6 @@ string_at(void)
   return ret;
 }
 
-struct compose_data { opi_t f, g; };
-
-static void
-compose_delete(OpiFn *fn)
-{
-  struct compose_data *data = fn->data;
-  opi_unref(data->f);
-  opi_unref(data->g);
-  free(data);
-  opi_fn_delete(fn);
-}
-
-static opi_t
-compose_aux(void)
-{
-  struct compose_data *data = opi_fn_get_data(opi_current_fn);
-
-  opi_t tmp = opi_apply(data->g, opi_nargs);
-  if (opi_unlikely(tmp->type == opi_undefined_type))
-    return tmp;
-
-  opi_push(tmp);
-  return opi_apply(data->f, 1);
-}
-
-static opi_t
-compose(void)
-{
-  opi_t f = opi_pop();
-  opi_t g = opi_pop();
-  struct compose_data *data = malloc(sizeof(struct compose_data));
-  opi_inc_rc(data->f = f);
-  opi_inc_rc(data->g = g);
-  opi_t aux = opi_fn("composition", compose_aux, opi_fn_get_arity(g));
-  opi_fn_set_data(aux, data, compose_delete);
-  return aux;
-}
-
 static opi_t
 apply(void)
 {
@@ -448,22 +410,74 @@ force(void)
   return ret;
 }
 
+struct compose_data { opi_t f, g; };
+
+static void
+compose_delete(OpiFn *fn)
+{
+  struct compose_data *data = fn->data;
+  opi_unref(data->f);
+  opi_unref(data->g);
+  free(data);
+  opi_fn_delete(fn);
+}
+
+static opi_t
+compose_aux(void)
+{
+  struct compose_data *data = opi_fn_get_data(opi_current_fn);
+
+  opi_t tmp = opi_apply(data->g, opi_nargs);
+  if (opi_unlikely(tmp->type == opi_undefined_type))
+    return tmp;
+
+  opi_push(tmp);
+  return opi_apply(data->f, 1);
+}
+
 static opi_t
 concat(void)
 {
-  OPI_FN()
-  OPI_ARG(s1, opi_string_type)
-  OPI_ARG(s2, opi_string_type)
-  size_t l1 = opi_string_get_length(s1);
-  size_t l2 = opi_string_get_length(s2);
-  char *buf = malloc(l1 + l2 + 1);
-  memcpy(buf, opi_string_get_value(s1), l1);
-  memcpy(buf + l1, opi_string_get_value(s2), l2);
-  buf[l1 + l2] = '\0';
+  opi_t lhs = opi_pop();
+  opi_inc_rc(lhs);
+  opi_t rhs = opi_pop();
+  opi_inc_rc(rhs);
+  if (lhs->type == opi_string_type) {
+    // String concatenation
+    if (rhs->type != opi_string_type) {
+      opi_unref(lhs);
+      opi_unref(rhs);
+      return opi_undefined(opi_symbol("type-error"));
+    }
+    size_t l1 = opi_string_get_length(lhs);
+    size_t l2 = opi_string_get_length(rhs);
+    char *buf = malloc(l1 + l2 + 1);
+    memcpy(buf, opi_string_get_value(lhs), l1);
+    memcpy(buf + l1, opi_string_get_value(rhs), l2);
+    buf[l1 + l2] = '\0';
+    opi_unref(lhs);
+    opi_unref(rhs);
+    return opi_string_drain_with_len(buf, l1 + l2);
 
-  opi_unref(s1);
-  opi_unref(s2);
-  return opi_string_drain_with_len(buf, l1 + l2);
+  } else if (lhs->type == opi_fn_type) {
+    // Function composition
+    if (rhs->type != opi_fn_type) {
+      opi_unref(lhs);
+      opi_unref(rhs);
+      return opi_undefined(opi_symbol("type-error"));
+    }
+    struct compose_data *data = malloc(sizeof(struct compose_data));
+    data->f = lhs;
+    data->g = rhs;
+    opi_t aux = opi_fn("composition", compose_aux, opi_fn_get_arity(rhs));
+    opi_fn_set_data(aux, data, compose_delete);
+    return aux;
+
+  } else {
+    opi_unref(lhs);
+    opi_unref(rhs);
+    return opi_undefined(opi_symbol("type-error"));
+  }
 }
 
 #define TYPE_PRED(name, ty)                          \
@@ -865,7 +879,6 @@ opi_builtins(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "FILE?", opi_fn("FILE?", FILE_p, 1));
   opi_builder_def_const(bldr, "table?", opi_fn("table?", table_p, 1));
 
-  opi_builder_def_const(bldr, ".", opi_fn(".", compose, 2));
   opi_builder_def_const(bldr, "++", opi_fn("++", concat, 2));
   opi_builder_def_const(bldr, "car", opi_fn("car", car_, 1));
   opi_builder_def_const(bldr, "cdr", opi_fn("cdr", cdr_, 1));
@@ -879,6 +892,7 @@ opi_builtins(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "regex", opi_fn("regex", regex, 1));
 
   opi_builder_def_const(bldr, "#", opi_fn("#", table_ref, 2));
+
   opi_builder_def_const(bldr, "pairs", opi_fn("pairs", pairs, 1));
   opi_builder_def_const(bldr, "is", opi_fn("is", is_, 2));
   opi_builder_def_const(bldr, "eq", opi_fn("eq", eq_, 2));

@@ -58,11 +58,62 @@ opi_die(const char *fmt, ...);
 extern
 int opi_error;
 
+static inline uint32_t
+opi_flp2_u32(uint32_t x)
+{
+  x = x | (x >> 1);
+  x = x | (x >> 2);
+  x = x | (x >> 4);
+  x = x | (x >> 8);
+  x = x | (x >> 16);
+  return x - (x >> 1);
+}
+
+static inline uint64_t
+opi_flp2_u64(uint64_t x)
+{
+  x = x | (x >> 1);
+  x = x | (x >> 2);
+  x = x | (x >> 4);
+  x = x | (x >> 8);
+  x = x | (x >> 16);
+  x = x | (x >> 32);
+  return x - (x >> 1);
+}
+
+static inline uint32_t
+opi_cep2_u32(uint32_t x)
+{
+  --x;
+  x |= x >> 1;
+  x |= x >> 2;
+  x |= x >> 4;
+  x |= x >> 8;
+  x |= x >> 16;
+  return ++x;
+}
+
+static inline uint64_t
+opi_cep2_u64(uint64_t x)
+{
+  --x;
+  x |= x >> 1;
+  x |= x >> 2;
+  x |= x >> 4;
+  x |= x >> 8;
+  x |= x >> 16;
+  x |= x >> 32;
+  return ++x;
+}
+
 typedef struct OpiType_s OpiType;
 typedef OpiType *opi_type_t;
 
 typedef struct OpiHeader_s OpiHeader;
 typedef OpiHeader *opi_t;
+
+typedef struct OpiSeq_s OpiSeq;
+typedef struct OpiIter_s OpiIter;
 
 typedef struct OpiLocation_s {
   char *path;
@@ -193,7 +244,7 @@ int
 opi_equal(opi_t x, opi_t y);
 
 static inline void
-opi_init_cell(void* x_, opi_type_t ty)
+opi_init_cell(void *restrict x_, opi_type_t ty)
 {
   opi_t x = x_;
   x->type = ty;
@@ -248,22 +299,23 @@ typedef struct OpiH2w_s {
   opi_word_t w[2];
 } OpiH2w;
 
+
 void*
 opi_h2w();
 
 void
 opi_h2w_free(void *ptr);
 
-typedef struct OpiH3w_s {
+typedef struct OpiH6w_s {
   OpiHeader header;
-  opi_word_t w[3];
-} OpiH3w;
+  opi_word_t w[6];
+} OpiH6w;
 
 void*
-opi_h3w();
+opi_h6w();
 
 void
-opi_h3w_free(void *ptr);
+opi_h6w_free(void *ptr);
 
 /* ==========================================================================
  * Stack
@@ -576,7 +628,7 @@ struct OpiFn_s {
   OpiHeader header;
   char *name;
   opi_fn_handle_t handle;
-  void *data;
+  void *restrict data;
   void (*delete)(OpiFn *self);
   intptr_t arity;
 };
@@ -593,8 +645,14 @@ opi_fn_init(void);
 void
 opi_fn_cleanup(void);
 
-opi_t
-opi_fn_alloc();
+static inline opi_t
+opi_fn_alloc()
+{
+  OpiFn *fn = opi_h6w();
+  fn->handle = NULL;
+  opi_init_cell(fn, opi_fn_type);
+  return (opi_t)fn;
+};
 
 void
 opi_fn_finalize(opi_t fn, const char *name, opi_fn_handle_t f, int arity);
@@ -621,12 +679,6 @@ static inline opi_fn_handle_t
 opi_fn_get_handle(opi_t cell)
 {
   return opi_as(cell, OpiFn).handle;
-}
-
-static inline const char*
-opi_fn_get_name(opi_t f)
-{
-  return opi_as(f, OpiFn).name;
 }
 
 static inline opi_t
@@ -692,6 +744,77 @@ opi_lazy_get_value(opi_t x)
 }
 
 /* ==========================================================================
+ * Array
+ */
+extern opi_type_t
+opi_array_type;
+
+typedef struct OpiArray_s {
+  OpiHeader header;
+  opi_t *data;
+  size_t len;
+  size_t cap;
+} OpiArray;
+
+void
+opi_array_init(void);
+
+void
+opi_array_cleanup(void);
+
+opi_t
+opi_array_drain(opi_t *data, size_t len, size_t cap);
+
+opi_t
+opi_array_new_empty(size_t reserve);
+
+opi_t
+opi_array_new_empty(size_t reserve);
+
+static inline opi_t*
+opi_array_get_data(opi_t x)
+{
+  return opi_as(x, OpiArray).data;
+}
+
+static inline size_t
+opi_array_get_length(opi_t x)
+{
+  return opi_as(x, OpiArray).len;
+}
+
+static inline void
+opi_array_push(opi_t a, opi_t x)
+{
+  OpiArray *arr = opi_as_ptr(a);
+  if (arr->len == arr->cap) {
+    arr->cap <<= 1;
+    arr->data = realloc(arr->data, sizeof(opi_t) * arr->cap);
+  }
+  opi_inc_rc(arr->data[arr->len++] = x);
+}
+
+static inline opi_t
+opi_array_push_with_copy(opi_t a, opi_t x)
+{
+  OpiArray *arr = opi_as_ptr(a);
+
+  size_t cap = arr->cap;
+  size_t len = arr->len;
+  opi_t *data = NULL;
+  if (len == cap)
+    cap <<= 1;
+  data = malloc(sizeof(opi_t) * cap);
+
+  for (size_t i = 0; i < len; ++i)
+    opi_inc_rc(data[i] = arr->data[i]);
+  opi_inc_rc(data[len++] = x);
+
+  opi_inc_rc(arr->data[arr->len++] = x);
+  return opi_array_drain(data, len, cap);
+}
+
+/* ==========================================================================
  * Vectors
  */
 typedef struct OpiSVector_s OpiSVector;
@@ -738,6 +861,55 @@ opi_dvector_get_data(opi_t x);
 
 size_t
 opi_vector_get_size(opi_t x);
+
+/* ==========================================================================
+ * Seq
+ */
+extern opi_type_t
+opi_seq_type;
+
+struct OpiSeq_s {
+  OpiHeader header;
+  cod_vec(opi_t) cache;
+  OpiIter *iter;
+  opi_t (*next)(OpiIter *iter, int drain);
+  void (*delete_iter)(OpiIter *iter);
+};
+
+void
+opi_seq_init(void);
+
+void
+opi_seq_cleanup(void);
+
+opi_t
+opi_seq_new(OpiIter *iter, opi_t (*next)(OpiIter *iter, int drain), void (*delete_iter)(OpiIter *iter));
+
+static inline opi_t
+opi_seq_next(opi_t x, size_t *i, int is_drain)
+{
+  OpiSeq *seq = opi_as_ptr(x);
+
+  opi_t ret;
+  if (*i < seq->cache.len) {
+    ret = seq->cache.data[*i];
+    if (is_drain && ret) {
+      opi_dec_rc(ret);
+      seq->cache.data[*i] = NULL;
+    }
+
+  } else {
+    ret = seq->next(seq->iter, is_drain);
+    if (ret && !is_drain) {
+      cod_vec_push(seq->cache, ret);
+      opi_inc_rc(ret);
+    }
+  }
+
+  *i += 1;
+  return ret;
+}
+
 
 /* ==========================================================================
  * AST
@@ -1256,7 +1428,7 @@ typedef struct OpiFlatInsn_s {
   OpiOpc opc;
   union {
     uintptr_t reg[3];
-    void *ptr[3];
+    void *restrict ptr[3];
   };
 } OpiFlatInsn;
 

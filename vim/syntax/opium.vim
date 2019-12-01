@@ -24,12 +24,13 @@ syn keyword opiUse use as
 syn keyword opiStruct struct nextgroup=opiStructName skipwhite skipnl
 syn match   opiStructName /\k\+/ contained
 
-syn region opiList matchgroup=opiType start=/\[/ matchgroup=opiType end=/\]/ skipwhite skipnl contains=TOP
+syn region opiList matchgroup=opiType start=/\[/ end=/\]/ skipwhite skipnl contains=TOP
+syn region opiArray matchgroup=opiType start=/\[\s*|/ end=/|\s*\]/ skipwhite skipnl contains=TOP
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""'
 " Builtins:
 syn keyword Function null? undefined? number? symbol? string? boolean? pair? fn? lazy? FILE? table? svector? dvector?
-syn keyword Function number table list regex svector dvector
+syn keyword Function number table list regex svector dvector array
 syn keyword Function write display newline print printf fprintf format
 syn keyword Function car cdr
 syn keyword Function pairs
@@ -66,7 +67,6 @@ syn keyword Function match split
 syn keyword opiKeyword let rec and or in return
 syn region opiBegin matchgroup=opiKeyword start=/\<begin\>/ end=/\<end\>/ contains=TOP
 syn keyword opiAssert assert
-syn keyword opiSpecial commandline environment
 
 syn keyword opiKeyword if unless when then else
 syn keyword opiLazy lazy

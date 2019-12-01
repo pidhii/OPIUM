@@ -11,15 +11,15 @@ opi_hash(const char* p, size_t n)
 }
 
 void
-opi_hash_map_init(struct opi_hash_map *map)
+opi_hash_map_init(OpiHashMap *map)
 {
   map->cap = 0x100;
   map->size = 0;
-  map->data = calloc(map->cap, sizeof(struct opi_hash_map_elt));
+  map->data = calloc(map->cap, sizeof(OpiHashMapElt));
 }
 
 void
-opi_hash_map_destroy(struct opi_hash_map *map)
+opi_hash_map_destroy(OpiHashMap *map)
 {
   opi_t key, val;
   size_t iter = opi_hash_map_begin(map);
@@ -31,11 +31,11 @@ opi_hash_map_destroy(struct opi_hash_map *map)
   free(map->data);
 }
 
-static struct opi_hash_map_elt*
-find(struct opi_hash_map_elt *data, size_t cap, opi_t key, size_t hash)
+static OpiHashMapElt*
+find(OpiHashMapElt *data, size_t cap, opi_t key, size_t hash)
 {
   for (size_t inc = 0, idx = hash & (cap - 1); TRUE; inc += 1, idx += inc) {
-    struct opi_hash_map_elt *elt = data + idx;
+    OpiHashMapElt *elt = data + idx;
     if (elt->key == NULL) {
       // Found empty cell.
       return elt;
@@ -47,11 +47,11 @@ find(struct opi_hash_map_elt *data, size_t cap, opi_t key, size_t hash)
   }
 }
 
-static struct opi_hash_map_elt*
-find_is(struct opi_hash_map_elt *data, size_t cap, opi_t key, size_t hash)
+static OpiHashMapElt*
+find_is(OpiHashMapElt *data, size_t cap, opi_t key, size_t hash)
 {
   for (size_t inc = 0, idx = hash & (cap - 1); TRUE; inc += 1, idx += inc) {
-    struct opi_hash_map_elt *elt = data + idx;
+    OpiHashMapElt *elt = data + idx;
     if (elt->key == NULL) {
       // Found empty cell.
       return elt;
@@ -64,34 +64,34 @@ find_is(struct opi_hash_map_elt *data, size_t cap, opi_t key, size_t hash)
 }
 
 int
-opi_hash_map_find(struct opi_hash_map *map, opi_t key, size_t hash, struct opi_hash_map_elt* elt)
+opi_hash_map_find(OpiHashMap *map, opi_t key, size_t hash, OpiHashMapElt* elt)
 {
-  struct opi_hash_map_elt *myelt = find(map->data, map->cap, key, hash);
+  OpiHashMapElt *myelt = find(map->data, map->cap, key, hash);
   if (elt)
     *elt = *myelt;
   return myelt->key != NULL;
 }
 
 int
-opi_hash_map_find_is(struct opi_hash_map *map, opi_t key, size_t hash, struct opi_hash_map_elt* elt)
+opi_hash_map_find_is(OpiHashMap *map, opi_t key, size_t hash, OpiHashMapElt* elt)
 {
-  struct opi_hash_map_elt *myelt = find_is(map->data, map->cap, key, hash);
+  OpiHashMapElt *myelt = find_is(map->data, map->cap, key, hash);
   if (elt)
     *elt = *myelt;
   return myelt->key != NULL;
 }
 
 static void
-rehash(struct opi_hash_map *map, size_t new_cap)
+rehash(OpiHashMap *map, size_t new_cap)
 {
-  struct opi_hash_map_elt *old_data = map->data;
+  OpiHashMapElt *old_data = map->data;
   size_t old_cap = map->cap;
-  struct opi_hash_map_elt *new_data = calloc(new_cap, sizeof(struct opi_hash_map_elt));
+  OpiHashMapElt *new_data = calloc(new_cap, sizeof(OpiHashMapElt));
 
   for (size_t i = 0; i < old_cap; ++i) {
-    struct opi_hash_map_elt *old_elt = old_data + i;
+    OpiHashMapElt *old_elt = old_data + i;
     if (old_elt->key != NULL) {
-      struct opi_hash_map_elt *new_elt = find(new_data, new_cap, old_elt->key, old_elt->hash);
+      OpiHashMapElt *new_elt = find(new_data, new_cap, old_elt->key, old_elt->hash);
       *new_elt = *old_elt;
     }
   }
@@ -102,7 +102,7 @@ rehash(struct opi_hash_map *map, size_t new_cap)
 }
 
 void
-opi_hash_map_insert(struct opi_hash_map *map, opi_t key, size_t hash, opi_t val, struct opi_hash_map_elt *elt)
+opi_hash_map_insert(OpiHashMap *map, opi_t key, size_t hash, opi_t val, OpiHashMapElt *elt)
 {
   if (elt->key == NULL) {
     // Must insert new element => check load factor and rehash if needed.

@@ -11,7 +11,26 @@ let odd? x = x % 2 /= 0
 let open path ..mode = __builtin_open path (car mode or "r")
 let popen cmd ..mode = __builtin_popen cmd (car mode or "r")
 
-let trim = chomp . ltrim
+let trim = chomp ++ ltrim
 
 load "common.opi"
 load "list-base.opi"
+
+module Lazy =
+  let rec range from to =
+    if from >= to then nil
+    else lazy from : range (from + 1) to
+
+  let rec map f s =
+    unless let head:tail = force s then nil
+    else lazy f head : map f tail
+
+  let rec filter f l =
+    unless let x:xs = force l then nil
+    else if f x then lazy x : filter f xs
+    else filter f xs
+
+  let rec foldl f z l =
+    unless let x:xs = force l then z
+    else foldl f (f z x) xs
+end

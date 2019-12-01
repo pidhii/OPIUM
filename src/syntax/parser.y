@@ -200,7 +200,7 @@ int opi_start_token;
 %right ':' PLUSPLUS
 %right '+' '-'
 %left '*' '/' '%'
-%right '.'
+/*%right '.' (function composition) */
 %right NOT
 %left TABLEREF
 
@@ -234,6 +234,12 @@ Atom
     cod_ptrvec_destroy($2, NULL);
     free($2);
   }
+  | '[' '|' arg_aux '|' ']' {
+    $$ = opi_ast_apply(opi_ast_var("array"), (OpiAst**)$3->data, $3->size);
+    $$->apply.loc = location(&@$);
+    cod_ptrvec_destroy($3, NULL);
+    free($3);
+  }
   | '[' ']' { $$ = opi_ast_const(opi_nil); }
   | Atom TABLEREF SYMBOL {
     OpiAst *p[] = { $1, opi_ast_const(opi_symbol($3)) };
@@ -246,6 +252,11 @@ Atom
     $$ = opi_ast_apply(opi_ast_var("#"), p, 2);
     $$->apply.loc = location(&@$);
     free($3);
+  }
+  | Atom TABLEREF '(' Expr ')' {
+    OpiAst *p[] = { $1, $4 };
+    $$ = opi_ast_apply(opi_ast_var("#"), p, 2);
+    $$->apply.loc = location(&@$);
   }
 ;
 
@@ -403,11 +414,11 @@ Expr
   | Expr '/' Expr { $$ = opi_ast_binop(OPI_OPC_DIV, $1, $3); }
   | Expr '%' Expr { $$ = opi_ast_binop(OPI_OPC_MOD, $1, $3); }
   | Expr ':' Expr { $$ = opi_ast_binop(OPI_OPC_CONS, $1, $3); }
-  | Expr '.' Expr {
-    OpiAst *p[] = { $1, $3 };
-    $$ = opi_ast_apply(opi_ast_var("."), p, 2);
-    $$->apply.loc = location(&@$);
-  }
+  /*| Expr '.' Expr {*/
+    /*OpiAst *p[] = { $1, $3 };*/
+    /*$$ = opi_ast_apply(opi_ast_var("."), p, 2);*/
+    /*$$->apply.loc = location(&@$);*/
+  /*}*/
   | Expr PLUSPLUS Expr {
     OpiAst *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("++"), p, 2);

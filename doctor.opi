@@ -48,13 +48,13 @@ let realpath path = `test -e '%{path}' && realpath '%{path}'`
 
 
 {- Global: Parsed command-line options. -}
-let cmdArgs = table $ parseArgs $ cdr commandline
+let cmdArgs = table $ parseArgs $ cdr Sys.argv
 
 {- Global: Force mode. -}
 let force? = cmdArgs#force or false
 
 {- Global: Path to opium libraries. -}
-let installPath = cmdArgs#path or environment#OPIUM_PATH or begin
+let installPath = cmdArgs#path or Sys.env#OPIUM_PATH or begin
   fprintf stderr "error: path to opium libraries not set\n";
   exit 1;
 end
