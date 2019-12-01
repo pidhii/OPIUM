@@ -66,6 +66,4 @@ opi_hash_map_get(OpiHashMap *map, size_t iter, opi_t *key, opi_t *val)
   return TRUE;
 }
 
-#undef CAP
-
 #endif

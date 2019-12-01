@@ -24,6 +24,7 @@ opi_bytecode()
   bc->point = bc->tail;
 
   bc->tape = NULL;
+  bc->is_generator = FALSE;
 
   return bc;
 }

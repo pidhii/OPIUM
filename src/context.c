@@ -7,38 +7,48 @@
 void
 opi_context_init(OpiContext *ctx)
 {
-  cod_ptrvec_init(&ctx->types);
-  cod_ptrvec_init(&ctx->bc);
+  cod_vec_init(ctx->types);
+  cod_vec_init(ctx->traits);
+  cod_vec_init(ctx->bc);
   cod_strvec_init(&ctx->dl_paths);
-  cod_ptrvec_init(&ctx->dls);
+  cod_vec_init(ctx->dls);
 }
-
-static void
-delete_dl(void *dl)
-{ dlclose(dl); }
 
 void
 opi_context_destroy(OpiContext *ctx)
 {
-  cod_ptrvec_destroy(&ctx->types, (void*)opi_type_delete);
-  cod_ptrvec_destroy(&ctx->bc, (void*)opi_insn_delete);
+  cod_vec_iter(ctx->types, i, x, opi_type_delete(x));
+  cod_vec_destroy(ctx->types);
+
+  cod_vec_iter(ctx->traits, i, x, opi_trait_delete(x));
+  cod_vec_destroy(ctx->traits);
+
+  cod_vec_iter(ctx->bc, i, x, opi_insn_delete(x));
+  cod_vec_destroy(ctx->bc);
+
   cod_strvec_destroy(&ctx->dl_paths);
-  cod_ptrvec_destroy(&ctx->dls, delete_dl);
+
+  cod_vec_iter(ctx->dls, i, x, dlclose(x));
+  cod_vec_destroy(ctx->dls);
 }
 
 void
 opi_context_add_type(OpiContext *ctx, opi_type_t type)
-{ cod_ptrvec_push(&ctx->types, type, NULL); }
+{ cod_vec_push(ctx->types, type); }
+
+void
+opi_context_add_trait(OpiContext *ctx, OpiTrait *trait)
+{ cod_vec_push(ctx->traits, trait); }
 
 void
 opi_context_drain_bytecode(OpiContext *ctx, OpiBytecode *bc)
-{ cod_ptrvec_push(&ctx->bc, opi_bytecode_drain(bc), NULL); }
+{ cod_vec_push(ctx->bc, opi_bytecode_drain(bc)); }
 
 void
 opi_context_add_dl(OpiContext *ctx, const char *path, void *dl)
 {
   cod_strvec_push(&ctx->dl_paths, path);
-  cod_ptrvec_push(&ctx->dls, dl, NULL);
+  cod_vec_push(ctx->dls, dl);
 }
 
 void*

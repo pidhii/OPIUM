@@ -23,6 +23,13 @@
     fprintf(OPI_ERROR, fmt, ##__VA_ARGS__);                \
   } while (0)
 
+#define OPI_WARNING stderr
+#define opi_warning(fmt, ...)                                 \
+  do {                                                        \
+    fprintf(OPI_WARNING, "[\x1b[38;5;11;7m opium \x1b[0m] "); \
+    fprintf(OPI_WARNING, fmt, ##__VA_ARGS__);                 \
+  } while (0)
+
 #define OPI_TRACE stderr
 #define opi_trace(fmt, ...)                              \
   do {                                                   \
@@ -112,6 +119,9 @@ typedef OpiType *opi_type_t;
 typedef struct OpiHeader_s OpiHeader;
 typedef OpiHeader *opi_t;
 
+typedef struct OpiInsn_s OpiInsn;
+typedef struct OpiFlatInsn_s OpiFlatInsn;
+
 typedef struct OpiSeq_s OpiSeq;
 typedef struct OpiIter_s OpiIter;
 
@@ -158,14 +168,14 @@ typedef struct OpiBytecode_s OpiBytecode;
  */
 #define OPI_TYPE_NAME_MAX 255
 
-extern
-opi_type_t opi_type_type;
-
 opi_type_t
 opi_type_new(const char *name);
 
 void
 opi_type_delete(opi_type_t ty);
+
+void
+opi_type_delete_methods(opi_type_t ty);
 
 void
 opi_type_set_delete_cell(opi_type_t ty, void (*fn)(opi_type_t,opi_t));
@@ -211,6 +221,87 @@ opi_type_get_fields(opi_type_t ty);
 
 void*
 opi_type_get_data(opi_type_t ty);
+
+/* ==========================================================================
+ * Trait
+ */
+typedef struct OpiTrait_s OpiTrait;
+
+// TODO: Create dummy method if n = 0.
+OpiTrait*
+opi_trait_new(char *const nam[], int n);
+
+void
+opi_trait_delete(OpiTrait *trait);
+
+/*
+ * Set default methods implementation. Partial implementation is allowed.
+ */
+void
+opi_trait_set_default(OpiTrait *trait, char *const nam[], opi_t f[], int n);
+
+/*
+ * Implement trait for given type.
+ *
+ * If <replace> is not zero, previous implementation (if present) will be
+ * replaced by the new one. Otherwize, implementation will fail on such
+ * collision.
+ *
+ * Return OPI_OK on success; otherwize, return OPI_ERR, in case if given
+ * implementation does not satisfy trait requirements.
+ */
+int
+opi_trait_impl(OpiTrait *trait, opi_type_t type, char *const nam[], opi_t f[],
+    int n, int replace);
+
+/*
+ * Add conditional trait implementation.
+ *
+ * Return OPI_OK on success; otherwize, return OPI_ERR, in case if given
+ * implementation does not satisfy trait requirements.
+ */
+int
+opi_trait_cond_impl(OpiTrait *trait, OpiTrait *traits[], int ntraits,
+    char *const nam[], opi_t f[], int nf);
+
+/*
+ * Get number of methods.
+ */
+int
+opi_trait_get_methods(const OpiTrait *trait);
+
+/*
+ * Get method offset.
+ *
+ * Return offset (>= 0) or -1 in case of error.
+ */
+int
+opi_trait_get_method_offset(const OpiTrait *trait, const char *nam);
+
+/*
+ * Find matching conditional implementation.
+ *
+ * Return implementation identifier (>= 0) or -1 in case of error.
+ */
+int
+opi_trait_find_cond_impl(OpiTrait *trait, opi_type_t type);
+
+/*
+ * Get method implementation for given type. If trait is not yet implemented
+ * for this type, it will be checked if there is matching conditional
+ * implementation; and if so, it will be assigned as an implementation for
+ * supplied type.
+ *
+ * Return method, or NULL in case of error.
+ */
+opi_t
+opi_trait_get_impl(OpiTrait *trait, opi_type_t type, int metoffs);
+
+/*
+ * Return function to dispatch implementations by type of the first argument.
+ */
+opi_t
+opi_trait_get_generic(OpiTrait *trait, int metoffs);
 
 /* ==========================================================================
  * Cell
@@ -929,6 +1020,8 @@ typedef enum OpiAstTag_e {
   OPI_AST_USE,
   OPI_AST_RETURN,
   OPI_AST_BINOP,
+  OPI_AST_TRAIT,
+  OPI_AST_IMPL,
 } OpiAstTag;
 
 typedef enum OpiPatternTag_e {
@@ -969,6 +1062,8 @@ struct OpiAst_s {
     char *load;
     struct { OpiAstPattern *pattern; OpiAst *then, *els, *expr; } match;
     struct { char *typename, **fields; size_t nfields; } strct;
+    struct { char *name, **f_nams; OpiAst *build, **fs; int nfs; } trait;
+    struct { char *trait, *target; char **f_nams; OpiAst **fs; int nfs; } impl;
     struct { char *old, *new; } use;
     OpiAst *ret;
     struct { int opc; OpiAst *lhs, *rhs; } binop;
@@ -1053,9 +1148,15 @@ OpiAst*
 opi_ast_match_new_simple(const char *type, char **vars, char **fields, size_t n,
     OpiAst *expr, OpiAst *then, OpiAst *els);
 
-
 OpiAst*
 opi_ast_struct(const char *typename, char** fields, size_t nfields);
+
+OpiAst*
+opi_ast_trait(const char *name, char *const f_nams[], OpiAst *fsp[], int n);
+
+OpiAst*
+opi_ast_impl(const char *trait, const char *target, char *const f_nams[],
+    OpiAst *fs[], int nfs);
 
 OpiAst*
 opi_ast_and(OpiAst *x, OpiAst *y);
@@ -1081,10 +1182,11 @@ opi_ast_binop(int opc, OpiAst *lhs, OpiAst *rhs);
  * Context
  */
 typedef struct OpiContext_s {
-  struct cod_ptrvec types;
-  struct cod_ptrvec bc;
+  cod_vec(OpiType*) types;
+  cod_vec(OpiTrait*) traits;
+  cod_vec(OpiInsn*) bc;
   struct cod_strvec dl_paths;
-  struct cod_ptrvec dls;
+  cod_vec(void*) dls;
 } OpiContext;
 
 void
@@ -1095,6 +1197,9 @@ opi_context_destroy(OpiContext *ctx);
 
 void
 opi_context_add_type(OpiContext *ctx, opi_type_t type);
+
+void
+opi_context_add_trait(OpiContext *ctx, OpiTrait *trait);
 
 void
 opi_context_drain_bytecode(OpiContext *ctx, OpiBytecode *bc);
@@ -1149,6 +1254,9 @@ struct OpiBuilder_s {
 
   struct cod_strvec *type_names;
   struct cod_ptrvec *types;
+
+  struct cod_strvec *trait_names;
+  struct cod_ptrvec *traits;
 };
 
 static inline int
@@ -1189,7 +1297,7 @@ int
 opi_builder_find_deep(OpiBuilder *bldr, const char *var);
 
 typedef struct OpiScope_s {
-  size_t nvars1, ntypes1, vasize1;
+  size_t nvars1, ntypes1, ntraits1, vasize1;
 } OpiScope;
 
 void
@@ -1207,14 +1315,23 @@ opi_builder_find_path(OpiBuilder *bldr, const char *path, char *fullpath);
 int
 opi_builder_add_type(OpiBuilder *bldr, const char *name, opi_type_t type);
 
+int
+opi_builder_add_trait(OpiBuilder *bldr, const char *name, OpiTrait *trait);
+
 opi_type_t
-opi_builder_find_type(OpiBuilder *bldr, const char *typename);
+opi_builder_find_type(OpiBuilder *bldr, const char *name);
+
+OpiTrait*
+opi_builder_find_trait(OpiBuilder *bldr, const char *name);
 
 void
 opi_builder_def_const(OpiBuilder *bldr, const char *name, opi_t val);
 
 int
 opi_builder_def_type(OpiBuilder *bldr, const char *name, opi_type_t type);
+
+int
+opi_builder_def_trait(OpiBuilder *bldr, const char *name, OpiTrait *trait);
 
 typedef enum OpiIrTag_e {
   OPI_IR_CONST,
@@ -1587,6 +1704,7 @@ struct OpiBytecode_s {
   OpiInsn *tail;
   OpiInsn *point;
   OpiFlatInsn *tape;
+  int is_generator;
 };
 
 OpiBytecode*
@@ -1767,6 +1885,18 @@ opi_vm(OpiBytecode *bc);
     opi_dec_rc(opi_this.ret);                \
     return opi_this.ret;                     \
   } while (0)
+
+static inline void
+opi_drop_args(int nargs)
+{
+  // increment all arguments
+  for (int i = 0; i < nargs; ++i)
+    opi_inc_rc(opi_get(i + 1));
+  // unref all arguments
+  for (int i = 0; i < nargs; ++i)
+    opi_unref(opi_get(i + 1));
+  opi_sp -= nargs;
+}
 
 #define OPI_NUM(x) opi_num_get_value(x)
 #define OPI_STR(x) opi_string_get_value(x)

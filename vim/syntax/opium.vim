@@ -21,6 +21,23 @@ syn region opiTable matchgroup=Type start=/{/ end=/}/ contains=TOP skipwhite ski
 
 syn keyword opiUse use as
 
+syn region opiImplHead matchgroup=opiTrait start=/\<impl\>/ end=/\<end\>/ skipwhite skipnl contains=opiTraitName,opiStructName,opiImplTail,opiImplFor
+syn keyword opiImplFor for contained
+hi link opiImplFor opiTrait
+
+syn region opiImplTail start=/=/me=s-1 matchgroup=opiTrait end=/\<end\>/me=s-1 skipwhite skipnl contains=TOP contained
+
+"syn keyword Type impl nextgroup=opiImplTrait
+"syn match opiImplTrait /\<\k\+\>/ nextgroup=opiImplFor
+"syn keyword opiImplFor for nextgroup=opiImplType
+"hi link opiImplFor opiTrait
+"syn region opiImpl matchgroup=opiStructName start=/\<\k\+\>/ matchgroup=opiTrait end=/\<end\>/ skipwhite skipnl contains=TOP
+
+
+syn region opiTraitWrap matchgroup=opiTrait start=/\<trait\>/ end=/\<end\>/ contains=opiTraitDef
+syn region opiTraitDef matchgroup=opiTraitName start=/\<\k\+\>/ matchgroup=opiTrait end=/\<end\>/me=s-1 skipwhite skipnl contains=TOP containedin=opiTraitWrap contained
+syn match opiTraitName /\k\+/ contained
+
 syn keyword opiStruct struct nextgroup=opiStructName skipwhite skipnl
 syn match   opiStructName /\k\+/ contained
 
@@ -182,6 +199,8 @@ hi link opiUse Define
 "hi link opiStruct     StorageClass
 "hi link opiStructName Type
 
+hi link opiTrait      Structure
+hi link opiTraitName  StorageClass
 hi link opiStruct     Structure
 hi link opiStructName StorageClass
 

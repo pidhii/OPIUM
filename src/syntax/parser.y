@@ -130,7 +130,7 @@ int opi_start_token;
 
 %right '=' RARROW FN
 
-%nonassoc STRUCT
+%nonassoc STRUCT TRAIT IMPL FOR
 
 %token<c>   CHAR
 %token<num> NUMBER
@@ -189,8 +189,8 @@ int opi_start_token;
 %type<ast> string shell qr sr
 %type<fmt> string_aux shell_aux qr_aux
 %type<fmt> fmt
-%type<ast> table
-%type<table> table_aux
+%type<ast> table_binds table
+%type<table> table_aux cond_table_aux
 
 %right OR
 %right '$'
@@ -235,7 +235,7 @@ Atom
     free($2);
   }
   | '[' '|' arg_aux '|' ']' {
-    $$ = opi_ast_apply(opi_ast_var("array"), (OpiAst**)$3->data, $3->size);
+    $$ = opi_ast_apply(opi_ast_var("Array"), (OpiAst**)$3->data, $3->size);
     $$->apply.loc = location(&@$);
     cod_ptrvec_destroy($3, NULL);
     free($3);
@@ -700,6 +700,85 @@ block_stmnt_only
     cod_strvec_destroy($4);
     free($4);
   }
+  | TRAIT TYPE '=' cond_table_aux END {
+    OpiAst *list_args[$4.names.size];
+    OpiAst *impls[$4.names.size + 1];
+    int n_impl = 0;
+    for (size_t i = 0; i < $4.names.size; ++i) {
+      if ($4.body.data[i] == NULL)
+        continue;
+      OpiAst *key = opi_ast_const(opi_symbol($4.names.data[i]));
+      OpiAst *val = opi_ast_var($4.names.data[i]);
+      list_args[n_impl] = opi_ast_binop(OPI_OPC_CONS, key, val);
+      impls[n_impl] = $4.body.data[i];
+      n_impl++;
+    }
+
+    OpiAst *list = opi_ast_apply(opi_ast_var("list"), list_args, n_impl);
+
+    impls[n_impl] = list;
+    OpiAst *block = opi_ast_block(impls, n_impl + 1);
+
+    OpiAst *table = opi_ast_apply(opi_ast_var("table"), &block, 1);
+
+    char *table_name = " trait table ";
+    OpiAst *methods[n_impl];
+    for (size_t i = 0; i < $4.names.size; ++i) {
+      if ($4.body.data[i] == NULL) {
+        methods[i] = NULL;
+      } else {
+        OpiAst *p[] = {
+            opi_ast_var(table_name),
+            opi_ast_const(opi_symbol($4.names.data[i]))
+        };
+        methods[i] = opi_ast_apply(opi_ast_var("#"), p, 2);
+      }
+    }
+    cod_vec_destroy($4.body);
+
+    $$ = opi_ast_trait($2, $4.names.data, methods, $4.names.size);
+    $$->trait.build = opi_ast_let(&table_name, &table, 1, NULL);
+
+    free($2);
+    cod_strvec_destroy(&$4.names);
+  }
+  | IMPL TYPE FOR TYPE '=' table_aux END {
+    OpiAst *list_args[$6.names.size];
+    for (size_t i = 0; i < $6.names.size; ++i) {
+      OpiAst *key = opi_ast_const(opi_symbol($6.names.data[i]));
+      OpiAst *val = opi_ast_var($6.names.data[i]);
+      list_args[i] = opi_ast_binop(OPI_OPC_CONS, key, val);
+    }
+
+    OpiAst *list = opi_ast_apply(opi_ast_var("list"), list_args, $6.names.size);
+
+    cod_vec_push($6.body, list);
+    OpiAst *block = opi_ast_block($6.body.data, $6.body.len);
+    cod_vec_destroy($6.body);
+
+    OpiAst *table = opi_ast_apply(opi_ast_var("table"), &block, 1);
+
+    char *table_name = " trait table ";
+    OpiAst *methods[$6.names.size];
+    for (size_t i = 0; i < $6.names.size; ++i) {
+      OpiAst *p[] = {
+          opi_ast_var(table_name),
+          opi_ast_const(opi_symbol($6.names.data[i]))
+      };
+      methods[i] = opi_ast_apply(opi_ast_var("#"), p, 2);
+    }
+
+    OpiAst *my_body[] = {
+      opi_ast_let(&table_name, &table, 1, NULL),
+      opi_ast_impl($2, $4, $6.names.data, methods, $6.names.size)
+    };
+    $$ = opi_ast_block(my_body, 2);
+    opi_ast_block_set_drop($$, FALSE);
+
+    free($2);
+    free($4);
+    cod_strvec_destroy(&$6.names);
+  }
   | USE Symbol AS SYMBOL {
     $$ = opi_ast_use($2, $4);
     free($2);
@@ -926,22 +1005,22 @@ fmt
   }
 ;
 
-table
-  : '{' table_aux '}' {
-
-    OpiAst *list_args[$2.names.size];
-    for (size_t i = 0; i < $2.names.size; ++i) {
-      OpiAst *key = opi_ast_const(opi_symbol($2.names.data[i]));
-      OpiAst *val = opi_ast_var($2.names.data[i]);
+table: '{' table_binds '}' { $$ = $2; }
+table_binds
+  : table_aux {
+    OpiAst *list_args[$1.names.size];
+    for (size_t i = 0; i < $1.names.size; ++i) {
+      OpiAst *key = opi_ast_const(opi_symbol($1.names.data[i]));
+      OpiAst *val = opi_ast_var($1.names.data[i]);
       list_args[i] = opi_ast_binop(OPI_OPC_CONS, key, val);
     }
 
-    OpiAst *list = opi_ast_apply(opi_ast_var("list"), list_args, $2.names.size);
-    cod_strvec_destroy(&$2.names);
+    OpiAst *list = opi_ast_apply(opi_ast_var("list"), list_args, $1.names.size);
+    cod_strvec_destroy(&$1.names);
 
-    cod_vec_push($2.body, list);
-    OpiAst *block = opi_ast_block($2.body.data, $2.body.len);
-    cod_vec_destroy($2.body);
+    cod_vec_push($1.body, list);
+    OpiAst *block = opi_ast_block($1.body.data, $1.body.len);
+    cod_vec_destroy($1.body);
 
     $$ = opi_ast_apply(opi_ast_var("table"), &block, 1);
   }
@@ -953,7 +1032,8 @@ table_aux
     cod_vec_init($$.body);
   }
   | table_aux LET REC recbinds {
-    OpiAst *letrec = opi_ast_fix($4->vars.data, (OpiAst**)$4->vals.data, $4->vars.size, NULL);
+    OpiAst *letrec = opi_ast_fix($4->vars.data, (OpiAst**)$4->vals.data,
+        $4->vars.size, NULL);
 
     $$ = $1;
     for (size_t i = 0; i < $4->vars.size; ++i)
@@ -963,7 +1043,8 @@ table_aux
     binds_delete($4);
   }
   | table_aux LET binds {
-    OpiAst *let = opi_ast_let($3->vars.data, (OpiAst**)$3->vals.data, $3->vars.size, NULL);
+    OpiAst *let = opi_ast_let($3->vars.data, (OpiAst**)$3->vals.data,
+        $3->vars.size, NULL);
 
     $$ = $1;
     for (size_t i = 0; i < $3->vars.size; ++i)
@@ -974,6 +1055,40 @@ table_aux
   }
 ;
 
+cond_table_aux
+  : {
+    cod_strvec_init(&$$.names);
+    cod_vec_init($$.body);
+  }
+  | cond_table_aux LET REC recbinds {
+    OpiAst *letrec = opi_ast_fix($4->vars.data, (OpiAst**)$4->vals.data,
+        $4->vars.size, NULL);
+
+    $$ = $1;
+    for (size_t i = 0; i < $4->vars.size; ++i)
+      cod_strvec_push(&$$.names, $4->vars.data[i]);
+    cod_vec_push($$.body, letrec);
+
+    binds_delete($4);
+  }
+  | cond_table_aux LET binds {
+    OpiAst *let = opi_ast_let($3->vars.data, (OpiAst**)$3->vals.data,
+        $3->vars.size, NULL);
+
+    $$ = $1;
+    for (size_t i = 0; i < $3->vars.size; ++i)
+      cod_strvec_push(&$$.names, $3->vars.data[i]);
+    cod_vec_push($$.body, let);
+
+    binds_delete($3);
+  }
+  | cond_table_aux LET SYMBOL {
+    $$ = $1;
+    cod_strvec_push(&$$.names, $3);
+    cod_vec_push($$.body, NULL);
+    free($3);
+  }
+;
 %%
 
 int opi_start_token = -1;

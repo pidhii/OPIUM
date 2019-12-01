@@ -98,6 +98,9 @@ return { return RETURN; }
 fn { return FN; }
 lazy { return LAZY; }
 assert { return ASSERT; }
+trait { return TRAIT; }
+impl { return IMPL; }
+for { return FOR; }
 
 begin {
   g_begin_cnt += 1;

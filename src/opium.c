@@ -137,10 +137,10 @@ opi_cleanup(void)
 }
 
 /******************************************************************************/
-opi_type_t opi_type_type = NULL;
-
 struct OpiType_s {
   char name[OPI_TYPE_NAME_MAX + 1];
+
+  OpiHeader type_object; // used to map types in generics;
 
   void (*delete_cell)(opi_type_t ty, opi_t cell);
 
@@ -156,8 +156,6 @@ struct OpiType_s {
   size_t fields_offset;
   size_t nfields;
   char **fields;
-
-  OpiHashMap methods;
 };
 
 static void
@@ -184,12 +182,25 @@ static int
 default_equal(opi_type_t ty, opi_t x, opi_t y)
 { return ty->eq(ty, x, y); }
 
-opi_type_t
-opi_type_new(const char *name)
+static void
+type_init(OpiType *ty, const char *name)
 {
-  OpiType *ty = malloc(sizeof(OpiType));
+  static OpiType type_type = {
+    .name = "TypeObject",
+    .delete_cell = default_destroy_cell,
+    .data = NULL,
+    .delete_data = default_destroy_data,
+    .display = default_display,
+    .write = default_write,
+    .eq = default_eq,
+    .equal = default_equal,
+    .hash = NULL,
+    .fields = NULL,
+  };
+
   opi_assert(strlen(name) <= OPI_TYPE_NAME_MAX);
   strcpy(ty->name, name);
+  opi_init_cell(&ty->type_object, &type_type);
   ty->delete_cell = default_destroy_cell;
   ty->data = NULL;
   ty->delete_data = default_destroy_data;
@@ -199,7 +210,13 @@ opi_type_new(const char *name)
   ty->equal = default_equal;
   ty->hash = NULL;
   ty->fields = NULL;
-  opi_hash_map_init(&ty->methods);
+}
+
+opi_type_t
+opi_type_new(const char *name)
+{
+  OpiType *ty = malloc(sizeof(OpiType));
+  type_init(ty, name);
   return ty;
 }
 
@@ -214,8 +231,6 @@ opi_type_delete(opi_type_t ty)
       free(ty->fields[i]);
     free(ty->fields);
   }
-
-  opi_hash_map_destroy(&ty->methods);
 
   free(ty);
 }
@@ -323,6 +338,315 @@ opi_delete(opi_t x)
 size_t
 opi_hashof(opi_t x)
 { return x->type->hash(x->type, x); }
+
+/******************************************************************************/
+typedef struct Impl_s {
+  char **f_names;
+  opi_t *fs;
+  int n;
+} Impl;
+
+static Impl*
+impl_new(char *const names[], opi_t fs[], int n)
+{
+  Impl* impl = malloc(sizeof(Impl));
+  impl->f_names = malloc(sizeof(char*) * n);
+  impl->fs = malloc(sizeof(opi_t) * n);
+  for (int i = 0; i < n; ++i) {
+    impl->f_names[i] = strdup(names[i]);
+    if ((impl->fs[i] = fs[i]))
+      opi_inc_rc(fs[i]);
+  }
+  impl->n = n;
+  return impl;
+}
+
+static void
+impl_delete(Impl *impl)
+{
+  for (int i = 0; i < impl->n; ++i) {
+    free(impl->f_names[i]);
+    if (impl->fs[i])
+      opi_unref(impl->fs[i]);
+  }
+  free(impl->f_names);
+  free(impl->fs);
+  free(impl);
+}
+
+/*
+ * Check if all unimplemented functions are supplied.
+ */
+static int
+impl_is_full_with(Impl *impl, char *const names[], int n)
+{
+  for (int i = 0; i < impl->n; ++i) {
+    if (impl->fs[i] == NULL) {
+      int is_ok = FALSE;
+      for (int j = 0; j < n; ++j) {
+        if (strcmp(impl->f_names[i], names[j]) == 0) {
+          is_ok = TRUE;
+          break;
+        }
+      }
+      if (!is_ok)
+        return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static void
+impl_insert(Impl *impl, char *const nam, opi_t f)
+{
+  for (int i = 0; i < impl->n; ++i) {
+    if (strcmp(impl->f_names[i], nam) == 0) {
+      opi_inc_rc(f);
+      if (impl->fs[i])
+        opi_unref(impl->fs[i]);
+      impl->fs[i] = f;
+      return;
+    }
+  }
+  opi_warning("failed to insert trait method '%s', no such method\n", nam);
+}
+
+typedef struct CondImpl_s {
+  Impl *impl;
+  int lock; // to prevent cycles
+  int n;
+  OpiTrait *traits[];
+} CondImpl;
+
+static CondImpl*
+cond_impl_new(Impl *impl, OpiTrait *traits[], int n)
+{
+  CondImpl *ci = malloc(sizeof(CondImpl) + sizeof(OpiTrait*) * n);
+  ci->impl = impl;
+  ci->n = n;
+  memcpy(ci->traits, traits, sizeof(OpiTrait*) * n);
+  ci->lock = 0;
+  return ci;
+}
+
+static void
+cond_impl_delete(CondImpl *ci)
+{
+  impl_delete(ci->impl);
+  free(ci);
+}
+
+// TODO: Handle cyclic dependences.
+static int
+cond_impl_fits(CondImpl *ci, opi_type_t type)
+{
+  opi_assert(!ci->lock);
+  ci->lock = 1;
+  for (int i = 0; i < ci->n; ++i) {
+    if (!opi_trait_get_impl(ci->traits[i], type, 0)) {
+      ci->lock = 0;
+      return FALSE;
+    }
+  }
+  ci->lock = 0;
+  return TRUE;
+}
+
+struct OpiTrait_s {
+  Impl *default_impl;
+  OpiHashMap *impls;
+  cod_vec(CondImpl*) cond_impls;
+  opi_t *generics;
+};
+
+typedef struct GenericData_s {
+  OpiTrait *trait;
+  int moffs;
+} GenericData;
+
+static void
+generic_data_delete(OpiFn *fn)
+{
+  free(fn->data);
+  opi_fn_delete(fn);
+}
+
+static opi_t
+generic(void)
+{
+  GenericData *data = opi_fn_get_data(opi_current_fn);
+  opi_t x = opi_get(1);
+  opi_t m = opi_trait_get_impl(data->trait, x->type, data->moffs);
+  if (m == NULL) {
+    opi_drop_args(opi_nargs);
+    return opi_undefined(opi_symbol("method-dispatch-error"));
+  }
+  return opi_apply(m, opi_nargs);
+}
+
+OpiTrait*
+opi_trait_new(char *const nam[], int n)
+{
+  OpiTrait *trait = malloc(sizeof(OpiTrait));
+  // default_iml
+  opi_t fs[n];
+  memset(fs, 0, sizeof fs);
+  trait->default_impl = impl_new(nam, fs, n);
+  // impls
+  trait->impls = malloc(sizeof(OpiHashMap) * n);
+  for (int i = 0; i < n; ++i)
+    opi_hash_map_init(&trait->impls[i]);
+  // cond_impls
+  cod_vec_init(trait->cond_impls);
+  // generics
+  trait->generics = malloc(sizeof(opi_t) * n);
+  for (int i = 0; i < n; ++i) {
+    opi_t g = opi_fn(NULL, generic, -2);
+    GenericData *data = malloc(sizeof(GenericData));
+    data->trait = trait;
+    data->moffs = i;
+    opi_fn_set_data(g, data, generic_data_delete);
+    opi_inc_rc(trait->generics[i] = g);
+  }
+  return trait;
+}
+
+void
+opi_trait_delete(OpiTrait *trait)
+{
+  for (int i = 0; i < trait->default_impl->n; ++i)
+    opi_hash_map_destroy(&trait->impls[i]);
+  free(trait->impls);
+  cod_vec_iter(trait->cond_impls, i, x, cond_impl_delete(x));
+  cod_vec_destroy(trait->cond_impls);
+  for (int i = 0; i < trait->default_impl->n; ++i)
+    opi_unref(trait->generics[i]);
+  impl_delete(trait->default_impl);
+  free(trait->generics);
+  free(trait);
+}
+
+void
+opi_trait_set_default(OpiTrait *trait, char *const nam[], opi_t f[], int n)
+{
+  for (int i = 0; i < n; ++i)
+    impl_insert(trait->default_impl, nam[i], f[i]);
+}
+
+int
+opi_trait_get_methods(const OpiTrait *trait)
+{
+  return trait->default_impl->n;
+}
+
+int
+opi_trait_get_method_offset(const OpiTrait *trait, const char *nam)
+{
+
+  for (int i = 0; i < trait->default_impl->n; ++i) {
+    if (strcmp(trait->default_impl->f_names[i], nam) == 0)
+      return i;
+  }
+  return -1;
+}
+
+int
+opi_trait_impl(OpiTrait *trait, opi_type_t type, char *const nam[], opi_t f[],
+    int n, int replace)
+{
+  if (!impl_is_full_with(trait->default_impl, nam, n))
+    return OPI_ERR;
+
+  opi_t tyobj = &type->type_object;
+  size_t hash = (size_t)type;
+
+  int offs[n];
+  for (int i = 0; i < n; ++i) {
+    offs[i] = opi_trait_get_method_offset(trait, nam[i]);
+    if (!replace) {
+      OpiHashMapElt elt;
+      if (opi_hash_map_find(&trait->impls[offs[i]], tyobj, hash, &elt))
+        return OPI_ERR;
+    }
+  }
+
+  // apply supplied implementation
+  for (int i = 0; i < n; ++i) {
+    OpiHashMapElt elt;
+    opi_hash_map_find(&trait->impls[offs[i]], tyobj, hash, &elt);
+    opi_hash_map_insert(&trait->impls[offs[i]], tyobj, hash, f[i], &elt);
+  }
+  // apply default implementations
+  for (int i = 0; i < trait->default_impl->n; ++i) {
+    // skip supplied methods
+    int skip = FALSE;
+    for (int j = 0; j < n; ++j) {
+      if (i == offs[j]) {
+        skip = TRUE;
+        break;
+      }
+    }
+    if (skip)
+      continue;
+
+    OpiHashMapElt elt;
+    opi_hash_map_find(&trait->impls[i], tyobj, hash, &elt);
+    opi_hash_map_insert(&trait->impls[i], tyobj, hash,
+        trait->default_impl->fs[i], &elt);
+  }
+
+  return OPI_OK;
+}
+
+int
+opi_trait_cond_impl(OpiTrait *trait, OpiTrait *traits[], int ntraits,
+    char *const nam[], opi_t f[], int nf)
+{
+  if (!impl_is_full_with(trait->default_impl, nam, nf))
+    return OPI_ERR;
+  CondImpl *cimpl = cond_impl_new(impl_new(nam, f, nf), traits, ntraits);
+  cod_vec_push(trait->cond_impls, cimpl);
+  return OPI_OK;
+}
+
+int
+opi_trait_find_cond_impl(OpiTrait *trait, opi_type_t type)
+{
+  for (size_t i = 0; i < trait->cond_impls.len; ++i) {
+    if (cond_impl_fits(trait->cond_impls.data[i], type))
+      return i;
+  }
+  return -1;
+}
+
+opi_t
+opi_trait_get_impl(OpiTrait *trait, opi_type_t type, int metoffs)
+{
+  opi_t tyobj = &type->type_object;
+  OpiHashMapElt elt;
+  size_t hash = (size_t)type;
+
+  if (opi_hash_map_find_is(&trait->impls[metoffs], tyobj, hash, &elt)) {
+    return elt.val;
+
+  } else {
+    int impl_id = opi_trait_find_cond_impl(trait, type);
+    if (impl_id < 0)
+      return NULL;
+
+    char **nam = trait->cond_impls.data[impl_id]->impl->f_names;
+    opi_t *f = trait->cond_impls.data[impl_id]->impl->fs;
+    int n = trait->cond_impls.data[impl_id]->impl->n;
+    opi_assert(opi_trait_impl(trait, type, nam, f, n, FALSE) == OPI_OK);
+    return opi_trait_get_impl(trait, type, metoffs);
+  }
+}
+
+opi_t
+opi_trait_get_generic(OpiTrait *trait, int metoffs)
+{
+  return trait->generics[metoffs];
+}
 
 /******************************************************************************/
 opi_type_t opi_num_type;
@@ -1189,6 +1513,48 @@ opi_lazy(opi_t x)
 
 /******************************************************************************/
 opi_type_t
+opi_seq_type;
+
+static void
+seq_delete(opi_type_t type, opi_t x)
+{
+  OpiSeq *seq = opi_as_ptr(x);
+  for (size_t i = 0; i < seq->cache.len; ++i) {
+    if (seq->cache.data[i])
+      opi_unref(seq->cache.data[i]);
+  }
+  cod_vec_destroy(seq->cache);
+  seq->delete_iter(seq->iter);
+  free(seq);
+}
+
+void
+opi_seq_init(void)
+{
+  opi_seq_type = opi_type_new("Seq");
+  opi_type_set_delete_cell(opi_seq_type, seq_delete);
+}
+
+void
+opi_seq_cleanup(void)
+{
+  opi_type_delete(opi_seq_type);
+}
+
+opi_t
+opi_seq_new(OpiIter *iter, opi_t (*next)(OpiIter *iter, int drain), void (*delete_iter)(OpiIter *iter))
+{
+  OpiSeq *seq = malloc(sizeof(OpiSeq));
+  cod_vec_init(seq->cache);
+  seq->iter = iter;
+  seq->next = next;
+  seq->delete_iter = delete_iter;
+  opi_init_cell(seq, opi_seq_type);
+  return (opi_t)seq;
+}
+
+/******************************************************************************/
+opi_type_t
 opi_array_type;
 
 static void
@@ -1266,48 +1632,6 @@ opi_array_new_empty(size_t reserve)
   reserve = opi_cep2_u64(reserve);
   opi_t *data = malloc(sizeof(opi_t) * reserve);
   return opi_array_drain(data, 0, reserve);
-}
-
-/******************************************************************************/
-opi_type_t
-opi_seq_type;
-
-static void
-seq_delete(opi_type_t type, opi_t x)
-{
-  OpiSeq *seq = opi_as_ptr(x);
-  for (size_t i = 0; i < seq->cache.len; ++i) {
-    if (seq->cache.data[i])
-      opi_unref(seq->cache.data[i]);
-  }
-  cod_vec_destroy(seq->cache);
-  seq->delete_iter(seq->iter);
-  free(seq);
-}
-
-void
-opi_seq_init(void)
-{
-  opi_seq_type = opi_type_new("Seq");
-  opi_type_set_delete_cell(opi_seq_type, seq_delete);
-}
-
-void
-opi_seq_cleanup(void)
-{
-  opi_type_delete(opi_seq_type);
-}
-
-opi_t
-opi_seq_new(OpiIter *iter, opi_t (*next)(OpiIter *iter, int drain), void (*delete_iter)(OpiIter *iter))
-{
-  OpiSeq *seq = malloc(sizeof(OpiSeq));
-  cod_vec_init(seq->cache);
-  seq->iter = iter;
-  seq->next = next;
-  seq->delete_iter = delete_iter;
-  opi_init_cell(seq, opi_seq_type);
-  return (opi_t)seq;
 }
 
 /******************************************************************************/
