@@ -267,6 +267,15 @@ opi_h3w();
 void
 opi_h3w_free(void *ptr);
 
+opi_t*
+opi_request_pool(size_t size);
+
+void
+opi_release_pool(opi_t *ptr);
+
+size_t
+opi_get_pool_size(opi_t *ptr);
+
 /* ==========================================================================
  * Stack
  */
@@ -704,11 +713,25 @@ typedef struct OpiState_s {
   OpiBytecode *bc;
   OpiFlatInsn *ip;
   opi_t *reg;
-  size_t reg_cap;
 } OpiState;
 
-void
-opi_state_destroy(OpiState *state);
+static inline OpiState*
+opi_state_new(opi_t fn, OpiBytecode *bc, OpiFlatInsn *ip, opi_t *reg)
+{
+  OpiState *state = opi_h2w();
+  opi_inc_rc(state->this_fn = fn);
+  state->bc = bc;
+  state->ip = ip;
+  state->reg = reg;
+  return state;
+}
+
+static inline void
+opi_state_delete(OpiState *state)
+{
+  opi_unref(state->this_fn);
+  opi_h2w_free(state);
+}
 
 typedef struct OpiGen_s {
   OpiHeader header;
@@ -752,8 +775,7 @@ opi_gen_continue(opi_t x)
   opi_assert(val->type != opi_gen_type);
   opi_inc_rc(val);
   gen->is_done = TRUE;
-  opi_state_destroy(gen->state);
-  free(gen->state);
+  opi_state_delete(gen->state);
   gen->val = val;
 }
 
@@ -836,6 +858,7 @@ typedef enum OpiAstTag_e {
   OPI_AST_USE,
   OPI_AST_RETURN,
   OPI_AST_BINOP,
+  OPI_AST_UNOP,
   OPI_AST_YIELD,
 } OpiAstTag;
 
@@ -880,6 +903,7 @@ struct OpiAst_s {
     struct { char *old, *new; } use;
     OpiAst *ret;
     struct { int opc; OpiAst *lhs, *rhs; } binop;
+    struct { int opc; OpiAst *arg; } unop;
     OpiAst *yield;
   };
 };
@@ -985,6 +1009,9 @@ opi_ast_return(OpiAst *val);
 
 OpiAst*
 opi_ast_binop(int opc, OpiAst *lhs, OpiAst *rhs);
+
+OpiAst*
+opi_ast_unop(int opc, OpiAst *arg);
 
 OpiAst*
 opi_ast_yield(OpiAst *val);
@@ -1140,6 +1167,7 @@ typedef enum OpiIrTag_e {
   OPI_IR_MATCH,
   OPI_IR_RETURN,
   OPI_IR_BINOP,
+  OPI_IR_UNOP,
   OPI_IR_YIELD,
 } OpiIrTag;
 
@@ -1173,6 +1201,7 @@ struct OpiIr_s {
     struct { OpiIrPattern *pattern; OpiIr *expr, *then, *els; } match;
     OpiIr *ret;
     struct { int opc; OpiIr *lhs, *rhs; } binop;
+    struct { int opc; OpiIr *arg; } unop;
     OpiIr *yield;
   };
 };
@@ -1230,6 +1259,9 @@ opi_ir_return(OpiIr *val);
 
 OpiIr*
 opi_ir_binop(int opc, OpiIr *lhs, OpiIr *rhs);
+
+OpiIr*
+opi_ir_unop(int opc, OpiIr *arg);
 
 OpiIr*
 opi_ir_yield(OpiIr *val);
@@ -1333,6 +1365,10 @@ typedef enum OpiOpc_e {
 #define OPI_BINOP_REG_OUT(insn) (insn)->reg[0]
 #define OPI_BINOP_REG_LHS(insn) (insn)->reg[1]
 #define OPI_BINOP_REG_RHS(insn) (insn)->reg[2]
+
+  OPI_OPC_FORCE,
+#define OPI_UNOP_REG_OUT(insn) (insn)->reg[0]
+#define OPI_UNOP_REG_IN(insn) (insn)->reg[1]
 
   OPI_OPC_VAR,
 #define OPI_VAR_REG(insn) (insn)->reg[0]
@@ -1478,6 +1514,9 @@ opi_insn_guard(int in);
 
 OpiInsn*
 opi_insn_binop(OpiOpc opc, int out, int lhs, int rhs);
+
+OpiInsn*
+opi_insn_unop(OpiOpc opc, int out, int in);
 
 OpiInsn*
 opi_insn_var(int reg);
@@ -1648,6 +1687,9 @@ opi_bytecode_guard(OpiBytecode *bc, int cell);
 
 int
 opi_bytecode_binop(OpiBytecode *bc, OpiOpc opc, int lhs, int rhs);
+
+int
+opi_bytecode_unop(OpiBytecode *bc, OpiOpc opc, int in);
 
 int
 opi_bytecode_var(OpiBytecode *bc);

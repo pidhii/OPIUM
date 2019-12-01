@@ -834,6 +834,11 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
           opi_builder_build_ir(bldr, ast->binop.lhs),
           opi_builder_build_ir(bldr, ast->binop.rhs)
       );
+
+    case OPI_AST_UNOP:
+      return opi_ir_unop(ast->unop.opc,
+          opi_builder_build_ir(bldr, ast->unop.arg)
+      );
   }
 
   abort();
@@ -984,6 +989,10 @@ opi_ir_delete(OpiIr *node)
     case OPI_IR_BINOP:
       opi_ir_delete(node->binop.lhs);
       opi_ir_delete(node->binop.rhs);
+      break;
+
+    case OPI_IR_UNOP:
+      opi_ir_delete(node->unop.arg);
       break;
   }
 
@@ -1145,6 +1154,16 @@ opi_ir_binop(int opc, OpiIr *lhs, OpiIr *rhs)
   node->binop.opc = opc;
   node->binop.lhs = lhs;
   node->binop.rhs = rhs;
+  return node;
+}
+
+OpiIr*
+opi_ir_unop(int opc, OpiIr *arg)
+{
+  OpiIr *node = malloc(sizeof(OpiIr));
+  node->tag = OPI_IR_UNOP;
+  node->unop.opc = opc;
+  node->unop.arg = arg;
   return node;
 }
 

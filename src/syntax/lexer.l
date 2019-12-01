@@ -99,6 +99,7 @@ fn { return FN; }
 lazy { return LAZY; }
 assert { return ASSERT; }
 yield { return YIELD; }
+genForce { return FORCE; }
 
 begin {
   g_begin_cnt += 1;

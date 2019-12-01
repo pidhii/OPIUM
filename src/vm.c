@@ -6,8 +6,7 @@
 #include <math.h>
 
 static inline __attribute__((always_inline)) opi_t
-vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t *r_stack, size_t r_cap,
-    opi_t this_fn, OpiState *stateptr)
+vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t this_fn)
 {
   OpiRecScope *scp = NULL;
   size_t scpcnt = 0;
@@ -74,6 +73,18 @@ vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t *r_stack, size_t r_cap,
         break;
       }
 
+      case OPI_OPC_FORCE:
+      {
+        opi_t in = r[OPI_UNOP_REG_IN(ip)];
+        if (opi_unlikely(in->type == opi_gen_type)) {
+          opi_gen_force(in);
+          r[OPI_UNOP_REG_OUT(ip)] = opi_gen_get_value(in);
+        } else {
+          r[OPI_UNOP_REG_OUT(ip)] = in;
+        }
+        break;
+      }
+
       case OPI_OPC_PHI:
         r[OPI_PHI_REG(ip)] = opi_nil;
         break;
@@ -127,11 +138,9 @@ vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t *r_stack, size_t r_cap,
           this_fn = opi_current_fn = fn;
           bc = lam->bc;
           ip = bc->tape;
-          if (bc->nvals > r_cap) {
-            if (r == r_stack)
-              r = malloc(sizeof(opi_t) * bc->nvals);
-            else
-              r = realloc(r, sizeof(opi_t) * (r_cap = bc->nvals));
+          if (bc->nvals > opi_get_pool_size(r)) {
+            opi_release_pool(r);
+            r = opi_request_pool(bc->nvals);
           }
           continue;
         } else {
@@ -144,37 +153,15 @@ vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t *r_stack, size_t r_cap,
       case OPI_OPC_RET:
       {
         opi_t ret = r[OPI_RET_REG_VAL(ip)];
-        if (r != r_stack)
-          free(r);
+        opi_release_pool(r);
         return ret;
       }
 
       case OPI_OPC_YIELD:
       {
-        if (r_stack && r == r_stack) {
-          r = malloc(sizeof(opi_t) * r_cap);
-          memcpy(r, r_stack, sizeof(opi_t) * r_cap);
-        }
-
-        int is_cont = stateptr != NULL;
-
         opi_drop(r[OPI_YIELD_REG_RET(ip)]);
-
-        if (!is_cont)
-          stateptr = malloc(sizeof(OpiState));
-
-        opi_inc_rc(this_fn);
-        if (is_cont)
-          opi_unref(stateptr->this_fn);
-
-        stateptr->this_fn = this_fn;
-
-        stateptr->bc = bc;
-        stateptr->ip = ip + 1;
-        stateptr->reg = r;
-        stateptr->reg_cap = r_cap;
-
-        return opi_gen_new(stateptr);
+        OpiState *state = opi_state_new(this_fn, bc, ip + 1, r);
+        return opi_gen_new(state);
       }
 
       case OPI_OPC_PUSH:
@@ -289,17 +276,15 @@ vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t *r_stack, size_t r_cap,
 opi_t
 opi_vm_continue(OpiState *state)
 {
-  return vm(state->bc, state->ip, state->reg, NULL, state->reg_cap, state->this_fn, state);
+  return vm(state->bc, state->ip, state->reg, state->this_fn);
 }
 
 opi_t
 opi_vm(OpiBytecode *bc)
 {
   OpiFlatInsn *ip = bc->tape;
-  opi_t r_stack[bc->nvals];
-  size_t r_cap = bc->nvals;
-  opi_t *r = r_stack;
+  opi_t *reg = opi_request_pool(bc->nvals);
   opi_t this_fn = opi_current_fn;
-  return vm(bc, ip, r, r_stack, r_cap, this_fn, NULL);
+  return vm(bc, ip, reg, this_fn);
 }
 

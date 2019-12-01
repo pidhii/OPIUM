@@ -106,6 +106,10 @@ opi_ast_delete(OpiAst *node)
       opi_ast_delete(node->binop.lhs);
       opi_ast_delete(node->binop.rhs);
       break;
+
+    case OPI_AST_UNOP:
+      opi_ast_delete(node->unop.arg);
+      break;
   }
 
   free(node);
@@ -460,6 +464,16 @@ opi_ast_binop(int opc, OpiAst *lhs, OpiAst *rhs)
   node->binop.opc = opc;
   node->binop.lhs = lhs;
   node->binop.rhs = rhs;
+  return node;
+}
+
+OpiAst*
+opi_ast_unop(int opc, OpiAst *arg)
+{
+  OpiAst *node = malloc(sizeof(OpiAst));
+  node->tag = OPI_AST_UNOP;
+  node->unop.opc = opc;
+  node->unop.arg = arg;
   return node;
 }
 

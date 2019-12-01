@@ -145,7 +145,7 @@ int opi_start_token;
 
 %right ';'
 
-%right LAZY ASSERT YIELD
+%right LAZY ASSERT YIELD FORCE
 
 %left IF UNLESS WHEN
 %precedence THEN
@@ -332,6 +332,7 @@ Expr
     $$ = opi_ast_apply(opi_ast_var("lazy"), &fn, 1);
     $$->apply.loc = location(&@$);
   }
+  | FORCE Expr { $$ = opi_ast_unop(OPI_OPC_FORCE, $2); }
   | ASSERT Expr {
     opi_t err = opi_undefined(opi_symbol("assertion-failed"));
     $$ = opi_ast_if($2, opi_ast_const(opi_nil),

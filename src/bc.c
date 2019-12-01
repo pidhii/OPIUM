@@ -105,6 +105,7 @@ opi_insn_delete1(OpiInsn *insn)
     case OPI_OPC_VAR:
     case OPI_OPC_SET:
     case OPI_OPC_YIELD:
+    case OPI_OPC_FORCE:
       break;
 
     case OPI_OPC_ENDSCP:
@@ -571,6 +572,16 @@ opi_insn_binop(OpiOpc opc, int out, int lhs, int rhs)
 }
 
 OpiInsn*
+opi_insn_unop(OpiOpc opc, int out, int in)
+{
+  OpiInsn *insn = malloc(sizeof(OpiInsn));
+  insn->opc = opc;
+  OPI_UNOP_REG_OUT(insn) = out;
+  OPI_UNOP_REG_IN(insn) = in;
+  return insn;
+}
+
+OpiInsn*
 opi_insn_var(int reg)
 {
   OpiInsn *insn = malloc(sizeof(OpiInsn));
@@ -621,6 +632,9 @@ opi_insn_is_using(OpiInsn *insn, int vid)
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
       return (int)OPI_BINOP_REG_LHS(insn) == vid ||
              (int)OPI_BINOP_REG_RHS(insn) == vid;
+
+    case OPI_OPC_FORCE:
+      return (int)OPI_UNOP_REG_IN(insn) == vid;
 
     // ignore manual RC-management
     case OPI_OPC_INCRC:
@@ -704,6 +718,7 @@ opi_insn_is_killing(OpiInsn *insn, int vid)
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
     case OPI_OPC_VAR:
     case OPI_OPC_SET:
+    case OPI_OPC_FORCE:
       return FALSE;
 
     // ignore manual RC-management
@@ -763,6 +778,9 @@ opi_insn_is_creating(OpiInsn *insn, int vid)
 
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
       return (int)OPI_BINOP_REG_OUT(insn) == vid;
+
+    case OPI_OPC_FORCE:
+      return (int)OPI_UNOP_REG_OUT(insn) == vid;
 
     // ignore manual RC-management
     case OPI_OPC_INCRC:
@@ -1020,6 +1038,24 @@ opi_bytecode_binop(OpiBytecode *bc, OpiOpc opc, int lhs, int rhs)
       break;
   }
   opi_bytecode_write(bc, opi_insn_binop(opc, out, lhs, rhs));
+  return out;
+}
+
+int
+opi_bytecode_unop(OpiBytecode *bc, OpiOpc opc, int in)
+{
+  int flag;
+  switch (opc) {
+    case OPI_OPC_FORCE:
+      flag = OPI_VAL_LOCAL;
+      break;
+
+    default:
+      opi_error("undefined unop\n");
+      abort();
+  }
+  int out = opi_bytecode_new_val(bc, flag);
+  opi_bytecode_write(bc, opi_insn_unop(opc, out, in));
   return out;
 }
 

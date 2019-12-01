@@ -259,6 +259,23 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
       return ret;
     }
 
+    case OPI_IR_UNOP:
+    {
+      int arg = emit(ir->unop.arg, bc, stack, FALSE);
+      int ret = opi_bytecode_unop(bc, ir->binop.opc, arg);
+      // Implicit error-test:
+      // if
+      int test = opi_bytecode_testty(bc, ret, opi_undefined_type);
+      OpiIf iff;
+      opi_bytecode_if(bc, test, &iff);
+      // then
+      opi_bytecode_ret(bc, ret);
+      // else
+      opi_bytecode_if_else(bc, &iff);
+      opi_bytecode_if_end(bc, &iff);
+      return ret;
+    }
+
     case OPI_IR_FN:
       return emit_fn(ir, bc, stack, -1);
 

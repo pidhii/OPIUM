@@ -1,0 +1,68 @@
+--load "base"
+
+let range from to =
+  let rec loop i acc =
+    if i < from then acc
+    else loop (i - 1) (i:acc)
+  in loop (to - 1) nil
+
+let revfilter f l =
+  let rec loop l acc =
+    unless let x:xs = l then acc
+    else loop xs $ if f x then x:acc else acc
+  in loop l nil
+
+--let filter f l =
+  --let rec loop l acc =
+    --if let x:xs = l then
+      --loop xs (if f x then Array.push acc x else acc)
+    --else Array.toList acc
+  --in loop l $ Array ()
+
+let rec foldl f z l =
+  unless let x:xs = l then z
+  else foldl f (f z x) xs
+
+module Gen =
+  let rec range from to =
+    yield nil;
+    if from >= to then nil
+    else from : range (from + 1) to
+
+  let rec filter f g =
+    yield nil;
+    unless let x:xs = (genForce g) then nil
+    else if f x then x : filter f xs
+    else (genForce filter f xs)
+
+  let rec foldl f z g =
+    unless let x:xs = (genForce g) then z
+    else foldl f (f z x) xs
+end
+
+let even? x = x % 2 == 0
+
+begin
+  let add x y = x + y in
+  --print $ foldl add 0 $ revfilter even? $ range 0 100;
+
+  --let seq = List.toSeq [1 2 3 4] in
+  --print "seq:" seq;
+  --Seq.iter (fn x -> print "- %{x}") seq;
+  --Seq.iter (fn x -> print "- %{x}") $ Seq.map (fn x -> x * x) seq;
+
+  let n = 10000000 in
+
+  let testList () =
+    foldl add 0 $ revfilter even? $ range 0 n
+  in
+
+  let testGen () =
+    Gen.foldl add 0 $ Gen.filter even? $ Gen.range 0 n
+  in
+
+  let test = testList in
+  --let test = testGen in
+  print "=> %{test ()}";
+end
+

@@ -1205,12 +1205,6 @@ opi_lazy(opi_t x)
 opi_type_t
 opi_gen_type;
 
-void
-opi_state_destroy(OpiState *state)
-{
-  opi_unref(state->this_fn);
-}
-
 static void
 gen_delete(opi_type_t type, opi_t x)
 {
@@ -1220,8 +1214,7 @@ gen_delete(opi_type_t type, opi_t x)
       opi_unref(gen->val);
   } else {
     opi_error("unfinished state\n");
-    opi_state_destroy(gen->state);
-    free(gen->state);
+    opi_state_delete(gen->state);
   }
   opi_h2w_free(gen);
 }
