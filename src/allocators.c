@@ -29,13 +29,15 @@
 
 #define UALLOC_NAME h2w
 #define UALLOC_TYPE OpiH2w
+/*#define UALLOC_POOL_SIZE 0x1000*/
 #include "codeine/ualloc.h"
 ALLOCATOR(2)
 
-#define UALLOC_NAME h3w
-#define UALLOC_TYPE OpiH3w
+#define UALLOC_NAME h6w
+#define UALLOC_TYPE OpiH6w
+#define UALLOC_POOL_SIZE 0x40
 #include "codeine/ualloc.h"
-ALLOCATOR(3)
+ALLOCATOR(6)
 
 typedef struct Pool_s {
   uintptr_t size;
@@ -92,12 +94,19 @@ opi_release_pool(opi_t *ptr)
   cod_vec_push(g_pools, get_pool(ptr));
 }
 
+opi_t*
+opi_realloc_pool(opi_t *ptr, size_t size)
+{
+  Pool* pool = realloc_pool(get_pool(ptr), size);
+  return pool->data;
+}
+
 
 void
 opi_allocators_init(void)
 {
   cod_ualloc_h2w_init(&g_allocator_h2w);
-  cod_ualloc_h3w_init(&g_allocator_h3w);
+  cod_ualloc_h6w_init(&g_allocator_h6w);
   cod_vec_init(g_pools);
 }
 
@@ -105,7 +114,7 @@ void
 opi_allocators_cleanup(void)
 {
   cod_ualloc_h2w_destroy(&g_allocator_h2w);
-  cod_ualloc_h3w_destroy(&g_allocator_h3w);
+  cod_ualloc_h6w_destroy(&g_allocator_h6w);
   for (size_t i = 0; i < g_pools.len; ++i)
     free(g_pools.data[i]);
   cod_vec_destroy(g_pools);

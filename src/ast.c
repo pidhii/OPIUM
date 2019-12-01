@@ -98,6 +98,30 @@ opi_ast_delete(OpiAst *node)
       free(node->strct.fields);
       break;
 
+    case OPI_AST_TRAIT:
+      free(node->trait.name);
+      for (int i = 0; i < node->trait.nfs; ++i) {
+        free(node->trait.f_nams[i]);
+        if (node->trait.fs[i])
+          opi_ast_delete(node->trait.fs[i]);
+      }
+      if (node->trait.build)
+        opi_ast_delete(node->trait.build);
+      free(node->trait.f_nams);
+      free(node->trait.fs);
+      break;
+
+    case OPI_AST_IMPL:
+      free(node->impl.trait);
+      free(node->impl.target);
+      for (int i = 0; i < node->impl.nfs; ++i) {
+        free(node->impl.f_nams[i]);
+        opi_ast_delete(node->impl.fs[i]);
+      }
+      free(node->impl.f_nams);
+      free(node->impl.fs);
+      break;
+
     case OPI_AST_RETURN:
       opi_ast_delete(node->ret);
       break;
@@ -395,6 +419,41 @@ opi_ast_struct(const char *typename, char** fields, size_t nfields)
   for (size_t i = 0; i < nfields; ++i)
     node->strct.fields[i] = strdup(fields[i]);
   node->strct.nfields = nfields;
+  return node;
+}
+
+OpiAst*
+opi_ast_trait(const char *name, char *const f_nams[], OpiAst *fs[], int n)
+{
+  OpiAst *node = malloc(sizeof(OpiAst));
+  node->tag = OPI_AST_TRAIT;
+  node->trait.name = strdup(name);
+  node->trait.f_nams = malloc(sizeof(char*) * n);
+  node->trait.fs = malloc(sizeof(opi_t) * n);
+  node->trait.nfs = n;
+  for (int i = 0; i < n; ++i) {
+    node->trait.f_nams[i] = strdup(f_nams[i]);
+    node->trait.fs[i] = fs[i];
+  }
+  node->trait.build = NULL;
+  return node;
+}
+
+OpiAst*
+opi_ast_impl(const char *trait, const char *target, char *const f_nams[],
+    OpiAst *fs[], int nfs)
+{
+  OpiAst *node = malloc(sizeof(OpiAst));
+  node->tag = OPI_AST_IMPL;
+  node->impl.trait = strdup(trait);
+  node->impl.target = strdup(target);
+  node->impl.f_nams = malloc(sizeof(char*) * nfs);
+  node->impl.fs = malloc(sizeof(OpiAst*) * nfs);
+  node->impl.nfs = nfs;
+  for (int i = 0; i < nfs; ++i) {
+    node->impl.f_nams[i] = strdup(f_nams[i]);
+    node->impl.fs[i] = fs[i];
+  }
   return node;
 }
 

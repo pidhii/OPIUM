@@ -6,8 +6,12 @@
 #include <math.h>
 
 static inline __attribute__((always_inline)) opi_t
-vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t this_fn)
+vm(OpiState *state)
 {
+  OpiBytecode *bc = state->bc;
+  OpiFlatInsn *restrict ip = state->ip;
+  opi_t *restrict r = state->reg;
+
   OpiRecScope *scp = NULL;
   size_t scpcnt = 0;
 
@@ -75,14 +79,28 @@ vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t this_fn)
 
       case OPI_OPC_FORCE:
       {
-        opi_t in = r[OPI_UNOP_REG_IN(ip)];
-        if (opi_unlikely(in->type == opi_gen_type)) {
-          opi_gen_force(in);
-          r[OPI_UNOP_REG_OUT(ip)] = opi_gen_get_value(in);
-        } else {
-          r[OPI_UNOP_REG_OUT(ip)] = in;
-        }
-        break;
+        abort();
+        /*opi_t g = r[OPI_UNOP_REG_IN(ip)];*/
+        /*if (g->type != opi_gen_type) {*/
+          /*r[OPI_UNOP_REG_OUT(ip)] = g;*/
+          /*break;*/
+        /*}*/
+
+      /*drain:;*/
+        /*opi_t ret = opi_gen_drain_value(g);*/
+        /*if (ret) {*/
+          /*opi_dec_rc(ret);*/
+          /*r[OPI_UNOP_REG_OUT(ip)] = ret;*/
+          /*break;*/
+        /*}*/
+
+        /*if (opi_gen_is_done(g)) {*/
+          /*r[OPI_UNOP_REG_OUT(ip)] = opi_undefined(opi_symbol("End"));*/
+          /*break;*/
+        /*}*/
+
+        /*opi_gen_next(g);*/
+        /*goto drain;*/
       }
 
       case OPI_OPC_PHI:
@@ -135,13 +153,15 @@ vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t this_fn)
         if (opi_is_lambda(fn) & opi_test_arity(opi_fn_get_arity(fn), nargs)) {
           // Tail Call
           OpiLambda *lam = opi_fn_get_data(fn);
-          this_fn = opi_current_fn = fn;
+          opi_current_fn = fn;
+          opi_inc_rc(fn);
+          if (state->this_fn)
+            opi_unref(state->this_fn);
+          state->this_fn = fn;
           bc = lam->bc;
           ip = bc->tape;
-          if (bc->nvals > opi_get_pool_size(r)) {
-            opi_release_pool(r);
-            r = opi_request_pool(bc->nvals);
-          }
+          if (bc->nvals > opi_get_pool_size(r))
+            r = state->reg = opi_realloc_pool(r, bc->nvals);
           continue;
         } else {
           // Fall back to default APPLY
@@ -154,14 +174,16 @@ vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t this_fn)
       {
         opi_t ret = r[OPI_RET_REG_VAL(ip)];
         opi_release_pool(r);
+        state->reg = NULL; // to nitifiy about regular return
         return ret;
       }
 
       case OPI_OPC_YIELD:
       {
-        opi_drop(r[OPI_YIELD_REG_RET(ip)]);
-        OpiState *state = opi_state_new(this_fn, bc, ip + 1, r);
-        return opi_gen_new(state);
+        // NOTE: state->{reg & this_fn} are updated on tail-call
+        state->ip = ip + 1;
+        state->bc = bc;
+        return r[OPI_YIELD_REG_RET(ip)];
       }
 
       case OPI_OPC_PUSH:
@@ -276,15 +298,35 @@ vm(OpiBytecode *bc, OpiFlatInsn *ip, opi_t *r, opi_t this_fn)
 opi_t
 opi_vm_continue(OpiState *state)
 {
-  return vm(state->bc, state->ip, state->reg, state->this_fn);
+  return vm(state);
 }
 
 opi_t
 opi_vm(OpiBytecode *bc)
 {
-  OpiFlatInsn *ip = bc->tape;
-  opi_t *reg = opi_request_pool(bc->nvals);
-  opi_t this_fn = opi_current_fn;
-  return vm(bc, ip, reg, this_fn);
+  if (opi_current_fn)
+    opi_inc_rc(opi_current_fn);
+
+  OpiState state = {
+    .this_fn = opi_current_fn,
+    .ip = bc->tape,
+    .bc = bc,
+    .reg = opi_request_pool(bc->nvals),
+  };
+
+  opi_t ret = vm(&state);
+
+  if (state.this_fn)
+    opi_dec_rc(state.this_fn);
+
+  if (state.reg) {
+    // yield => return generator
+    opi_assert(state.this_fn);
+    OpiState *s = opi_state_new(state.this_fn, state.bc, state.ip, state.reg);
+    return opi_gen_new(ret, s);
+  } else {
+    // return
+    return ret;
+  }
 }
 

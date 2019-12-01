@@ -64,32 +64,23 @@ opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
   cod_strvec_init(bldr->type_names = malloc(sizeof(struct cod_strvec)));
   cod_ptrvec_init(bldr->types = malloc(sizeof(struct cod_ptrvec)));
 
-  opi_builder_def_type(bldr, "Undefined", opi_undefined_type);
-  cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "Num", opi_num_type);
-  cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "Sym", opi_symbol_type);
-  cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "Nil", opi_nil_type);
-  cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "Str", opi_string_type);
-  cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "Bool", opi_boolean_type);
-  cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "Cons", opi_pair_type);
-  cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "Fn", opi_fn_type);
-  cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "Lazy", opi_lazy_type);
-  cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "File", opi_file_type);
-  cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "Gen", opi_gen_type);
-  cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "svector", opi_svector_type);
-  cod_ptrvec_pop(&bldr->ctx->types, NULL);
-  opi_builder_def_type(bldr, "dvector", opi_dvector_type);
-  cod_ptrvec_pop(&bldr->ctx->types, NULL);
+  cod_strvec_init(bldr->trait_names = malloc(sizeof(struct cod_strvec)));
+  cod_ptrvec_init(bldr->traits = malloc(sizeof(struct cod_ptrvec)));
+
+  opi_builder_def_type(bldr, "Undefined", opi_undefined_type); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "Num"      , opi_num_type      ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "Sym"      , opi_symbol_type   ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "Nil"      , opi_nil_type      ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "Str"      , opi_string_type   ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "Bool"     , opi_boolean_type  ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "Cons"     , opi_pair_type     ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "Fn"       , opi_fn_type       ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "Lazy"     , opi_lazy_type     ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "File"     , opi_file_type     ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "Gen"      , opi_gen_type      ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "Array"    , opi_array_type    ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "svector"  , opi_svector_type  ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "dvector"  , opi_dvector_type  ); cod_vec_pop(ctx->types);
 }
 
 void
@@ -113,6 +104,9 @@ opi_builder_init_derived(OpiBuilder *bldr, OpiBuilder *parent)
 
   bldr->type_names = parent->type_names;
   bldr->types = parent->types;
+
+  bldr->trait_names = parent->trait_names;
+  bldr->traits = parent->traits;
 }
 
 void
@@ -143,6 +137,11 @@ opi_builder_destroy(OpiBuilder *bldr)
   free(bldr->type_names);
   cod_ptrvec_destroy(bldr->types, NULL);
   free(bldr->types);
+
+  cod_strvec_destroy(bldr->trait_names);
+  free(bldr->trait_names);
+  cod_ptrvec_destroy(bldr->traits, NULL);
+  free(bldr->traits);
 }
 
 void
@@ -176,17 +175,48 @@ opi_builder_add_type(OpiBuilder *bldr, const char *name, opi_type_t type)
     opi_error = 1;
     return OPI_ERR;
   }
+  if (opi_builder_find_trait(bldr, name)) {
+    opi_error("type '%s' shadows a trait with the same name\n", name);
+    opi_error = 1;
+    return OPI_ERR;
+  }
   cod_strvec_push(bldr->type_names, name);
   cod_ptrvec_push(bldr->types, type, NULL);
   opi_context_add_type(bldr->ctx, type);
   return OPI_OK;
 }
 
-opi_type_t
-opi_builder_find_type(OpiBuilder *bldr, const char *typename)
+int
+opi_builder_add_trait(OpiBuilder *bldr, const char *name, OpiTrait *trait)
 {
-  long long int idx = cod_strvec_find(bldr->type_names, typename);
+  if (opi_builder_find_trait(bldr, name)) {
+    opi_error("trait named '%s' already present\n", name);
+    opi_error = 1;
+    return OPI_ERR;
+  }
+  if (opi_builder_find_type(bldr, name)) {
+    opi_error("trait '%s' shadows a type with the same name\n", name);
+    opi_error = 1;
+    return OPI_ERR;
+  }
+  cod_strvec_push(bldr->trait_names, name);
+  cod_ptrvec_push(bldr->traits, trait, NULL);
+  opi_context_add_trait(bldr->ctx, trait);
+  return OPI_OK;
+}
+
+opi_type_t
+opi_builder_find_type(OpiBuilder *bldr, const char *name)
+{
+  long long int idx = cod_strvec_find(bldr->type_names, name);
   return idx < 0 ? NULL : bldr->types->data[idx];
+}
+
+OpiTrait*
+opi_builder_find_trait(OpiBuilder *bldr, const char *name)
+{
+  long long int idx = cod_strvec_find(bldr->trait_names, name);
+  return idx < 0 ? NULL : bldr->traits->data[idx];
 }
 
 void
@@ -207,6 +237,15 @@ opi_builder_def_type(OpiBuilder *bldr, const char *name, opi_type_t type)
   return OPI_OK;
 }
 
+int
+opi_builder_def_trait(OpiBuilder *bldr, const char *name, OpiTrait *trait)
+{
+  if (opi_builder_add_trait(bldr, name, trait) == OPI_ERR)
+    return OPI_ERR;
+  opi_alist_push(bldr->alist, name, NULL);
+  return OPI_OK;
+}
+
 opi_t
 opi_builder_find_const(OpiBuilder *bldr, const char *name)
 {
@@ -214,11 +253,10 @@ opi_builder_find_const(OpiBuilder *bldr, const char *name)
   return idx < 0 ? NULL : bldr->const_vals->data[idx];
 }
 
-typedef int (*build_t)(OpiBuilder*);
 int
 opi_builder_load_dl(OpiBuilder *bldr, void *dl)
 {
-  build_t build = dlsym(dl, "opium_library");
+  int (*build)(OpiBuilder*) = dlsym(dl, "opium_library");
   if (!build) {
     opi_error(dlerror());
     opi_error = 1;
@@ -240,7 +278,6 @@ opi_builder_pop_decl(OpiBuilder *bldr)
 {
   const char *var = bldr->alist->keys.data[bldr->alist->keys.size-1];
   const char *decl = bldr->decls.data[bldr->decls.size - 1];
-  /*opi_debug("var = %s, decl = %s\n", var, decl);*/
   opi_assert(strcmp(var, decl) == 0);
   cod_strvec_pop(&bldr->decls);
   opi_alist_pop(bldr->alist, 1);
@@ -250,7 +287,6 @@ void
 opi_builder_capture(OpiBuilder *bldr, const char *var)
 {
   cod_strvec_insert(&bldr->decls, var, 0);
-  /*opi_alist_push(bldr->alist, var, NULL);*/
   bldr->frame_offset += 1;
 }
 
@@ -280,6 +316,7 @@ opi_builder_begin_scope(OpiBuilder *bldr, OpiScope *scp)
 {
   scp->nvars1 = bldr->decls.size - bldr->frame_offset;
   scp->ntypes1 = bldr->types->size;
+  scp->ntraits1 = bldr->traits->size;
   scp->vasize1 = opi_alist_get_size(bldr->alist);
 }
 
@@ -293,6 +330,10 @@ opi_builder_drop_scope(OpiBuilder *bldr, OpiScope *scp)
   size_t ntypes1 = scp->ntypes1;
   size_t ntypes2 = bldr->types->size;
   size_t ntypes = ntypes2 - ntypes1;
+
+  size_t ntraits1 = scp->ntraits1;
+  size_t ntraits2 = bldr->traits->size;
+  size_t ntraits = ntraits2 - ntraits1;
 
   size_t vasize1 = scp->vasize1;
   size_t vasize2 = opi_alist_get_size(bldr->alist);
@@ -308,6 +349,11 @@ opi_builder_drop_scope(OpiBuilder *bldr, OpiScope *scp)
     cod_strvec_pop(bldr->type_names);
     cod_ptrvec_pop(bldr->types, NULL);
   }
+  // pop traits
+  while (ntraits--) {
+    cod_strvec_pop(bldr->trait_names);
+    cod_ptrvec_pop(bldr->traits, NULL);
+  }
 }
 
 void
@@ -320,6 +366,10 @@ opi_builder_make_namespace(OpiBuilder *bldr, OpiScope *scp, const char *prefix)
   size_t ntypes1 = scp->ntypes1;
   size_t ntypes2 = bldr->types->size;
   size_t ntypes = ntypes2 - ntypes1;
+
+  size_t ntraits1 = scp->ntraits1;
+  size_t ntraits2 = bldr->traits->size;
+  size_t ntraits = ntraits2 - ntraits1;
 
   size_t vasize1 = scp->vasize1;
   size_t vasize2 = opi_alist_get_size(bldr->alist);
@@ -353,6 +403,21 @@ opi_builder_make_namespace(OpiBuilder *bldr, OpiScope *scp, const char *prefix)
     // change declaration
     free(bldr->type_names->data[i]);
     bldr->type_names->data[i] = newname;
+    // push new type name into a-list
+    opi_alist_push(bldr->alist, newname, NULL);
+  }
+
+  // fetch namespace traits and prefix with namespace name
+  for (size_t i = bldr->trait_names->size - ntraits; i < bldr->trait_names->size; ++i) {
+    // add namespace prefix
+    size_t len = strlen(bldr->trait_names->data[i]) + nslen;
+    char *newname = malloc(len + 1);
+    sprintf(newname, "%s%s", prefix, bldr->trait_names->data[i]);
+    // change declaration
+    free(bldr->trait_names->data[i]);
+    bldr->trait_names->data[i] = newname;
+    // push new trait name into a-list
+    opi_alist_push(bldr->alist, newname, NULL);
   }
 }
 
@@ -405,6 +470,54 @@ write_struct(opi_type_t type, opi_t x, FILE *out)
     opi_write(s->data[i], out);
   }
   fputs(" }", out);
+}
+
+typedef struct ImplData_s {
+  OpiTrait *trait;
+  OpiType *type;
+  char **f_nams;
+  int nnams;
+} ImplData;
+
+static void
+impl_data_delete(OpiFn *fn)
+{
+  ImplData *data = fn->data;
+  for (int i = 0; i < data->nnams; ++i)
+    free(data->f_nams[i]);
+  free(data->f_nams);
+  free(data);
+  opi_fn_delete(fn);
+}
+
+static opi_t
+impl_default(void)
+{
+  ImplData *data = opi_fn_get_data(opi_current_fn);
+  opi_assert((int)opi_nargs == data->nnams);
+  opi_t fs[data->nnams];
+  for (int i = 0; i < data->nnams; ++i)
+    fs[i] = opi_pop();
+  opi_trait_set_default(data->trait, data->f_nams, fs, data->nnams);
+  return opi_nil;
+}
+
+static opi_t
+impl_for_type(void)
+{
+  ImplData *data = opi_fn_get_data(opi_current_fn);
+  opi_assert((int)opi_nargs == data->nnams);
+  opi_t fs[data->nnams];
+  for (int i = 0; i < data->nnams; ++i)
+    fs[i] = opi_pop();
+  int err = opi_trait_impl(data->trait, data->type, data->f_nams, fs,
+      data->nnams, FALSE);
+  if (err != OPI_OK) {
+    opi_error("failed to implement trait for type '%s'\n",
+        opi_type_get_name(data->type));
+    abort();
+  }
+  return opi_nil;
 }
 
 static OpiIr*
@@ -824,6 +937,89 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       opi_builder_push_decl(bldr, ast->strct.typename);
       OpiIr *ctor_ir = opi_ir_const(ctor);
       return opi_ir_let(&ctor_ir, 1, NULL);
+    }
+
+    case OPI_AST_TRAIT:
+    {
+      // create trait
+      OpiTrait *trait = opi_trait_new(ast->trait.f_nams, ast->trait.nfs);
+      opi_builder_def_trait(bldr, ast->trait.name, trait);
+
+      // declare generics
+      int trait_len = strlen(ast->trait.name);
+      for (int i = 0; i < ast->trait.nfs; ++i) {
+        opi_t g = opi_trait_get_generic(trait, i);
+        char buf[trait_len + strlen(ast->trait.f_nams[i]) + 1];
+        sprintf(buf, "%s.%s", ast->trait.name, ast->trait.f_nams[i]);
+        opi_builder_def_const(bldr, buf, g);
+      }
+
+      OpiIr *build = NULL;
+      if (ast->trait.build)
+        build = opi_builder_build_ir(bldr, ast->trait.build);
+      else
+        build = opi_ir_const(opi_nil);
+
+      // default methods
+      OpiIr *methods[ast->trait.nfs];
+      char **method_nams = malloc(sizeof(char*) *ast->trait.nfs);
+      int method_cnt = 0;
+      for (int i = 0; i < ast->trait.nfs; ++i) {
+        if (ast->trait.fs[i] == NULL)
+          continue;
+        methods[method_cnt] = opi_builder_build_ir(bldr, ast->trait.fs[i]);
+        method_nams[method_cnt] = strdup(ast->trait.f_nams[i]);
+        method_cnt++;
+      }
+
+      // create implementer for defaults
+      ImplData *data = malloc(sizeof(ImplData));
+      data->trait = trait;
+      data->f_nams = method_nams;
+      data->nnams = method_cnt;
+      opi_t impl_fn = opi_fn(NULL, impl_default, -1);
+      opi_fn_set_data(impl_fn, data, impl_data_delete);
+
+      // apply implementer
+      OpiIr *impl = opi_ir_apply(opi_ir_const(impl_fn), methods, method_cnt);
+      OpiIr *body[] = { build, impl };
+      return opi_ir_block(body, 2);
+    }
+
+    case OPI_AST_IMPL:
+    {
+      OpiTrait *trait = opi_builder_find_trait(bldr, ast->impl.trait);
+      if (trait == NULL) {
+        opi_error("no such trait, '%s'\n", ast->impl.trait);
+        opi_error = 1;
+        return build_error();
+      }
+
+      OpiType *type = opi_builder_find_type(bldr, ast->impl.target);
+      if (type == NULL) {
+        opi_error("no such type, '%s'\n", ast->impl.target);
+        opi_error = 1;
+        return build_error();
+      }
+
+      int nfs = ast->impl.nfs;
+      OpiIr *methods[nfs];
+      char **method_nams = malloc(sizeof(char*) * nfs);
+      for (int i = 0; i < nfs; ++i) {
+        method_nams[i] = strdup(ast->impl.f_nams[i]);
+        methods[i] = opi_builder_build_ir(bldr, ast->impl.fs[i]);
+      }
+
+      ImplData *data = malloc(sizeof(ImplData));
+      data->trait = trait;
+      data->type = type;
+      data->f_nams = method_nams;
+      data->nnams = nfs;
+      opi_t impl_fn = opi_fn(NULL, impl_for_type, -1);
+      opi_fn_set_data(impl_fn, data, impl_data_delete);
+
+      // apply implementer
+      return opi_ir_apply(opi_ir_const(impl_fn), methods, nfs);
     }
 
     case OPI_AST_RETURN:

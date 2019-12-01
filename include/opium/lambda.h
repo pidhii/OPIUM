@@ -54,6 +54,10 @@ typedef struct OpiLambda_s {
 static inline OpiLambda*
 opi_lambda_allocate(size_t ncaps)
 {
+  if (ncaps < 2)
+    return opi_h2w();
+  if (ncaps < 6)
+    return opi_h6w();
   return malloc(sizeof(OpiLambda) + sizeof(opi_t) * ncaps);
 }
 

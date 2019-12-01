@@ -100,6 +100,9 @@ lazy { return LAZY; }
 assert { return ASSERT; }
 yield { return YIELD; }
 genForce { return FORCE; }
+trait { return TRAIT; }
+impl { return IMPL; }
+for { return FOR; }
 
 begin {
   g_begin_cnt += 1;
