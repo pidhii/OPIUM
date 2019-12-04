@@ -1,0 +1,46 @@
+--load "base"
+
+let range from to =
+  let rec loop i acc =
+    if i < from then acc
+    else loop (i - 1) (i:acc)
+  in loop (to - 1) nil
+
+let revfilter f l =
+  let rec loop l acc =
+    unless let x:xs = l then acc
+    else loop xs $ if f x then x:acc else acc
+  in loop l nil
+
+--let filter f l =
+  --let rec loop l acc =
+    --if let x:xs = l then
+      --loop xs (if f x then Array.push acc x else acc)
+    --else Array.toList acc
+  --in loop l $ Array ()
+
+let rec foldl f z l =
+  unless let x:xs = l then z
+  else foldl f (f z x) xs
+
+
+let even? x = x % 2 == 0
+
+begin
+  let add x y = x + y in
+
+  --let seq = List.toSeq [1 2 3 4] in
+  --print "seq:" seq;
+  --Seq.iter (fn x -> print "- %{x}") seq;
+  --Seq.iter (fn x -> print "- %{x}") $ Seq.map (fn x -> x * x) seq;
+
+  let n = 10000000 in
+
+  let testList () =
+    foldl add 0 $ revfilter even? $ range 0 n
+  in
+
+  let test = testList in
+  print "=> %{test ()}";
+end
+
