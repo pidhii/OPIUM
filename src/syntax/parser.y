@@ -744,7 +744,7 @@ block_stmnt_only
     free($2);
     cod_strvec_destroy(&$4.names);
   }
-  | IMPL TYPE FOR TYPE '=' table_aux END {
+  | IMPL Type FOR Type '=' table_aux END {
     OpiAst *list_args[$6.names.size];
     for (size_t i = 0; i < $6.names.size; ++i) {
       OpiAst *key = opi_ast_const(opi_symbol($6.names.data[i]));
