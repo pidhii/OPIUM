@@ -1519,12 +1519,7 @@ static void
 seq_delete(opi_type_t type, opi_t x)
 {
   OpiSeq *seq = opi_as_ptr(x);
-  for (size_t i = 0; i < seq->cache.len; ++i) {
-    if (seq->cache.data[i])
-      opi_unref(seq->cache.data[i]);
-  }
-  cod_vec_destroy(seq->cache);
-  seq->delete_iter(seq->iter);
+  seq->cfg.delete(seq->iter);
   free(seq);
 }
 
@@ -1542,13 +1537,12 @@ opi_seq_cleanup(void)
 }
 
 opi_t
-opi_seq_new(OpiIter *iter, opi_t (*next)(OpiIter *iter, int drain), void (*delete_iter)(OpiIter *iter))
+opi_seq_new(OpiIter *iter, OpiSeqCfg cfg)
 {
+  opi_assert(cfg.reset && cfg.next && cfg.delete);
   OpiSeq *seq = malloc(sizeof(OpiSeq));
-  cod_vec_init(seq->cache);
   seq->iter = iter;
-  seq->next = next;
-  seq->delete_iter = delete_iter;
+  seq->cfg = cfg;
   opi_init_cell(seq, opi_seq_type);
   return (opi_t)seq;
 }

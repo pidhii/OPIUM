@@ -200,7 +200,7 @@ int opi_start_token;
 %right ':' PLUSPLUS
 %right '+' '-'
 %left '*' '/' '%'
-/*%right '.' (function composition) */
+%right '.'
 %right NOT
 %left TABLEREF
 
@@ -229,7 +229,7 @@ Atom
   | sr
   | '(' Expr ')' { $$ = $2; }
   | '[' arg_aux ']' {
-    $$ = opi_ast_apply(opi_ast_var("list"), (OpiAst**)$2->data, $2->size);
+    $$ = opi_ast_apply(opi_ast_var("[]"), (OpiAst**)$2->data, $2->size);
     $$->apply.loc = location(&@$);
     cod_ptrvec_destroy($2, NULL);
     free($2);
@@ -414,11 +414,11 @@ Expr
   | Expr '/' Expr { $$ = opi_ast_binop(OPI_OPC_DIV, $1, $3); }
   | Expr '%' Expr { $$ = opi_ast_binop(OPI_OPC_MOD, $1, $3); }
   | Expr ':' Expr { $$ = opi_ast_binop(OPI_OPC_CONS, $1, $3); }
-  /*| Expr '.' Expr {*/
-    /*OpiAst *p[] = { $1, $3 };*/
-    /*$$ = opi_ast_apply(opi_ast_var("."), p, 2);*/
-    /*$$->apply.loc = location(&@$);*/
-  /*}*/
+  | Expr '.' Expr {
+    OpiAst *p[] = { $1, $3 };
+    $$ = opi_ast_apply(opi_ast_var("."), p, 2);
+    $$->apply.loc = location(&@$);
+  }
   | Expr PLUSPLUS Expr {
     OpiAst *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("++"), p, 2);
@@ -714,12 +714,12 @@ block_stmnt_only
       n_impl++;
     }
 
-    OpiAst *list = opi_ast_apply(opi_ast_var("list"), list_args, n_impl);
+    OpiAst *list = opi_ast_apply(opi_ast_var("[]"), list_args, n_impl);
 
     impls[n_impl] = list;
     OpiAst *block = opi_ast_block(impls, n_impl + 1);
 
-    OpiAst *table = opi_ast_apply(opi_ast_var("table"), &block, 1);
+    OpiAst *table = opi_ast_apply(opi_ast_var("Table"), &block, 1);
 
     char *table_name = " trait table ";
     OpiAst *methods[n_impl];
@@ -750,13 +750,13 @@ block_stmnt_only
       list_args[i] = opi_ast_binop(OPI_OPC_CONS, key, val);
     }
 
-    OpiAst *list = opi_ast_apply(opi_ast_var("list"), list_args, $6.names.size);
+    OpiAst *list = opi_ast_apply(opi_ast_var("[]"), list_args, $6.names.size);
 
     cod_vec_push($6.body, list);
     OpiAst *block = opi_ast_block($6.body.data, $6.body.len);
     cod_vec_destroy($6.body);
 
-    OpiAst *table = opi_ast_apply(opi_ast_var("table"), &block, 1);
+    OpiAst *table = opi_ast_apply(opi_ast_var("Table"), &block, 1);
 
     char *table_name = " trait table ";
     OpiAst *methods[$6.names.size];
@@ -1015,14 +1015,14 @@ table_binds
       list_args[i] = opi_ast_binop(OPI_OPC_CONS, key, val);
     }
 
-    OpiAst *list = opi_ast_apply(opi_ast_var("list"), list_args, $1.names.size);
+    OpiAst *list = opi_ast_apply(opi_ast_var("[]"), list_args, $1.names.size);
     cod_strvec_destroy(&$1.names);
 
     cod_vec_push($1.body, list);
     OpiAst *block = opi_ast_block($1.body.data, $1.body.len);
     cod_vec_destroy($1.body);
 
-    $$ = opi_ast_apply(opi_ast_var("table"), &block, 1);
+    $$ = opi_ast_apply(opi_ast_var("Table"), &block, 1);
   }
 ;
 

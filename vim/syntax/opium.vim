@@ -47,7 +47,7 @@ syn region opiArray matchgroup=opiType start=/\[\s*|/ end=/|\s*\]/ skipwhite ski
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""'
 " Builtins:
 syn keyword Function null? undefined? number? symbol? string? boolean? pair? fn? lazy? FILE? table? svector? dvector?
-syn keyword Function number table list regex svector dvector array
+syn keyword Function number regex svector dvector
 syn keyword Function write display newline print printf fprintf format
 syn keyword Function car cdr
 syn keyword Function pairs
@@ -62,6 +62,7 @@ syn keyword Function next
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Base:
+syn keyword Function list rlist array table 
 syn keyword Function length
 syn keyword Function strlen substr strstr chop chomp ltrim trim concat
 syn keyword Function open popen
@@ -75,6 +76,7 @@ syn keyword Function any? all?
 syn keyword Function revmap map
 syn keyword Function foreach
 syn keyword Function foldl foldr
+syn keyword Function unfold
 syn keyword Function revfilter filter
 " base/base.opi
 syn keyword Function zero? positive? negative? even? odd?

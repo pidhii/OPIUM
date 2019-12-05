@@ -137,9 +137,15 @@ s[g]*[/|+] {
     case '|': BEGIN(sr2); break;
     case '+': BEGIN(sr3); break;
   }
-  char buf[yyleng - 2];
-  memcpy(buf, yytext + 1, yyleng - 2);
-  buf[yyleng - 2] = 0;
+  char *start = yytext + 1;
+  while (TRUE) {
+    if (*start == 'g') start++;
+    else break;
+  }
+  int len = yyleng - 1 - (start - yytext);
+  char buf[len + 1];
+  memcpy(buf, start, len);
+  buf[len] = 0;
   yylval->str = strdup(buf);
   opi_start_token = 'r';
   return S;
@@ -294,6 +300,16 @@ is[ \n\t]+not { return ISNOT; }
 "'"[^ \t\n(){}\[\]'\";,:]+ { yylval->opi = opi_symbol(yytext+1); return CONST; }
 [a-z_][0-9a-zA-Z_]*['?]? { yylval->str = strdup(yytext); return SYMBOL; }
 [A-Z][0-9a-zA-Z_]* { yylval->str = strdup(yytext); return TYPE; }
+
+"("[A-Z][0-9a-zA-Z_]*")" {
+  char *start = yytext + 1;
+  int len = yyleng - 2;
+  char buf[len + 1];
+  memcpy(buf, start, len);
+  buf[len] = 0;
+  yylval->str = strdup(buf);
+  return SYMBOL;
+}
 
 . {
   opi_error("parse error: unexpected symbols, %s\n", yytext);

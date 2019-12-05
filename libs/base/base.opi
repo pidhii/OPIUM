@@ -1,6 +1,7 @@
 {- file: base/base.opi -}
-
 load "base.so"
+load "common.opi"
+load "list-base.opi"
 
 let zero? x = x == 0
 let positive? x = x > 0
@@ -8,29 +9,46 @@ let negative? x = x < 0
 let even? x = x % 2 == 0
 let odd? x = x % 2 /= 0
 
+let trim = chomp . ltrim
+
 let open path ..mode = __builtin_open path (car mode or "r")
 let popen cmd ..mode = __builtin_popen cmd (car mode or "r")
 
-let trim = chomp ++ ltrim
+let write x = printf "%w" x
+let display x = printf "%d" x
 
-load "common.opi"
-load "list-base.opi"
-
-module Lazy =
-  let rec range from to =
-    if from >= to then nil
-    else lazy from : range (from + 1) to
-
-  let rec map f s =
-    unless let head:tail = force s then nil
-    else lazy f head : map f tail
-
-  let rec filter f l =
-    unless let x:xs = force l then nil
-    else if f x then lazy x : filter f xs
-    else filter f xs
-
-  let rec foldl f z l =
-    unless let x:xs = force l then z
-    else foldl f (f z x) xs
+trait ToSeq =
+  let toSeq
 end
+
+impl ToSeq for Seq =
+  let toSeq = id
+end
+
+impl ToSeq for Cons =
+  let toSeq = List.toSeq
+end
+
+trait ToRevSeq =
+  let toRevSeq
+end
+
+
+-- TODO: use ToRevSeq
+-- TODO: check if type already matches
+-- TODO: Array.foldl, Array.foldr, List.foldl
+
+let rlist = List.ofRevSeq . ToSeq.toSeq
+let list = reverse . rlist
+let array = Array.ofSeq . ToSeq.toSeq
+let table = (Table) . list
+
+let foreach f = Seq.iter f . ToSeq.toSeq
+let map f = Seq.map f . ToSeq.toSeq
+let filter f = Seq.filter f . ToSeq.toSeq
+let foldl f z = Seq.foldl f z . ToSeq.toSeq
+
+let unfold = Seq.unfold
+
+let range from to =
+  unfold (fn i -> if i < to then i : i + 1) from

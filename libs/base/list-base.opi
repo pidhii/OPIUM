@@ -33,33 +33,25 @@ let rec all? f l =
   unless let x:xs = l then true
   else f x && all? f xs
 
-let revmap f l =
-  let rec loop l acc =
-    unless let x:xs = l then acc
-    else loop xs (f x : acc)
-  in loop l nil
+--let revmap f l =
+  --let rec loop l acc =
+    --unless let x:xs = l then acc
+    --else loop xs (f x : acc)
+  --in loop l nil
 
-let map = reverse ++ revmap
+--let map = reverse . revmap
 
-let foreach f l =
-  let rec loop l =
-    unless let x:xs = l then nil
-    else (f x; loop xs)
-  in loop l
+--let foreach f l =
+  --let rec loop l =
+    --unless let x:xs = l then nil
+    --else (f x; loop xs)
+  --in loop l
 
-let foldl f z l =
-  let rec loop l acc =
-    unless let x:xs = l then acc
-    else loop xs $ f acc x
-  in loop l z
+--let revfilter f l =
+  --let rec loop l acc =
+    --unless let x:xs = l then acc
+    --else loop xs $ if f x then x:acc else acc
+  --in loop l nil
 
-let foldr f z l = foldl (flip f) z (reverse l)
-
-let revfilter f l =
-  let rec loop l acc =
-    unless let x:xs = l then acc
-    else loop xs $ if f x then x:acc else acc
-  in loop l nil
-
-let filter = reverse ++ revfilter
+--let filter = reverse . revfilter
 

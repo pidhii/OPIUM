@@ -77,6 +77,7 @@ opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
   opi_builder_def_type(bldr, "Fn"       , opi_fn_type       ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Lazy"     , opi_lazy_type     ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "File"     , opi_file_type     ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "Seq"      , opi_seq_type      ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Array"    , opi_array_type    ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "svector"  , opi_svector_type  ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "dvector"  , opi_dvector_type  ); cod_vec_pop(ctx->types);
@@ -951,10 +952,14 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       }
 
       OpiIr *build = NULL;
-      if (ast->trait.build)
+      int ndecls = 0;
+      if (ast->trait.build) {
+        int n0 = bldr->decls.size;
         build = opi_builder_build_ir(bldr, ast->trait.build);
-      else
+        ndecls = bldr->decls.size - n0;
+      } else {
         build = opi_ir_const(opi_nil);
+      }
 
       // default methods
       OpiIr *methods[ast->trait.nfs];
@@ -967,6 +972,8 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
         method_nams[method_cnt] = strdup(ast->trait.f_nams[i]);
         method_cnt++;
       }
+      while (ndecls--)
+        opi_builder_pop_decl(bldr);
 
       // create implementer for defaults
       ImplData *data = malloc(sizeof(ImplData));

@@ -859,9 +859,6 @@ opi_array_drain(opi_t *data, size_t len, size_t cap);
 opi_t
 opi_array_new_empty(size_t reserve);
 
-opi_t
-opi_array_new_empty(size_t reserve);
-
 static inline opi_t*
 opi_array_get_data(opi_t x)
 {
@@ -959,12 +956,16 @@ opi_vector_get_size(opi_t x);
 extern opi_type_t
 opi_seq_type;
 
+typedef struct OpiSeqCfg_s {
+  void (*reset)(OpiIter *iter);
+  opi_t (*next)(OpiIter *iter, int drain);
+  void (*delete)(OpiIter *iter);
+} OpiSeqCfg;
+
 struct OpiSeq_s {
   OpiHeader header;
-  cod_vec(opi_t) cache;
-  OpiIter *iter;
-  opi_t (*next)(OpiIter *iter, int drain);
-  void (*delete_iter)(OpiIter *iter);
+  OpiIter *restrict iter;
+  OpiSeqCfg cfg;
 };
 
 void
@@ -973,34 +974,25 @@ opi_seq_init(void);
 void
 opi_seq_cleanup(void);
 
-opi_t
-opi_seq_new(OpiIter *iter, opi_t (*next)(OpiIter *iter, int drain), void (*delete_iter)(OpiIter *iter));
+static OpiSeqCfg
+opi_seq_cfg_undefined = { .reset = NULL, .next = NULL, .delete = NULL };
 
-static inline opi_t
-opi_seq_next(opi_t x, size_t *i, int is_drain)
+opi_t
+opi_seq_new(OpiIter *iter, OpiSeqCfg cfg);
+
+static inline void
+opi_seq_reset(opi_t x)
 {
   OpiSeq *seq = opi_as_ptr(x);
-
-  opi_t ret;
-  if (*i < seq->cache.len) {
-    ret = seq->cache.data[*i];
-    if (is_drain && ret) {
-      opi_dec_rc(ret);
-      seq->cache.data[*i] = NULL;
-    }
-
-  } else {
-    ret = seq->next(seq->iter, is_drain);
-    if (ret && !is_drain) {
-      cod_vec_push(seq->cache, ret);
-      opi_inc_rc(ret);
-    }
-  }
-
-  *i += 1;
-  return ret;
+  seq->cfg.reset(seq->iter);
 }
 
+static inline opi_t
+opi_seq_next(opi_t x, int is_drain)
+{
+  OpiSeq *seq = opi_as_ptr(x);
+  return seq->cfg.next(seq->iter, is_drain);
+}
 
 /* ==========================================================================
  * AST
