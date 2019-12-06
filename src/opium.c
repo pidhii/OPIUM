@@ -1079,7 +1079,11 @@ static void
 pair_display(opi_type_t ty, opi_t x, FILE *out)
 {
   while (x->type == opi_pair_type) {
+    if (opi_car(x)->type == opi_pair_type)
+      putc('(', out);
     opi_display(opi_car(x), out);
+    if (opi_car(x)->type == opi_pair_type)
+      putc(')', out);
     putc(':', out);
     x = opi_cdr(x);
   }
@@ -1090,7 +1094,11 @@ static void
 pair_write(opi_type_t ty, opi_t x, FILE *out)
 {
   while (x->type == opi_pair_type) {
+    if (opi_car(x)->type == opi_pair_type)
+      putc('(', out);
     opi_write(opi_car(x), out);
+    if (opi_car(x)->type == opi_pair_type)
+      putc(')', out);
     putc(':', out);
     x = opi_cdr(x);
   }
@@ -1539,12 +1547,19 @@ opi_seq_cleanup(void)
 opi_t
 opi_seq_new(OpiIter *iter, OpiSeqCfg cfg)
 {
-  opi_assert(cfg.reset && cfg.next && cfg.delete);
+  opi_assert(cfg.next && cfg.delete && cfg.copy);
   OpiSeq *seq = malloc(sizeof(OpiSeq));
   seq->iter = iter;
   seq->cfg = cfg;
   opi_init_cell(seq, opi_seq_type);
   return (opi_t)seq;
+}
+
+opi_t
+opi_seq_copy(opi_t x)
+{
+  OpiSeq *seq = opi_as_ptr(x);
+  return opi_seq_new(seq->cfg.copy(seq->iter), seq->cfg);
 }
 
 /******************************************************************************/

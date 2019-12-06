@@ -173,6 +173,14 @@ opi_ast_apply(OpiAst *fn, OpiAst **args, size_t nargs)
   return node;
 }
 
+void
+opi_ast_append_arg(OpiAst *node, OpiAst *arg)
+{
+  node->apply.args =
+    realloc(node->apply.args, sizeof(OpiAst*) * ++node->apply.nargs);
+  node->apply.args[node->apply.nargs - 1] = arg;
+}
+
 OpiAst*
 opi_ast_fn(char **args, size_t nargs, OpiAst *body)
 {

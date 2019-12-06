@@ -259,7 +259,7 @@ id(void)
 }
 
 static opi_t
-list_ctor(void)
+List(void)
 {
   opi_t acc = opi_nil;
   for (size_t i = opi_nargs; i > 0; --i)
@@ -485,7 +485,7 @@ TYPE_PRED(symbol_p, opi_symbol_type)
 TYPE_PRED(fn_p, opi_fn_type)
 TYPE_PRED(svector_p, opi_svector_type)
 TYPE_PRED(dvector_p, opi_dvector_type)
-TYPE_PRED(FILE_p, opi_file_type)
+TYPE_PRED(file_p, opi_file_type)
 TYPE_PRED(table_p, opi_table_type)
 TYPE_PRED(lazy_p, opi_lazy_type)
 
@@ -517,7 +517,7 @@ vaarg_aux(void)
   opi_t args[data->nmin + 1];
   for (size_t i = 0; i < data->nmin; ++i, --opi_nargs)
     args[i] = opi_pop();
-  args[data->nmin] = list_ctor();
+  args[data->nmin] = List();
 
   for (int i = data->nmin; i >= 0; --i)
     opi_push(args[i]);
@@ -862,7 +862,7 @@ opi_builtins(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "lazy?", opi_fn("lazy?", lazy_p, 1));
   opi_builder_def_const(bldr, "svector?", opi_fn("svector?", svector_p, 1));
   opi_builder_def_const(bldr, "dvector?", opi_fn("dvector?", dvector_p, 1));
-  opi_builder_def_const(bldr, "FILE?", opi_fn("FILE?", FILE_p, 1));
+  opi_builder_def_const(bldr, "file?", opi_fn("file?", file_p, 1));
   opi_builder_def_const(bldr, "table?", opi_fn("table?", table_p, 1));
 
   opi_builder_def_const(bldr, ".", opi_fn(".", compose, 2));
@@ -870,7 +870,7 @@ opi_builtins(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "car", opi_fn("car", car_, 1));
   opi_builder_def_const(bldr, "cdr", opi_fn("cdr", cdr_, 1));
 
-  opi_builder_def_const(bldr, "[]", opi_fn("[]", list_ctor, -1));
+  opi_builder_def_const(bldr, "List", opi_fn("List", List, -1));
   opi_builder_def_const(bldr, "Table", opi_fn(0, Table, 1));
   opi_builder_def_const(bldr, "dvector", opi_fn("dvector", dvector, 1));
   opi_builder_def_const(bldr, "svector", opi_fn("svector", svector, 1));

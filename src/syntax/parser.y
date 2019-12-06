@@ -229,7 +229,7 @@ Atom
   | sr
   | '(' Expr ')' { $$ = $2; }
   | '[' arg_aux ']' {
-    $$ = opi_ast_apply(opi_ast_var("[]"), (OpiAst**)$2->data, $2->size);
+    $$ = opi_ast_apply(opi_ast_var("List"), (OpiAst**)$2->data, $2->size);
     $$->apply.loc = location(&@$);
     cod_ptrvec_destroy($2, NULL);
     free($2);
@@ -424,6 +424,14 @@ Expr
     $$ = opi_ast_apply(opi_ast_var("++"), p, 2);
     $$->apply.loc = location(&@$);
   }
+  | Expr '$' Expr {
+    if ($1->tag == OPI_AST_APPLY) {
+      opi_ast_append_arg($1, $3);
+      $$ = $1;
+    } else {
+      $$ = opi_ast_apply($1, &$3, 1);
+    }
+  }
   | Expr OR Expr { $$ = opi_ast_eor($1, $3, " "); }
   | Expr OR SYMBOL RARROW Expr %prec THEN { $$ = opi_ast_eor($1, $5, $3); free($3); }
   | table
@@ -603,12 +611,6 @@ arg
     cod_ptrvec_init($$);
   }
   | arg_aux
-  | '$' Expr {
-    $$ = malloc(sizeof(struct cod_ptrvec));
-    cod_ptrvec_init($$);
-    cod_ptrvec_push($$, $2, NULL);
-  }
-  | arg_aux '$' Expr { $$ = $1; cod_ptrvec_push($$, $3, NULL); }
   | FN anyfn_aux {
     $$ = malloc(sizeof(struct cod_ptrvec));
     cod_ptrvec_init($$);
@@ -714,7 +716,7 @@ block_stmnt_only
       n_impl++;
     }
 
-    OpiAst *list = opi_ast_apply(opi_ast_var("[]"), list_args, n_impl);
+    OpiAst *list = opi_ast_apply(opi_ast_var("List"), list_args, n_impl);
 
     impls[n_impl] = list;
     OpiAst *block = opi_ast_block(impls, n_impl + 1);
@@ -750,7 +752,7 @@ block_stmnt_only
       list_args[i] = opi_ast_binop(OPI_OPC_CONS, key, val);
     }
 
-    OpiAst *list = opi_ast_apply(opi_ast_var("[]"), list_args, $6.names.size);
+    OpiAst *list = opi_ast_apply(opi_ast_var("List"), list_args, $6.names.size);
 
     cod_vec_push($6.body, list);
     OpiAst *block = opi_ast_block($6.body.data, $6.body.len);
@@ -1015,7 +1017,7 @@ table_binds
       list_args[i] = opi_ast_binop(OPI_OPC_CONS, key, val);
     }
 
-    OpiAst *list = opi_ast_apply(opi_ast_var("[]"), list_args, $1.names.size);
+    OpiAst *list = opi_ast_apply(opi_ast_var("List"), list_args, $1.names.size);
     cod_strvec_destroy(&$1.names);
 
     cod_vec_push($1.body, list);

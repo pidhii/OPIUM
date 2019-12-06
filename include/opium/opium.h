@@ -957,8 +957,8 @@ extern opi_type_t
 opi_seq_type;
 
 typedef struct OpiSeqCfg_s {
-  void (*reset)(OpiIter *iter);
-  opi_t (*next)(OpiIter *iter, int drain);
+  opi_t (*next)(OpiIter *iter);
+  OpiIter* (*copy)(OpiIter *iter);
   void (*delete)(OpiIter *iter);
 } OpiSeqCfg;
 
@@ -975,24 +975,24 @@ void
 opi_seq_cleanup(void);
 
 static OpiSeqCfg
-opi_seq_cfg_undefined = { .reset = NULL, .next = NULL, .delete = NULL };
+opi_seq_cfg_undefined = {
+  .next = NULL,
+  .copy = NULL,
+  .delete = NULL
+};
 
 opi_t
 opi_seq_new(OpiIter *iter, OpiSeqCfg cfg);
 
-static inline void
-opi_seq_reset(opi_t x)
+static inline opi_t
+opi_seq_next(opi_t x)
 {
   OpiSeq *seq = opi_as_ptr(x);
-  seq->cfg.reset(seq->iter);
+  return seq->cfg.next(seq->iter);
 }
 
-static inline opi_t
-opi_seq_next(opi_t x, int is_drain)
-{
-  OpiSeq *seq = opi_as_ptr(x);
-  return seq->cfg.next(seq->iter, is_drain);
-}
+opi_t
+opi_seq_copy(opi_t x);
 
 /* ==========================================================================
  * AST
@@ -1099,6 +1099,9 @@ opi_ast_use(const char *old, const char *new);
 
 OpiAst*
 opi_ast_apply(OpiAst *fn, OpiAst **args, size_t nargs);
+
+void
+opi_ast_append_arg(OpiAst *appy, OpiAst *arg);
 
 OpiAst*
 opi_ast_fn(char **args, size_t nargs, OpiAst *body);
@@ -1852,9 +1855,11 @@ opi_vm(OpiBytecode *bc);
   for (size_t i = 0; i < opi_nargs; ++i)                                 \
     opi_inc_rc(opi_this.arg[i] = opi_pop());
 
-#define OPI_UNREF_ARGS()                   \
-  for (int i = 0; i < opi_this.nargs; ++i) \
-    opi_unref(opi_this.arg[i]);
+#define OPI_UNREF_ARGS()                     \
+  for (int i = 0; i < opi_this.nargs; ++i) { \
+    if (opi_this.arg[i])                     \
+      opi_unref(opi_this.arg[i]);            \
+  }
 
 #define OPI_THROW(error_string)                     \
   do {                                              \
