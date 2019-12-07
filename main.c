@@ -7,9 +7,6 @@
 #include <libgen.h>
 #include <unistd.h>
 
-static
-opi_t *stack;
-
  __attribute__((noreturn)) void
 help_and_exit(char *argv0, int err)
 {
@@ -26,9 +23,6 @@ help_and_exit(char *argv0, int err)
 int
 main(int argc, char **argv, char **env)
 {
-  stack = malloc(sizeof(opi_t) * 0x1000);
-  opi_sp = stack;
-
   struct cod_strvec srcdirs;
   cod_strvec_init(&srcdirs);
   int show_bytecode = FALSE;
@@ -72,7 +66,6 @@ main(int argc, char **argv, char **env)
   if (optind < argc) {
     if (!(in = fopen(argv[optind], "r"))) {
       opi_error("%s\n", strerror(errno));
-      free(stack);
       cod_strvec_destroy(&srcdirs);
       exit(EXIT_FAILURE);
     }
@@ -84,7 +77,7 @@ main(int argc, char **argv, char **env)
   opi_assert(dir);
 
   /*opi_debug("initialize environment\n");*/
-  opi_init();
+  opi_init(OPI_INIT_DEFAULT);
 
   OpiContext ctx;
   opi_context_init(&ctx);
@@ -224,7 +217,6 @@ cleanup:
   opi_builder_destroy(&builder);
   opi_context_destroy(&ctx);
   opi_cleanup();
-  free(stack);
 
   return opi_error ? EXIT_FAILURE : EXIT_SUCCESS;
 }

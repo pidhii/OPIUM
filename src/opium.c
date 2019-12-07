@@ -27,72 +27,21 @@ opi_die(const char *fmt, ...)
   exit(EXIT_FAILURE);
 }
 
-int
-opi_show_location(FILE *out, const char *path, int fc, int fl, int lc, int ll)
-{
-  FILE *fs = fopen(path, "r");
-  if (fs == NULL) {
-    opi_error = 1;
-    return OPI_ERR;
-  }
+static opi_t*
+g_my_stack = NULL;
 
-  int line = 1;
-  int col = 1;
-  int hl = FALSE;
-  while (TRUE) {
-    errno = 0;
-    int c = fgetc(fs);
-    if (errno) {
-      opi_error("print location: %s\n", strerror(errno));
-      opi_error = 1;
-      opi_assert(fclose(fs) == 0);
-      return OPI_ERR;
-    }
-    if (c == EOF) {
-      /*opi_error("print location: unexpected end of file\n");*/
-      /*opi_error = 1;*/
-      opi_assert(fclose(fs) == 0);
-      fputs("\e[0m", out);
-      return OPI_OK;
-    }
+extern void
+opi_lexer_init(void);
 
-    if (line >= fl && line <= ll) {
-      if (line == fl && col == fc) {
-        hl = TRUE;
-        fputs("\e[38;5;9;1m", out);
-      }
-
-      if (col == 1) {
-        fputs("\e[0m", out);
-        fprintf(out, "[\x1b[38;5;9m opium \x1b[0m] %4d: ", line);
-        if (hl)
-          fputs("\e[38;5;9;1m", out);
-      }
-
-      putc(c, out);
-
-      if (line == ll && col == lc - 1)
-        fputs("\e[0m", out);
-    }
-
-    if (c == '\n') {
-      line += 1;
-      col = 1;
-    } else {
-      col += 1;
-    }
-
-    if (line > ll)
-      break;
-  }
-
-  opi_assert(fclose(fs) == 0);
-  return OPI_OK;
-}
+extern void
+opi_lexer_cleanup(void);
 
 void
-opi_init(void)
+opi_init(int flags)
 {
+  if (flags & OPI_INIT_STACK)
+    opi_sp = g_my_stack = malloc(sizeof(opi_t) * 0x400);
+
   opi_allocators_init();
   opi_lexer_init();
 
@@ -134,6 +83,9 @@ opi_cleanup(void)
 
   opi_lexer_cleanup();
   opi_allocators_cleanup();
+
+  if (g_my_stack)
+    free(g_my_stack);
 }
 
 /******************************************************************************/
@@ -1683,7 +1635,7 @@ opi_scanner_get_in(OpiScanner *scanner)
 }
 
 OpiLocation*
-opi_location(const char *path, int fl, int fc, int ll, int lc)
+opi_location_new(const char *path, int fl, int fc, int ll, int lc)
 {
   OpiLocation *loc = malloc(sizeof(OpiLocation));
   *loc = (OpiLocation) { strdup(path), fl, fc, ll, lc };
@@ -1700,7 +1652,7 @@ opi_location_delete(OpiLocation *loc)
 OpiLocation*
 opi_location_copy(const OpiLocation *loc)
 {
-  return opi_location(loc->path, loc->fl, loc->fc, loc->ll, loc->lc);
+  return opi_location_new(loc->path, loc->fl, loc->fc, loc->ll, loc->lc);
 }
 
 /******************************************************************************/
@@ -1810,3 +1762,71 @@ opi_vector_get_size(opi_t x)
   return opi_as(x, OpiSVector).size;
 }
 
+int
+opi_show_location(FILE *out, const char *path, int fc, int fl, int lc, int ll)
+{
+  FILE *fs = fopen(path, "r");
+  if (fs == NULL) {
+    opi_error = 1;
+    return OPI_ERR;
+  }
+
+  int line = 1;
+  int col = 1;
+  int hl = FALSE;
+  while (TRUE) {
+    errno = 0;
+    int c = fgetc(fs);
+    if (errno) {
+      opi_error("print location: %s\n", strerror(errno));
+      opi_error = 1;
+      opi_assert(fclose(fs) == 0);
+      return OPI_ERR;
+    }
+    if (c == EOF) {
+      /*opi_error("print location: unexpected end of file\n");*/
+      /*opi_error = 1;*/
+      opi_assert(fclose(fs) == 0);
+      fputs("\e[0m", out);
+      return OPI_OK;
+    }
+
+    if (line >= fl && line <= ll) {
+      if (line == fl && col == fc) {
+        hl = TRUE;
+        fputs("\e[38;5;9;1m", out);
+      }
+
+      if (col == 1) {
+        fputs("\e[0m", out);
+        fprintf(out, "[\x1b[38;5;9m opium \x1b[0m] %4d: ", line);
+        if (hl)
+          fputs("\e[38;5;9;1m", out);
+      }
+
+      putc(c, out);
+
+      if (line == ll && col == lc - 1)
+        fputs("\e[0m", out);
+    }
+
+    if (c == '\n') {
+      line += 1;
+      col = 1;
+    } else {
+      col += 1;
+    }
+
+    if (line > ll)
+      break;
+  }
+
+  opi_assert(fclose(fs) == 0);
+  return OPI_OK;
+}
+
+int
+opi_location_show(OpiLocation *loc, FILE *out)
+{
+  return opi_show_location(out, loc->path, loc->fc, loc->fl, loc->lc, loc->ll);
+}

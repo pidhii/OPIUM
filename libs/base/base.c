@@ -1113,8 +1113,6 @@ opium_library(OpiBuilder *bldr)
 {
   opi_builder_def_const(bldr, "length", opi_fn("length", length , 1));
   opi_builder_def_const(bldr, "revappend", opi_fn("revappend", revappend, 2));
-  /*opi_builder_def_const(bldr, "foldl", opi_fn("foldl", foldl, 3));*/
-  /*opi_builder_def_const(bldr, "revfilter", opi_fn("revfilter", revfilter, 2));*/
 
   opi_builder_def_const(bldr, "Seq.iter", opi_fn(0, Seq_iter, 2));
   opi_builder_def_const(bldr, "Seq.map", opi_fn(0, Seq_map, 2));

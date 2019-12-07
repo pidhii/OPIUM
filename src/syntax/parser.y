@@ -1159,7 +1159,7 @@ location(void *locp_ptr)
 {
   YYLTYPE *locp = locp_ptr;
   if (g_filename[0]) {
-    return opi_location(g_filename, locp->first_line, locp->first_column,
+    return opi_location_new(g_filename, locp->first_line, locp->first_column,
                         locp->last_line, locp->last_column);
   } else {
     return NULL;

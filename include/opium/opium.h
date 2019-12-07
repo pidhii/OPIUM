@@ -62,56 +62,8 @@ opi_die(const char *fmt, ...);
 
 #define OPI_OK (0)
 #define OPI_ERR (-1)
-extern
-int opi_error;
-
-static inline uint32_t
-opi_flp2_u32(uint32_t x)
-{
-  x = x | (x >> 1);
-  x = x | (x >> 2);
-  x = x | (x >> 4);
-  x = x | (x >> 8);
-  x = x | (x >> 16);
-  return x - (x >> 1);
-}
-
-static inline uint64_t
-opi_flp2_u64(uint64_t x)
-{
-  x = x | (x >> 1);
-  x = x | (x >> 2);
-  x = x | (x >> 4);
-  x = x | (x >> 8);
-  x = x | (x >> 16);
-  x = x | (x >> 32);
-  return x - (x >> 1);
-}
-
-static inline uint32_t
-opi_cep2_u32(uint32_t x)
-{
-  --x;
-  x |= x >> 1;
-  x |= x >> 2;
-  x |= x >> 4;
-  x |= x >> 8;
-  x |= x >> 16;
-  return ++x;
-}
-
-static inline uint64_t
-opi_cep2_u64(uint64_t x)
-{
-  --x;
-  x |= x >> 1;
-  x |= x >> 2;
-  x |= x >> 4;
-  x |= x >> 8;
-  x |= x >> 16;
-  x |= x >> 32;
-  return ++x;
-}
+extern int
+opi_error;
 
 typedef struct OpiType_s OpiType;
 typedef OpiType *opi_type_t;
@@ -125,43 +77,129 @@ typedef struct OpiFlatInsn_s OpiFlatInsn;
 typedef struct OpiSeq_s OpiSeq;
 typedef struct OpiIter_s OpiIter;
 
-typedef struct OpiLocation_s {
-  char *path;
-  int fl, fc, ll, lc;
-} OpiLocation;
+typedef struct OpiBytecode_s OpiBytecode;
 
-OpiLocation*
-opi_location(const char *path, int fl, int fc, int ll, int lc);
+/*
+ * Argument-stack pointer.
+ *
+ * This stack is used ony to pass arguments during calls, which usually
+ * instantly pop those arguments from the stack and store them in some local
+ * variables. Thus size of this stack will only influence a maximal number of
+ * arguments to be passed to function. ...which is still quite important since
+ * e.g. lists and arrays are constructed by passing all the elemnts of a future
+ * container to corresponding function.
+ */
+extern opi_t*
+opi_sp;
 
+/*
+ * Pointer to the "current" function object.
+ *
+ * Can be used inside function handles (and only!) to assecc closure.
+ * Must be used as soon as possible (before any other function application).
+ *
+ * This parameter is implemented as global due to a bug in LibJIT I have faced
+ * once. With this bug it is impossible to pass arguments during tail call.
+ */
+extern opi_t
+opi_current_fn;
+
+/*
+ * Number of arguments passed to the function via argument-stack.
+ *
+ * Must be used as soon as possible (before any other function application).
+ *
+ * This parameter is implemented as global due to a bug in LibJIT I have faced
+ * once. With this bug it is impossible to pass arguments during tail call.
+ */
+extern size_t
+opi_nargs;
+
+/*
+ * Flags for opi_init().
+ */
+enum {
+  /* If enabled, opi_init() will take care to allocate an argument-stack.
+   * Otherwize, user must do it himself, and set opi_sp to point on it. */
+  OPI_INIT_STACK = 0x1,
+  /* Default flags to opi_init(). */
+  OPI_INIT_DEFAULT = OPI_INIT_STACK,
+};
+
+/*
+ * Initialize all relevant runtime environment. This is mandatory to be called
+ * before working with major part of Opium.
+ *
+ * This function will take care of calling all other init-functions you
+ * may find here. Don't call these yourself, order of "init"s matters, and only
+ * opi_init() will do it in a propper way.
+ */
 void
-opi_location_delete(OpiLocation *loc);
+opi_init(int flags);
 
-OpiLocation*
-opi_location_copy(const OpiLocation *loc);
-
-int
-opi_show_location(FILE *out, const char *path, int fc, int fl, int lc, int ll);
-
-void
-opi_lexer_init(void);
-
-void
-opi_lexer_cleanup(void);
-
-void
-opi_init(void);
-
+/*
+ * Release all runtime environment. Call to obtain clean picture from valgrind.
+ *
+ * Generally, behaviour of any function in this library becomes undefined once
+ * this functions is called.
+ */
 void
 opi_cleanup(void);
 
-extern
-opi_t *opi_sp;
-extern
-opi_t opi_current_fn;
-extern
-size_t opi_nargs;
 
-typedef struct OpiBytecode_s OpiBytecode;
+/* ==========================================================================
+ * Locations
+ */
+typedef struct OpiLocation_s {
+  char *path; /* file path */
+  int fl, /* first line */
+      fc, /* first column */
+      ll, /* last line */
+      lc; /* last column */
+} OpiLocation;
+
+/*
+ * Create new location object.
+ *
+ * Note: path MUST be a full path.
+ */
+OpiLocation*
+opi_location_new(const char *path, int fl, int fc, int ll, int lc);
+
+/*
+ * Delete location object allocated by opi_location_new().
+ */
+void
+opi_location_delete(OpiLocation *loc);
+
+/*
+ * Copy location object.
+ *
+ * It is safe to call opi_location_delete() on original location and continue
+ * using the copy.
+ *
+ * Note: output lines are indented with Opium tags, so this function is only
+ * usefull for error reporting.
+ */
+OpiLocation*
+opi_location_copy(const OpiLocation *loc);
+
+/*
+ * Print text by the given location.
+ *
+ * Return OPI_OK on success, or OPI_ERR in case of error.
+ */
+int
+opi_show_location(FILE *out, const char *path, int fc, int fl, int lc, int ll);
+
+/*
+ * Print location object.
+ *
+ * Return value is the same as for opi_show_location().
+ */
+int
+opi_location_show(OpiLocation *loc, FILE *out);
+
 
 /* ==========================================================================
  * Type
@@ -221,6 +259,7 @@ opi_type_get_fields(opi_type_t ty);
 
 void*
 opi_type_get_data(opi_type_t ty);
+
 
 /* ==========================================================================
  * Trait
@@ -302,6 +341,7 @@ opi_trait_get_impl(OpiTrait *trait, opi_type_t type, int metoffs);
  */
 opi_t
 opi_trait_get_generic(OpiTrait *trait, int metoffs);
+
 
 /* ==========================================================================
  * Cell
@@ -1902,5 +1942,53 @@ opi_drop_args(int nargs)
 #define OPI_SVEC(x) opi_svector_get_data(x)
 #define OPI_DVEC(x) opi_dvector_get_data(x)
 #define OPI_VECSZ(x) opi_vector_get_size(x)
+
+static inline uint32_t
+opi_flp2_u32(uint32_t x)
+{
+  x = x | (x >> 1);
+  x = x | (x >> 2);
+  x = x | (x >> 4);
+  x = x | (x >> 8);
+  x = x | (x >> 16);
+  return x - (x >> 1);
+}
+
+static inline uint64_t
+opi_flp2_u64(uint64_t x)
+{
+  x = x | (x >> 1);
+  x = x | (x >> 2);
+  x = x | (x >> 4);
+  x = x | (x >> 8);
+  x = x | (x >> 16);
+  x = x | (x >> 32);
+  return x - (x >> 1);
+}
+
+static inline uint32_t
+opi_cep2_u32(uint32_t x)
+{
+  --x;
+  x |= x >> 1;
+  x |= x >> 2;
+  x |= x >> 4;
+  x |= x >> 8;
+  x |= x >> 16;
+  return ++x;
+}
+
+static inline uint64_t
+opi_cep2_u64(uint64_t x)
+{
+  --x;
+  x |= x >> 1;
+  x |= x >> 2;
+  x |= x >> 4;
+  x |= x >> 8;
+  x |= x >> 16;
+  x |= x >> 32;
+  return ++x;
+}
 
 #endif
