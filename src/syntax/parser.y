@@ -31,6 +31,9 @@ OpiAst *g_result;
 static
 char g_filename[PATH_MAX];
 
+static char**
+g_errorptr;
+
 static OpiLocation*
 location(void *locp);
 
@@ -212,7 +215,7 @@ int opi_start_token;
 
 entry
   : START_FILE block { @$; g_result = $2; }
-  | START_REPL block_expr BRK {
+  | START_REPL block_expr {
     g_result = $2;
     opi_start_token = 0;
   }
@@ -1118,6 +1121,7 @@ filename(FILE *fp)
 OpiAst*
 opi_parse(FILE *in)
 {
+  g_errorptr = NULL;
   opi_start_token = START_FILE;
   const char *path = filename(in);
   if (path)
@@ -1133,8 +1137,9 @@ opi_parse(FILE *in)
 }
 
 OpiAst*
-opi_parse_expr(OpiScanner *scanner)
+opi_parse_expr(OpiScanner *scanner, char **errorptr)
 {
+  g_errorptr = errorptr;
   opi_start_token = START_REPL;
   g_filename[0] = 0;
 
@@ -1146,8 +1151,15 @@ void
 yyerror(void *locp_ptr, OpiScanner *yyscanner, const char *what)
 {
   YYLTYPE *locp = locp_ptr;
-  opi_error("parse error: %s\n", what);
+
   opi_error = 1;
+
+  if (g_errorptr == NULL) {
+    opi_error("parse error: %s\n", what);
+  } else {
+    *g_errorptr = strdup(what);
+    return;
+  }
 
   const char *path = filename(opi_scanner_get_in(yyscanner));
   if (path) {

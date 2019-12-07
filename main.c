@@ -3,9 +3,10 @@
 #include <getopt.h>
 #include <limits.h>
 #include <errno.h>
-#include <string.h>
 #include <libgen.h>
-#include <unistd.h>
+
+#include <readline/readline.h>
+#include <readline/history.h>
 
  __attribute__((noreturn)) void
 help_and_exit(char *argv0, int err)
@@ -121,26 +122,86 @@ main(int argc, char **argv, char **env)
 
   if (in == stdin) {
     // REPL
+    char history_path[PATH_MAX];
+
+    using_history();
+    sprintf(history_path, "%s/.opium_history", getenv("HOME"));
+
+    if (system("test -f $HOME/.opium_history") == 0)
+      read_history(history_path);
+    else
+      system("touch $HOME/.opium_history");
+
     OpiAst *ast;
     OpiBytecode *bc;
 
-    OpiScanner *scan = opi_scanner();
-    opi_scanner_set_in(scan, stdin);
+    cod_vec(char) input_buf;
+    cod_vec_init(input_buf);
+
+    char *line;
 
     size_t cnt = 0;
     puts("\e[1mOpium REPL\e[0m");
     puts("press <C-d> to exit");
     puts("");
-    while (TRUE) {
-      printf("opium [%zu] ", cnt++);
-      fflush(stdout);
 
-      opi_error = 0;
-      if (!(ast = opi_parse_expr(scan))) {
-        if (opi_error)
+    int nhist = 0;
+    while (TRUE) {
+
+      while (TRUE) {
+        // read line
+        char prompt[0x40];
+        sprintf(prompt, "opium [%zu] ", cnt++);
+        if (!(line = readline(prompt))) {
+          printf("End of input reached.\n");
+          if (append_history(nhist, history_path))
+            opi_warning("failed to write history: %s\n", strerror(errno));
+          cod_vec_destroy(input_buf);
+          goto cleanup;
+        }
+
+        if (line[0] == 0) {
+          free(line);
           continue;
-        else
+        }
+
+        // append line input buffer
+        for (int i = 0; line[i]; ++i)
+          cod_vec_push(input_buf, line[i]);
+        free(line);
+
+        // open input buffer as file stream to pass into scanner
+        FILE *parser_stream = fmemopen(input_buf.data, input_buf.len, "r");
+
+        // create fresh scanner
+        OpiScanner *scan = opi_scanner();
+        opi_scanner_set_in(scan, parser_stream);
+
+        // try parse
+        opi_error = 0;
+        char *errorptr;
+        ast = opi_parse_expr(scan, &errorptr);
+        fclose(parser_stream);
+        opi_scanner_delete(scan);
+
+        if (opi_error) {
+          if (strcmp(errorptr, "syntax error, unexpected $end") == 0) {
+            // must read more lines
+            free(errorptr);
+          } else {
+            // real parse error
+            opi_error("%s\n", errorptr);
+            free(errorptr);
+            input_buf.len = 0;
+          }
+        } else {
+          // parser succeed
+          cod_vec_push(input_buf, 0);
+          add_history(input_buf.data);
+          nhist += 1;
+          input_buf.len = 0;
           break;
+        }
       }
 
       bc = opi_build(&builder, ast, OPI_BUILD_EXPORT);
@@ -174,9 +235,6 @@ main(int argc, char **argv, char **env)
       opi_context_drain_bytecode(&ctx, bc);
       opi_bytecode_delete(bc);
     }
-
-    opi_scanner_delete(scan);
-    printf("End of input reached.\n");
 
   } else {
     OpiAst *ast = opi_parse(in);

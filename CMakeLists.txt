@@ -86,7 +86,7 @@ add_executable (opium
   ${CMAKE_SOURCE_DIR}/main.c
   $<TARGET_OBJECTS:opium_object_lib>)
 target_include_directories (opium PUBLIC ${LIBJIT_ROOT}/install/include)
-target_link_libraries (opium libjit -lm -ldl -lpcre)
+target_link_libraries (opium libjit -lm -ldl -lpcre -lreadline)
 install (
   TARGETS opium
   DESTINATION bin)

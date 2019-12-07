@@ -1122,7 +1122,7 @@ OpiAst*
 opi_parse(FILE *in);
 
 OpiAst*
-opi_parse_expr(OpiScanner *scanner);
+opi_parse_expr(OpiScanner *scanner, char **errorptr);
 
 OpiAst*
 opi_parse_string(const char *str);
