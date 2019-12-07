@@ -10,22 +10,9 @@ I won't deepen into syntax too much here, and assume that you are familliar with
 
 ### Delimiting expressions
 Top-level statements use different delimiting rules compared to statements inside some block-like statements, i.e:
-<pre>
-  <code>
--- top-level
-<b>let</b> x = 1
-<b>let</b> y = 2;; -- need this `;;` if next expression is not statement (application is not a statement)
-print "x =" x ", y =" y
 
-<b>begin</b>
-  -- nested block
-  <b>let</b> x = 3 <b>in</b> -- nested LET-statements must end with `in` 
-  <b>let</b> y = 4; 5 <b>in</b> -- `;` is basicaly a coma-operator from C, not a delimiter.
-  printf "x = %w, y = %d\n" x y; -- x = 3, y = 5
-  print "x + y = %{x + y}";
-<b>end</b>
-  </code>
-</pre>
+![](/12-07-19-19:36:47.png)
+
 Note: following code snippets are written in nested-block manner unless state otherwize.
 
 ### Chaining functions
