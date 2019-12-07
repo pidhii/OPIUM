@@ -114,7 +114,7 @@ chop(void)
 }
 
 static opi_t
-chomp(void)
+rtrim(void)
 {
   opi_t str = opi_pop();
   if (opi_unlikely(str->type != opi_string_type)) {
@@ -1136,7 +1136,7 @@ opium_library(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "substr", opi_fn("substr", substr ,-3));
   opi_builder_def_const(bldr, "strstr", opi_fn("strstr", strstr_, 2));
   opi_builder_def_const(bldr, "chop"  , opi_fn("chop"  , chop   , 1));
-  opi_builder_def_const(bldr, "chomp" , opi_fn("chomp" , chomp  , 1));
+  opi_builder_def_const(bldr, "rtrim" , opi_fn("rtrim" , rtrim  , 1));
   opi_builder_def_const(bldr, "ltrim" , opi_fn("ltrim" , ltrim  , 1));
   opi_builder_def_const(bldr, "concat", opi_fn("concat", concat, 1));
   opi_builder_def_const(bldr, "match", opi_fn("match", match, 2));

@@ -1,6 +1,7 @@
 %{
 #include <string.h>
 #include "opium/opium.h"
+#include <ctype.h>
 
 #define YY_DECL \
   int yylex(YYSTYPE *yylval, YYLTYPE *yylloc, OpiScanner *yyscanner)
@@ -36,9 +37,9 @@ enum {
   BRACE_QQ4, // /.../
   BRACE_QQ5, // |...|
   BRACE_QQ6, // +...+
-  BRACE_SR1,  // /../../
-  BRACE_SR2,  // |..|..|
-  BRACE_SR3,  // +..+..+
+  BRACE_SR1, // /../../
+  BRACE_SR2, // |..|..|
+  BRACE_SR3, // +..+..+
 };
 
 static
@@ -54,6 +55,8 @@ cod_vec(int) g_braces;
 %x shell
 %x qq1 qq2 qq3 qq4 qq5 qq6
 %x sr1 sr2 sr3
+
+TYPE_IDENT [A-Z][0-9a-zA-Z_]*
 
 %%
 
@@ -211,6 +214,13 @@ is { return IS; }
 eq { return EQ; }
 equal { return EQUAL; }
 is[ \n\t]+not { return ISNOT; }
+  /*is\s+{TYPE_IDENT} {*/
+    /*char *p = yytext + 2;*/
+    /*while (isspace(*p++));*/
+    /*yylval->str = strdup(p);*/
+    /*opi_debug("is %s\n", p);*/
+    /*return ISOF;*/
+  /*}*/
 
 "&&" { return SCAND; }
 "||" { return SCOR; }
@@ -299,9 +309,9 @@ is[ \n\t]+not { return ISNOT; }
 
 "'"[^ \t\n(){}\[\]'\";,:]+ { yylval->opi = opi_symbol(yytext+1); return CONST; }
 [a-z_][0-9a-zA-Z_]*['?]? { yylval->str = strdup(yytext); return SYMBOL; }
-[A-Z][0-9a-zA-Z_]* { yylval->str = strdup(yytext); return TYPE; }
+{TYPE_IDENT} { yylval->str = strdup(yytext); return TYPE; }
 
-"("[A-Z][0-9a-zA-Z_]*")" {
+"("{TYPE_IDENT}")" {
   char *start = yytext + 1;
   int len = yyleng - 2;
   char buf[len + 1];

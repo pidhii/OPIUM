@@ -126,6 +126,11 @@ opi_ast_delete(OpiAst *node)
       opi_ast_delete(node->binop.lhs);
       opi_ast_delete(node->binop.rhs);
       break;
+
+    case OPI_AST_ISOF:
+      opi_ast_delete(node->isof.expr);
+      free(node->isof.of);
+      break;
   }
 
   free(node);
@@ -526,3 +531,13 @@ opi_ast_binop(int opc, OpiAst *lhs, OpiAst *rhs)
   return node;
 }
 
+
+OpiAst*
+opi_ast_isof(OpiAst *expr, const char *of)
+{
+  OpiAst *node = malloc(sizeof(OpiAst));
+  node->tag = OPI_AST_ISOF;
+  node->isof.expr = expr;
+  node->isof.of = strdup(of);
+  return node;
+}

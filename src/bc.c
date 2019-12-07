@@ -900,6 +900,7 @@ opi_bytecode_test(OpiBytecode *bc, int in)
 void
 opi_bytecode_if(OpiBytecode *bc, int test, OpiIf *iff)
 {
+  opi_assert(bc->vinfo[test].type == OPI_VAL_BOOL);
   OpiInsn *insn = opi_insn_if(test);
   opi_bytecode_write(bc, insn);
   iff->iff = insn;
@@ -1012,7 +1013,7 @@ opi_bytecode_binop(OpiBytecode *bc, OpiOpc opc, int lhs, int rhs)
 int
 opi_bytecode_var(OpiBytecode *bc)
 {
-  int reg = opi_bytecode_new_val(bc, OPI_VAL_GLOBAL);
+  int reg = opi_bytecode_new_val(bc, OPI_VAL_BOOL);
   opi_bytecode_write(bc, opi_insn_var(reg));
   return reg;
 }

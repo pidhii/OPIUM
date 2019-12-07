@@ -197,6 +197,7 @@ int opi_start_token;
 %right SCOR
 %right SCAND
 %nonassoc IS ISNOT EQ EQUAL NUMLT NUMGT NUMLE NUMGE NUMEQ NUMNE
+%nonassoc<str> ISOF
 %right ':' PLUSPLUS
 %right '+' '-'
 %left '*' '/' '%'
@@ -352,6 +353,7 @@ Expr
     $$ = opi_ast_apply(opi_ast_var("is"), p, 2);
     $$->apply.loc = location(&@$);
   }
+  | Expr IS TYPE { $$ = opi_ast_isof($1, $3); free($3); }
   | Expr EQ Expr {
     OpiAst *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("eq"), p, 2);
@@ -432,6 +434,7 @@ Expr
       $$ = opi_ast_apply($1, &$3, 1);
     }
   }
+  | Type '$' Expr { $$ = opi_ast_apply(opi_ast_var($1), &$3, 1); free($1); }
   | Expr OR Expr { $$ = opi_ast_eor($1, $3, " "); }
   | Expr OR SYMBOL RARROW Expr %prec THEN { $$ = opi_ast_eor($1, $5, $3); free($3); }
   | table
@@ -525,7 +528,7 @@ atomicPattern
     cod_strvec_destroy(&$3.fields);
     cod_vec_destroy($3.patterns);
   }
-  | Type '{' patterns SYMBOL ':' pattern '}' {
+  | Type '{' patterns SYMBOL '=' pattern '}' {
     cod_strvec_push(&$3.fields, $4);
     cod_vec_push($3.patterns, $6);
     free($4);
@@ -578,7 +581,7 @@ patterns
     cod_strvec_init(&$$.fields);
     cod_vec_init($$.patterns);
   }
-  | patterns SYMBOL ':' pattern ',' {
+  | patterns SYMBOL '=' pattern ',' {
     $$ = $1;
     cod_strvec_push(&$$.fields, $2);
     cod_vec_push($$.patterns, $4);

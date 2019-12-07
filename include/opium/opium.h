@@ -1054,6 +1054,7 @@ typedef enum OpiAstTag_e {
   OPI_AST_BINOP,
   OPI_AST_TRAIT,
   OPI_AST_IMPL,
+  OPI_AST_ISOF,
 } OpiAstTag;
 
 typedef enum OpiPatternTag_e {
@@ -1099,6 +1100,7 @@ struct OpiAst_s {
     struct { char *old, *new; } use;
     OpiAst *ret;
     struct { int opc; OpiAst *lhs, *rhs; } binop;
+    struct { OpiAst *expr; char *of; } isof;
   };
 };
 
@@ -1212,6 +1214,9 @@ opi_ast_return(OpiAst *val);
 
 OpiAst*
 opi_ast_binop(int opc, OpiAst *lhs, OpiAst *rhs);
+
+OpiAst*
+opi_ast_isof(OpiAst *expr, const char *of);
 
 /* ==========================================================================
  * Context

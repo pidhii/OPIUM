@@ -1,7 +1,6 @@
-{- file: base/base.opi -}
 load "base.so"
-load "common.opi"
-load "list-base.opi"
+
+let flip f = \x y -> f y x
 
 let zero? x = x == 0
 let positive? x = x > 0
@@ -9,13 +8,9 @@ let negative? x = x < 0
 let even? x = x % 2 == 0
 let odd? x = x % 2 /= 0
 
-let trim = chomp . ltrim
+let trim = ltrim . rtrim
 
-
-let caar = car . car
-let cadr = car . cdr
-let cdar = cdr . car
-let cddr = cdr . cdr
+let reverse l = revappend l nil
 
 --------------------------------------------------------------------------------
 -- Seq utilities
@@ -24,27 +19,42 @@ trait ToSeq =
   let toSeq
 end
 
-impl ToSeq for Seq  = let toSeq = id         end
-impl ToSeq for Cons = let toSeq = List.toSeq end
-impl ToSeq for Nil  = let toSeq = List.toSeq end
+trait ToList =
+  let toList
+end
 
 trait ToRevSeq =
   let toRevSeq
 end
 
--- TODO: use ToRevSeq
--- TODO: check if type already matches
--- TODO: Array.foldl, Array.foldr, List.foldl
-let rlist = List.ofRevSeq . ToSeq.toSeq
+impl ToSeq for Seq   = let toSeq = id                 end
+impl ToSeq for Cons  = let toSeq = List.toSeq         end
+impl ToSeq for Nil   = let toSeq = List.toSeq         end
+impl ToSeq for Table = let toSeq = List.toSeq . pairs end
 
-let list = reverse . rlist
-  --if x is Array then Array.toList x
-  --else if x is ToList then ToList.toList x
-  --else if x is ToRevSeq then rlist $ ToRevSeq.toRevSeq x
-  --else reverse $ rlist x
+impl ToList for Array = let toList = Array.toList end
+impl ToList for Table = let toList = pairs        end
 
-let array = Array.ofSeq . ToSeq.toSeq
-let table = (Table) . list
+-- TODO: Array.toSeq, Array.foldl, Array.foldr, List.foldl
+let rlist x =
+  if x is nil then x
+  else if x is Cons then reverse x
+  else if x is Array then Array.toRevList x
+  else List.ofRevSeq $ ToSeq.toSeq x
+
+let list x = --reverse . rlist
+  if x is Cons || x is nil then x
+  else if x is ToList then ToList.toList x
+  else if x is ToRevSeq then rlist $ ToRevSeq.toRevSeq x
+  else reverse $ rlist x
+
+let array x =
+  if x is Array then x
+  else Array.ofSeq $ ToSeq.toSeq x
+
+let table x =
+  if x is Table then x
+  else Table $ list x
 
 let foreach f = Seq.iter f . ToSeq.toSeq
 let map f = Seq.map f . ToSeq.toSeq
@@ -56,6 +66,16 @@ let unfold = Seq.unfold
 
 let range from to =
   unfold (fn i -> if i < to then i : i + 1) from
+
+let rec any? f l =
+  unless let x:xs = l then false
+  else f x || any? f xs
+let any? f = any? f . list
+
+let rec all? f l =
+  unless let x:xs = l then true
+  else f x && all? f xs
+let all? f = all? f . list
 
 --------------------------------------------------------------------------------
 -- I/O
@@ -73,7 +93,7 @@ let display x = printf "%d" x
 let read = __base_read
 let readline = __base_readline
 let readlines file =
-  assert file? file;
+  assert file is File;
   unfold (fn s ->
     let file =
       if let [file] = s then

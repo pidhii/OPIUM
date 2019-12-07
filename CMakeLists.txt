@@ -108,10 +108,7 @@ install (
   DESTINATION lib/opium/baselib)
 # install scripts
 install (
-  FILES
-    ${LIBS_ROOT}/base/base.opi
-    ${LIBS_ROOT}/base/common.opi
-    ${LIBS_ROOT}/base/list-base.opi
+  FILES ${LIBS_ROOT}/base/base.opi
   DESTINATION lib/opium/baselib)
 # install symlink
 install (

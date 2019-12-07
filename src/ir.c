@@ -79,6 +79,7 @@ opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
   opi_builder_def_type(bldr, "File"     , opi_file_type     ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Seq"      , opi_seq_type      ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Array"    , opi_array_type    ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "Table"    , opi_table_type    ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "svector"  , opi_svector_type  ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "dvector"  , opi_dvector_type  ); cod_vec_pop(ctx->types);
 }
@@ -520,6 +521,16 @@ impl_for_type(void)
   return opi_nil;
 }
 
+static opi_t
+test_trait(void)
+{
+  OpiTrait *trait = opi_fn_get_data(opi_current_fn);
+  opi_t x = opi_pop();
+  opi_type_t type = x->type;
+  opi_drop(x);
+  return opi_trait_get_impl(trait, type, 0) ? opi_true : opi_false;
+}
+
 static OpiIr*
 build_error()
 {
@@ -757,6 +768,7 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
     }
 
     case OPI_AST_IF:
+      // TODO: optimize for OPI_AST_ISOF
       return opi_ir_if(
           opi_builder_build_ir(bldr, ast->iff.test),
           opi_builder_build_ir(bldr, ast->iff.then),
@@ -1033,6 +1045,32 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
           opi_builder_build_ir(bldr, ast->binop.lhs),
           opi_builder_build_ir(bldr, ast->binop.rhs)
       );
+
+    case OPI_AST_ISOF:
+    {
+      OpiType *type = opi_builder_find_type(bldr, ast->isof.of);
+      if (type) {
+        // TODO: need instruction to conver native bool into boolean object.
+        OpiIrPattern *pattern = opi_ir_pattern_new_unpack(type, NULL, NULL, 0);
+        OpiIr *expr = opi_builder_build_ir(bldr, ast->isof.expr);
+        OpiIr *then = opi_ir_const(opi_true);
+        OpiIr *els = opi_ir_const(opi_false);
+        return opi_ir_match(pattern, expr, then, els);
+      }
+
+      OpiTrait *trait = opi_builder_find_trait(bldr, ast->isof.of);
+      if (trait) {
+        // TODO: reuse these functions, don't create a new one each time.
+        opi_t test_fn = opi_fn(NULL, test_trait, 1);
+        opi_fn_set_data(test_fn, trait, NULL);
+        OpiIr *expr = opi_builder_build_ir(bldr, ast->isof.expr);
+        return opi_ir_apply(opi_ir_const(test_fn), &expr, 1);
+      }
+
+      opi_error("no such type or trait, '%s'\n", ast->isof.of);
+      opi_error = 1;
+      return build_error();
+    }
   }
 
   abort();
