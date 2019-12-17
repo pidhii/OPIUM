@@ -59,6 +59,7 @@ opi_bytecode_new_val(OpiBytecode *bc, OpiValType vtype)
   }
 
   bc->vinfo[bc->nvals].type = vtype;
+  bc->vinfo[bc->nvals].c = NULL;
 
   return bc->nvals++;
 }
@@ -79,34 +80,6 @@ void
 opi_insn_delete1(OpiInsn *insn)
 {
   switch (insn->opc) {
-    case OPI_OPC_NOP:
-    case OPI_OPC_END:
-    case OPI_OPC_APPLY:
-    case OPI_OPC_APPLYTC:
-    case OPI_OPC_RET:
-    case OPI_OPC_PUSH:
-    case OPI_OPC_INCRC:
-    case OPI_OPC_DECRC:
-    case OPI_OPC_DROP:
-    case OPI_OPC_UNREF:
-    case OPI_OPC_LDCAP:
-    case OPI_OPC_PARAM:
-    case OPI_OPC_POP:
-    case OPI_OPC_IF:
-    case OPI_OPC_JMP:
-    case OPI_OPC_PHI:
-    case OPI_OPC_DUP:
-    case OPI_OPC_ALCFN:
-    case OPI_OPC_BEGSCP:
-    case OPI_OPC_TESTTY:
-    case OPI_OPC_LDFLD:
-    case OPI_OPC_TEST:
-    case OPI_OPC_GUARD:
-    case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
-    case OPI_OPC_VAR:
-    case OPI_OPC_SET:
-      break;
-
     case OPI_OPC_ENDSCP:
       free(OPI_ENDSCP_ARG_CELLS(insn));
       break;
@@ -118,6 +91,9 @@ opi_insn_delete1(OpiInsn *insn)
     case OPI_OPC_FINFN:
       opi_bytecode_delete(OPI_FINFN_ARG_DATA(insn)->bc);
       free(OPI_FINFN_ARG_DATA(insn));
+
+    default:
+      break;
   }
 
   free(insn);
@@ -589,6 +565,17 @@ opi_insn_set(int reg, int val)
   return insn;
 }
 
+OpiInsn*
+opi_insn_and(int out, int lhs, int rhs)
+{
+  OpiInsn *insn = malloc(sizeof(OpiInsn));
+  insn->opc = OPI_OPC_AND;
+  OPI_AND_REG_OUT(insn) = out;
+  OPI_AND_REG_LHS(insn) = lhs;
+  OPI_AND_REG_RHS(insn) = rhs;
+  return insn;
+}
+
 int
 opi_insn_is_using(OpiInsn *insn, int vid)
 {
@@ -607,6 +594,7 @@ opi_insn_is_using(OpiInsn *insn, int vid)
     case OPI_OPC_GUARD:
     case OPI_OPC_VAR:
     case OPI_OPC_SET:
+    case OPI_OPC_AND:
       return FALSE;
 
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
@@ -693,6 +681,7 @@ opi_insn_is_killing(OpiInsn *insn, int vid)
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
     case OPI_OPC_VAR:
     case OPI_OPC_SET:
+    case OPI_OPC_AND:
       return FALSE;
 
     // ignore manual RC-management
@@ -745,6 +734,7 @@ opi_insn_is_creating(OpiInsn *insn, int vid)
     case OPI_OPC_GUARD:
     case OPI_OPC_VAR:
     case OPI_OPC_SET:
+    case OPI_OPC_AND:
       return FALSE;
 
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
@@ -802,6 +792,7 @@ int
 opi_bytecode_const(OpiBytecode *bc, opi_t cell)
 {
   int ret = opi_bytecode_new_val(bc, OPI_VAL_GLOBAL);
+  bc->vinfo[ret].c = cell;
   opi_bytecode_write(bc, opi_insn_const(ret, cell));
   return ret;
 }
@@ -1021,4 +1012,12 @@ opi_bytecode_var(OpiBytecode *bc)
 void
 opi_bytecode_set(OpiBytecode *bc, int reg, int val)
 { opi_bytecode_write(bc, opi_insn_set(reg, val)); }
+
+int
+opi_bytecode_and(OpiBytecode *bc, int lhs, int rhs)
+{
+  int out = opi_bytecode_new_val(bc, OPI_VAL_BOOL);
+  opi_bytecode_write(bc, opi_insn_and(out, lhs, rhs));
+  return out;
+}
 

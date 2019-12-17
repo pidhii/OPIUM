@@ -18,11 +18,11 @@
   static                                                     \
   struct cod_ualloc_h##n##w g_allocator_h##n##w;             \
                                                              \
-  void*                                                      \
+  void* __attribute__((hot, flatten))                        \
   opi_h##n##w()                                              \
   { return cod_ualloc_h##n##w_alloc(&g_allocator_h##n##w); } \
                                                              \
-  void                                                       \
+  void __attribute__((hot, flatten))                         \
   opi_h##n##w_free(void *ptr)                                \
   { cod_ualloc_h##n##w_free(&g_allocator_h##n##w, ptr); }
 #endif

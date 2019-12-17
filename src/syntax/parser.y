@@ -142,6 +142,7 @@ int opi_start_token;
 %token<str> S
 
 %nonassoc LET REC IN AND
+%type<ast> use
 %nonassoc BEG END
 
 %right BRK
@@ -194,6 +195,7 @@ int opi_start_token;
 %type<fmt> fmt
 %type<ast> table_binds table
 %type<table> table_aux cond_table_aux
+%type<table> ctor_aux
 
 %right OR
 %right '$'
@@ -223,6 +225,20 @@ entry
   | error { g_result = NULL; opi_start_token = 0; }
 ;
 
+ctor_aux
+  : SYMBOL '=' Expr {
+    cod_strvec_init(&$$.names);
+    cod_vec_init($$.body);
+    cod_strvec_push(&$$.names, $1); free($1);
+    cod_vec_push($$.body, $3);
+  }
+  | ctor_aux ',' SYMBOL '=' Expr {
+    $$ = $1;
+    cod_strvec_push(&$$.names, $3); free($3);
+    cod_vec_push($$.body, $5);
+  }
+;
+
 Atom
   : NUMBER { $$ = opi_ast_const(opi_num_new($1)); }
   | Symbol { $$ = opi_ast_var($1); free($1); }
@@ -231,6 +247,18 @@ Atom
   | shell
   | qr
   | sr
+  | Type '{' ctor_aux '}' {
+    $$ = opi_ast_ctor($1, $3.names.data, $3.body.data, $3.body.len, NULL);
+    cod_strvec_destroy(&$3.names);
+    cod_vec_destroy($3.body);
+    free($1);
+  }
+  | Type '{' ctor_aux ',' DOTDOT Expr '}' {
+    $$ = opi_ast_ctor($1, $3.names.data, $3.body.data, $3.body.len, $6);
+    cod_strvec_destroy(&$3.names);
+    cod_vec_destroy($3.body);
+    free($1);
+  }
   | '(' Expr ')' { $$ = $2; }
   | '[' arg_aux ']' {
     $$ = opi_ast_apply(opi_ast_var("List"), (OpiAst**)$2->data, $2->size);
@@ -304,10 +332,7 @@ Form
   }
 ;
 
-Stmnt
-  : if
-  | unless
-  | when
+Stmnt: if | unless | when | use
   | LET REC recbinds IN Expr {
     $$ = opi_ast_fix($3->vars.data, (OpiAst**)$3->vals.data, $3->vars.size, $5);
     binds_delete($3);
@@ -515,6 +540,40 @@ when
   }
 ;
 
+use
+  : USE Symbol AS SYMBOL IN Expr {
+    $$ = opi_ast_use($2, $4);
+    free($2);
+    free($4);
+    OpiAst *body[] = { $$, $6 };
+    $$ = opi_ast_block(body, 2);
+  }
+  | USE Type AS TYPE IN Expr {
+    $$ = opi_ast_use($2, $4);
+    free($2);
+    free($4);
+    OpiAst *body[] = { $$, $6 };
+    $$ = opi_ast_block(body, 2);
+  }
+  | USE SymbolOrType IN Expr {
+    char *p = strrchr($2, '.');
+    opi_assert(p);
+    $$ = opi_ast_use($2, p + 1);
+    free($2);
+    OpiAst *body[] = { $$, $4 };
+    $$ = opi_ast_block(body, 2);
+  }
+  | USE Type '.' '*' IN Expr {
+    size_t len = strlen($2) + 1;
+    char buf[len + 1];
+    sprintf(buf, "%s.", $2);
+    $$ = opi_ast_use(buf, "*");
+    free($2);
+    OpiAst *body[] = { $$, $6 };
+    $$ = opi_ast_block(body, 2);
+  }
+;
+
 atomicPattern
   : SYMBOL { $$ = opi_ast_pattern_new_ident($1); free($1); }
   | '(' pattern ')' { $$ = $2; }
@@ -572,6 +631,7 @@ pattern
     free($1);
     cod_vec_destroy($2);
   }
+  | Type { $$ = opi_ast_pattern_new_unpack($1, NULL, NULL, 0); free($1); }
 ;
 
 list_pattern_aux
@@ -691,7 +751,7 @@ block_stmnt_only
   | LET pattern '=' Expr { $$ = opi_ast_match($2, $4, NULL, NULL); }
   | LOAD string {
     opi_assert($2->tag == OPI_AST_CONST);
-    $$ = opi_ast_load(OPI_STR($2->cnst));
+    $$ = opi_ast_load(OPI_STR($2->cnst)->str);
     opi_ast_delete($2);
   }
   | MODULE TYPE '=' block END {

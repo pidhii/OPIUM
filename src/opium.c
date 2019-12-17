@@ -59,7 +59,7 @@ opi_init(int flags)
   opi_regex_init();
   opi_array_init();
   opi_seq_init();
-  opi_vectors_init();
+  opi_buffer_init();
 }
 
 void
@@ -79,7 +79,7 @@ opi_cleanup(void)
   opi_regex_cleanup();
   opi_array_cleanup();
   opi_seq_cleanup();
-  opi_vectors_cleanup();
+  opi_buffer_cleanup();
 
   opi_lexer_cleanup();
   opi_allocators_cleanup();
@@ -162,6 +162,7 @@ type_init(OpiType *ty, const char *name)
   ty->equal = default_equal;
   ty->hash = NULL;
   ty->fields = NULL;
+  ty->nfields = 0;
 }
 
 opi_type_t
@@ -439,6 +440,7 @@ generic(void)
 OpiTrait*
 opi_trait_new(char *const nam[], int n)
 {
+  opi_assert(n > 0);
   OpiTrait *trait = malloc(sizeof(OpiTrait));
   // default_iml
   opi_t fs[n];
@@ -601,10 +603,11 @@ opi_trait_get_generic(OpiTrait *trait, int metoffs)
 }
 
 /******************************************************************************/
-opi_type_t opi_num_type;
+opi_type_t
+opi_num_type;
 
 static void
-number_write(opi_type_t ty, opi_t x, FILE *out)
+num_write(opi_type_t ty, opi_t x, FILE *out)
 {
   long double val = opi_as(x, OpiNum).val;
   long double i;
@@ -616,7 +619,7 @@ number_write(opi_type_t ty, opi_t x, FILE *out)
 }
 
 static void
-number_display(opi_type_t ty, opi_t x, FILE *out)
+num_display(opi_type_t ty, opi_t x, FILE *out)
 {
   long double val = opi_as(x, OpiNum).val;
   long double i;
@@ -627,27 +630,27 @@ number_display(opi_type_t ty, opi_t x, FILE *out)
     fprintf(out, "%Lg", val);
 }
 
-static int
-number_eq(opi_type_t ty, opi_t x, opi_t y)
-{ return opi_num_get_value(x) == opi_num_get_value(y); }
-
 static void
-number_delete(opi_type_t ty, opi_t cell)
+num_delete(opi_type_t ty, opi_t cell)
 { opi_h2w_free(cell); }
 
+static int
+num_eq(opi_type_t typ, opi_t x, opi_t y)
+{ return opi_num_get_value(x) == opi_num_get_value(y); }
+
 static size_t
-number_hash(opi_type_t type, opi_t x)
+num_hash(opi_type_t type, opi_t x)
 { return opi_num_get_value(x); }
 
 void
 opi_num_init(void)
 {
   opi_num_type = opi_type_new("Num");
-  opi_type_set_write(opi_num_type, number_write);
-  opi_type_set_display(opi_num_type, number_display);
-  opi_type_set_delete_cell(opi_num_type, number_delete);
-  opi_type_set_eq(opi_num_type, number_eq);
-  opi_type_set_hash(opi_num_type, number_hash);
+  opi_type_set_write(opi_num_type, num_write);
+  opi_type_set_display(opi_num_type, num_display);
+  opi_type_set_delete_cell(opi_num_type, num_delete);
+  opi_type_set_eq(opi_num_type, num_eq);
+  opi_type_set_hash(opi_num_type, num_hash);
 }
 
 void
@@ -832,16 +835,16 @@ opi_type_t opi_string_type;
 
 static void
 string_write(opi_type_t ty, opi_t x, FILE *out)
-{ fprintf(out, "\"%s\"", opi_as(x, OpiString).str); }
+{ fprintf(out, "\"%s\"", opi_as(x, OpiStr).str); }
 
 static void
 string_display(opi_type_t ty, opi_t x, FILE *out)
-{ fprintf(out, "%s", opi_as(x, OpiString).str); }
+{ fprintf(out, "%s", opi_as(x, OpiStr).str); }
 
 static void
 string_delete(opi_type_t ty, opi_t x)
 {
-  OpiString *s = opi_as_ptr(x);
+  OpiStr *s = opi_as_ptr(x);
   free(s->str);
   opi_h2w_free(s);
 }
@@ -882,7 +885,7 @@ opi_string_cleanup(void)
 extern inline opi_t
 opi_string_drain_with_len(char *str, size_t len)
 {
-  OpiString *s = opi_h2w();
+  OpiStr *s = opi_h2w();
   opi_init_cell(s, opi_string_type);
   s->str = str;
   s->len = len;
@@ -909,7 +912,7 @@ opi_string_new(const char *str)
 opi_t
 opi_string_from_char(char c)
 {
-  OpiString *s = opi_h2w();
+  OpiStr *s = opi_h2w();
   opi_init_cell(s, opi_string_type);
   s->str = malloc(2);;
   s->str[0] = c;
@@ -920,11 +923,11 @@ opi_string_from_char(char c)
 
 const char*
 opi_string_get_value(opi_t x)
-{ return opi_as(x, OpiString).str; }
+{ return opi_as(x, OpiStr).str; }
 
 size_t
 opi_string_get_length(opi_t x)
-{ return opi_as(x, OpiString).len; }
+{ return opi_as(x, OpiStr).len; }
 
 /******************************************************************************/
 typedef struct OpiRegEx_s {
@@ -1296,7 +1299,7 @@ static void
 fn_delete(opi_type_t type, opi_t cell)
 {
   OpiFn *fn = opi_as_ptr(cell);
-  fn->delete(fn);
+  fn->dtor(fn);
 }
 
 void
@@ -1332,7 +1335,7 @@ opi_fn_finalize(opi_t cell, const char *name, opi_fn_handle_t f, int arity)
   fn->name = NULL; // WTF: need this line for better performance
   fn->handle = f;
   fn->data = NULL;
-  fn->delete = opi_fn_delete;
+  fn->dtor = opi_fn_delete;
   fn->arity = arity;
 }
 
@@ -1345,12 +1348,12 @@ opi_fn(const char *name, opi_t (*f)(void), int arity)
 }
 
 void
-opi_fn_set_data(opi_t cell, void *data, void (*delete)(OpiFn*))
+opi_fn_set_data(opi_t cell, void *data, void (*dtor)(OpiFn*))
 {
   OpiFn *fn = opi_as_ptr(cell);
   fn->data = data;
-  if (delete)
-    fn->delete = delete;
+  if (dtor)
+    fn->dtor = dtor;
 }
 
 struct curry_data {
@@ -1479,7 +1482,7 @@ static void
 seq_delete(opi_type_t type, opi_t x)
 {
   OpiSeq *seq = opi_as_ptr(x);
-  seq->cfg.delete(seq->iter);
+  seq->cfg.dtor(seq->iter);
   free(seq);
 }
 
@@ -1499,7 +1502,7 @@ opi_seq_cleanup(void)
 opi_t
 opi_seq_new(OpiIter *iter, OpiSeqCfg cfg)
 {
-  opi_assert(cfg.next && cfg.delete && cfg.copy);
+  opi_assert(cfg.next && cfg.dtor && cfg.copy);
   OpiSeq *seq = malloc(sizeof(OpiSeq));
   seq->iter = iter;
   seq->cfg = cfg;
@@ -1590,9 +1593,77 @@ opi_array_drain(opi_t *data, size_t len, size_t cap)
 opi_t
 opi_array_new_empty(size_t reserve)
 {
-  reserve = opi_cep2_u64(reserve);
   opi_t *data = malloc(sizeof(opi_t) * reserve);
   return opi_array_drain(data, 0, reserve);
+}
+
+void __attribute__((hot, flatten))
+opi_array_push(opi_t a, opi_t x)
+{
+  OpiArray *arr = (OpiArray*)a;
+  if (opi_unlikely(arr->len == arr->cap)) {
+    arr->cap <<= 1;
+    arr->data = realloc(arr->data, sizeof(opi_t) * arr->cap);
+  }
+  opi_inc_rc(arr->data[arr->len++] = x);
+}
+
+opi_t
+opi_array_push_with_copy(opi_t a, opi_t x)
+{
+  OpiArray *arr = (OpiArray*)a;
+
+  size_t cap = arr->cap;
+  size_t len = arr->len;
+  opi_t *data = NULL;
+  if (len == cap)
+    cap <<= 1;
+  data = malloc(sizeof(opi_t) * cap);
+
+  for (size_t i = 0; i < len; ++i)
+    opi_inc_rc(data[i] = arr->data[i]);
+  opi_inc_rc(data[len++] = x);
+
+  opi_inc_rc(arr->data[arr->len++] = x);
+  return opi_array_drain(data, len, cap);
+}
+
+/******************************************************************************/
+opi_type_t
+opi_buffer_type;
+
+static void
+buffer_delete(opi_type_t type, opi_t x)
+{
+  OpiBuffer *buf = OPI_BUFFER(x);
+  if (buf->free)
+    buf->free(buf->ptr, buf->c);
+  opi_h6w_free(buf);
+}
+
+void
+opi_buffer_init(void)
+{
+  opi_buffer_type = opi_type_new("Buffer");
+  opi_type_set_delete_cell(opi_buffer_type, buffer_delete);
+}
+
+void
+opi_buffer_cleanup(void)
+{
+  opi_type_delete(opi_buffer_type);
+}
+
+OpiBuffer*
+opi_buffer_new(void *ptr, size_t size, void (*free)(void* ptr,void* c), void *c)
+{
+  OpiBuffer *buf = opi_h6w();
+  buf->ptr = ptr;
+  buf->size = size;
+  buf->free = free;
+  buf->c = c;
+  opi_init_cell(buf, opi_buffer_type);
+  return buf;
 }
 
 /******************************************************************************/
@@ -1653,113 +1724,6 @@ OpiLocation*
 opi_location_copy(const OpiLocation *loc)
 {
   return opi_location_new(loc->path, loc->fl, loc->fc, loc->ll, loc->lc);
-}
-
-/******************************************************************************/
-#define DEFINE_VECTOR(dtype, prefix, name, fmt)                                \
-  typedef struct name##_s {                                                    \
-    OpiHeader header;                                                          \
-    dtype *data;                                                               \
-    size_t size;                                                               \
-  } name;                                                                      \
-                                                                               \
-  opi_type_t opi_##prefix##vector_type;                                        \
-                                                                               \
-  static void                                                                  \
-  prefix##vector_delete(opi_type_t type, opi_t x)                              \
-  {                                                                            \
-    name *vec = opi_as_ptr(x);                                                 \
-    free(vec->data);                                                           \
-    opi_h2w_free(x);                                                           \
-  }                                                                            \
-                                                                               \
-  static void                                                                  \
-  prefix##vector_write(opi_type_t type, opi_t x, FILE *out)                    \
-  {                                                                            \
-    name *vec = opi_as_ptr(x);                                                 \
-    fprintf(out, "(" #prefix "vector [");                                      \
-    for (size_t i = 0; i < vec->size; ++i) {                                   \
-      if (i > 0)                                                               \
-        putc(' ', out);                                                        \
-      fprintf(out, fmt, vec->data[i]);                                         \
-    }                                                                          \
-    fputs("])", out);                                                          \
-  }                                                                            \
-                                                                               \
-  opi_t                                                                        \
-  opi_##prefix##vector_new_moved(dtype *data, size_t size)                     \
-  {                                                                            \
-    name *vec = opi_h2w();                                                     \
-    vec->data = data;                                                          \
-    vec->size = size;                                                          \
-    opi_init_cell(vec, opi_##prefix##vector_type);                             \
-    return (opi_t)vec;                                                         \
-  }                                                                            \
-                                                                               \
-  opi_t                                                                        \
-  opi_##prefix##vector_new(const dtype *data, size_t size)                     \
-  {                                                                            \
-    dtype *mydata = malloc(sizeof(dtype) * size);                              \
-    memcpy(mydata, data, sizeof(dtype) * size);                                \
-    return opi_##prefix##vector_new_moved(mydata, size);                       \
-  }                                                                            \
-                                                                               \
-  opi_t                                                                        \
-  opi_##prefix##vector_new_raw(size_t size)                                    \
-  {                                                                            \
-    return opi_##prefix##vector_new_moved(malloc(sizeof(dtype) * size), size); \
-  }                                                                            \
-                                                                               \
-  opi_t                                                                        \
-  opi_##prefix##vector_new_filled(dtype fill, size_t size)                     \
-  {                                                                            \
-    dtype *data = malloc(sizeof(dtype) * size);                                \
-    for (size_t i = 0; i < size; ++i)                                          \
-      data[i] = fill;                                                          \
-    return opi_##prefix##vector_new_moved(data, size);                         \
-  }                                                                            \
-
-DEFINE_VECTOR(float, s, OpiSVector, "%f")
-#define SVECTOR(x) ((OpiSVector*)(x))
-
-DEFINE_VECTOR(double, d, OpiDVector, "%lf")
-#define DVECTOR(x) ((OpiDVector*)(x))
-
-void
-opi_vectors_init(void)
-{
-  opi_dvector_type = opi_type_new("dvector");
-  opi_type_set_delete_cell(opi_dvector_type, dvector_delete);
-  opi_type_set_write(opi_dvector_type, dvector_write);
-
-  opi_svector_type = opi_type_new("svector");
-  opi_type_set_delete_cell(opi_svector_type, svector_delete);
-  opi_type_set_write(opi_svector_type, svector_write);
-}
-
-void
-opi_vectors_cleanup(void)
-{
-  opi_type_delete(opi_dvector_type);
-  opi_type_delete(opi_svector_type);
-}
-
-const float*
-opi_svector_get_data(opi_t x)
-{
-  return opi_as(x, OpiSVector).data;
-}
-
-const double*
-opi_dvector_get_data(opi_t x)
-{
-  return opi_as(x, OpiDVector).data;
-}
-
-size_t
-opi_vector_get_size(opi_t x)
-{
-  return opi_as(x, OpiSVector).size;
 }
 
 int
@@ -1830,3 +1794,14 @@ opi_location_show(OpiLocation *loc, FILE *out)
 {
   return opi_show_location(out, loc->path, loc->fc, loc->fl, loc->lc, loc->ll);
 }
+
+int
+opi_find_string(const char *str, char* const arr[], int n)
+{
+  for (int i = 0; i < n; ++i) {
+    if (strcmp(str, arr[i]) == 0)
+      return i;
+  }
+  return -1;
+}
+

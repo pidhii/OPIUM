@@ -67,9 +67,7 @@ syn keyword Function length
 syn keyword Function strlen substr strstr chop ltrim rtrim trim concat
 syn keyword Function open popen
 syn keyword Function read readline readlines
-" base/common.opi
-syn keyword Function flip
-" base/list-base.opi
+syn keyword Function flip const
 syn keyword Function range
 syn keyword Function revappend reverse
 syn keyword Function any? all?
@@ -79,7 +77,6 @@ syn keyword Function foreach
 syn keyword Function foldl foldr
 syn keyword Function unfold
 syn keyword Function revfilter filter
-" base/base.opi
 syn keyword Function zero? positive? negative? even? odd?
 syn keyword Function match split
 

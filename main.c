@@ -7,10 +7,64 @@
 
 #include <readline/readline.h>
 #include <readline/history.h>
+;
+
+static const char*
+logo() {
+  static char logo_template[] =
+"                                               \n"
+"                   d8b                         \n"
+"                   Y8P                         \n"
+"                                               \n"
+"  .d88b.  88888b.  888 888  888 88888b.d88b.   \n"
+" d88\"\"88b 888 \"88b 888 888  888 888 \"888 \"88b  \n"
+" 888  888 888  888 888 888  888 888  888  888  \n"
+" Y88..88P 888 d88P 888 Y88b 888 888  888  888  \n"
+"  \"Y88P\"  88888P\"  888  \"Y88888 888  888  888  \n"
+"          888                                  \n"
+"          888                                  \n"
+"          888                                  \n"
+"                                               \n"
+;
+  static char alphabet[] =
+".?<..v/*nbRBQ3?,f+<,t3/j^`|,lhK>cP(IM.#H341.&*7/xV}D>3TpYYp~KZ,GLi@>X;/>4rP3;F"
+"<SS6DmqV>$Dso=~]{NYJIz\\FhN{iW*<@=i0p]<xCvxHBo@51ip|L3VK?5W4/`rfl@RMs%Oj?!,*,>V"
+"$l\\5x2Zrg\\.6cL[>#?LUPTl~:piqPCQ$~pGSe(ty_H.S5|HN<<7fyQ>Cn#B>@$%q.VHZ</`|8>?<jl"
+"$/g.i<#>D`=V8Sn>6QuV8puR2aqh?,Lk?sm=v}noh|gx.A..6>KPF]F`vt<;}RDWeF\\NGLPx>p>s=E"
+"V.gQT3Tj[J.[P,[}f.Dw0?3E/y**pHhjDA/P)}T,__,__zu5laH?pVgr8<Vq,3Ah/j/Ez<{YoL@([."
+",<ng}KE1v:EH8:;o@_pcK5eD(WO!fU1gN.Qx^5fWHujs`v^K}4>M,4.RV^E62?5>.Mo|?R_se9XxeU"
+"<fn_6Lv*M/s1Qf@}i@?/+\\WK?rD<r!MC=hAS?WtE?.H/h{WJy;(BxEW}w}%[.48xa!g.]bHe&&`,%U"
+"0Yeb.zF)LjD4???KVS><y[}E.H.z&vu5`.6vT0aA:!AvY3VJ5,x<_x>*U|~OcZM1M=l2l9ie.>]_4:"
+"e`tTf`m.0U4*n>>5R2y\\Q5b5E.UMO|nWA>A0)0j~3>#/:Alk0vmybJ#X7./%gv&4cf=(x[o[zX[niC"
+"k6V|=?io4o{cUQ9TuMDPw@#m?b=E7NO>w#f0{+4<`yt.{8?9R_A#Ljn5t,{L(g7vM<.Db~/WM?/H.l"
+"w,uTN/@<7iC.PyxbDj@o/ssCG+u@kVg<S;gqyjr>uez,kB.h+~0^<Ev)mqC.&8<NJ.gxGmH:%on.^^"
+"y{:.i^.@$U~<p8^_R:0y./FX?=AMUEaPLGL/[x,s!\\,4IQ0>bVg.2^I[lt>Qt%R?oA>ol_Ny#JU?)1"
+";?zAkI_>RYNx<86?:g3CEQ2&/L/3}P1K}J&Qt\\\\[[?<O%XW/kGf,..o>lPx<(HL!<]6FAq&W0xGmID"
+"./Dt.^9O/}?<j*5<$|;G*<uDXZmHAh/)BfJa5ctwOLW0Vc}*@7/Rq&7Q[c2U@u.z`JU+^<TOG|7LaI"
+"*14<[x#/[,(,JxL`ow/QCp[,`;Nyi}}P>BIWT#llvS!TVbnN]4$G]_hS?H.3|Pvbss#/BJ6YpQo7e."
+;
+
+  static char logo[sizeof logo_template] = { 0 };
+  if (logo[0] == 0) {
+    srand(time(0));
+    for (size_t i = 0; i < sizeof logo_template - 1; ++i)
+      logo[i] = isspace(logo_template[i])
+              ? logo_template[i]
+              : alphabet[rand() % (sizeof alphabet - 1)];
+  }
+  
+  return logo;
+}
 
  __attribute__((noreturn)) void
 help_and_exit(char *argv0, int err)
 {
+  if (err == EXIT_SUCCESS) {
+    fputs("\x1b[38;5;36;1m", stderr);
+    fputs(logo(), stderr);
+    fputs("\x1b[0m", stderr);
+  }
+
   fprintf(stderr, "usage: %s [OPTIONS] [<script-path>]\n", argv0);
 //fprintf(stderr, "-------------------------------------------------------------------------------\n");
   fprintf(stderr, "OPTIONS:\n");
@@ -64,9 +118,10 @@ main(int argc, char **argv, char **env)
 
   FILE *in = stdin;
   char path[PATH_MAX] = ".";
-  if (optind < argc) {
+  if (optind < argc && strcmp(argv[optind-1], "--") != 0) {
     if (!(in = fopen(argv[optind], "r"))) {
-      opi_error("%s\n", strerror(errno));
+      opi_error("failed to open file \"%s\" (%s)\n", argv[optind],
+          strerror(errno));
       cod_strvec_destroy(&srcdirs);
       exit(EXIT_FAILURE);
     }
@@ -97,6 +152,8 @@ main(int argc, char **argv, char **env)
   opi_t argv_ = opi_nil;
   for (int i = argc - 1; i >= optind; --i)
     argv_ = opi_cons(opi_string_new(argv[i]), argv_);
+  if (in == stdin)
+    argv_ = opi_cons(opi_string_from_char('-'), argv_);
   opi_builder_def_const(&builder, "Sys.argv", argv_);
   
   // Add environment variables.
@@ -114,14 +171,18 @@ main(int argc, char **argv, char **env)
   opi_t env_ = opi_table(env_list, TRUE);
   opi_builder_def_const(&builder, "Sys.env", env_);
 
-  // change working direcotry to the source location
-  /*opi_debug("chdir %s\n", dir);*/
-  /*opi_assert(chdir(dir) == 0);*/
-
+  // Builtins.
   opi_builtins(&builder);
 
+  if (use_base) {
+    // Add base-library.
+    opi_load(&builder, "base");
+  }
+
   if (in == stdin) {
-    // REPL
+/*******************************************************************************
+ * Begin REPL.
+ */
     char history_path[PATH_MAX];
 
     using_history();
@@ -141,6 +202,10 @@ main(int argc, char **argv, char **env)
     char *line;
 
     size_t cnt = 0;
+
+    fputs("\x1b[38;5;36;1m", stderr);
+    fputs(logo(), stderr);
+    fputs("\x1b[0m", stderr);
     puts("\e[1mOpium REPL\e[0m");
     puts("press <C-d> to exit");
     puts("");
@@ -235,6 +300,9 @@ main(int argc, char **argv, char **env)
       opi_context_drain_bytecode(&ctx, bc);
       opi_bytecode_delete(bc);
     }
+/*
+ * End REPL.
+ ******************************************************************************/
 
   } else {
     OpiAst *ast = opi_parse(in);

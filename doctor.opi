@@ -3,7 +3,7 @@
 {- Function: Show help and exit. -}
 let helpAndExit out err =
   fprintf out "\
-usage: %{car ARGV} [OPTIONS] COMMAND
+usage: %{car Sys.argv} [OPTIONS] COMMAND
 
 OPTIONS:
   path <opium-path>
@@ -48,7 +48,7 @@ let realpath path = `test -e '%{path}' && realpath '%{path}'`
 
 
 {- Global: Parsed command-line options. -}
-let cmdArgs = table $ parseArgs $ cdr Sys.argv
+let cmdArgs = table . parseArgs $ cdr Sys.argv
 
 {- Global: Force mode. -}
 let force? = cmdArgs#force or false
@@ -58,7 +58,6 @@ let installPath = cmdArgs#path or Sys.env#OPIUM_PATH or begin
   fprintf stderr "error: path to opium libraries not set\n";
   exit 1;
 end
-
 
 {- Function: Install package. -}
 let install () = begin
@@ -101,16 +100,13 @@ let install () = begin
     exit 1;
   end
   -- copy dependencies
-  let rec copy files =
-    unless let file:files = files then nil
-    else begin
-      `cp %{packageRoot}/%{file} %{packageInstallPath}` or begin
-        fprintf stderr "error: failed to copy \"%{file}\"\n";
-        exit 1;
-      end
-      copy files
+  let copy file = 
+    `cp %{packageRoot}/%{file} %{packageInstallPath}` or begin
+      fprintf stderr "error: failed to copy \"%{file}\"\n";
+      exit 1;
     end
-  in copy packageFiles;
+  in
+  foreach copy packageFiles;
   -- create symlink to the main script
   let rel_path = "%{packageDirName}/%{packageMain}" in
   let link_path = "%{installPath}/%{packageName}" in

@@ -29,7 +29,7 @@ opi_ast_delete(OpiAst *node)
 
     case OPI_AST_USE:
       free(node->use.old);
-      free(node->use.new);
+      free(node->use.nw);
       break;
 
     case OPI_AST_APPLY:
@@ -70,8 +70,8 @@ opi_ast_delete(OpiAst *node)
       for (size_t i = 0; i < node->block.n; ++i)
         opi_ast_delete(node->block.exprs[i]);
       free(node->block.exprs);
-      if (node->block.namespace)
-        free(node->block.namespace);
+      if (node->block.ns)
+        free(node->block.ns);
       break;
 
     case OPI_AST_LOAD:
@@ -88,7 +88,7 @@ opi_ast_delete(OpiAst *node)
       break;
 
     case OPI_AST_STRUCT:
-      free(node->strct.typename);
+      free(node->strct.name);
       for (size_t i = 0; i < node->strct.nfields; ++i)
         free(node->strct.fields[i]);
       free(node->strct.fields);
@@ -131,6 +131,18 @@ opi_ast_delete(OpiAst *node)
       opi_ast_delete(node->isof.expr);
       free(node->isof.of);
       break;
+
+    case OPI_AST_CTOR:
+      free(node->ctor.name);
+      for (int i = 0; i < node->ctor.nflds; ++i) {
+        free(node->ctor.fldnams[i]);
+        opi_ast_delete(node->ctor.flds[i]);
+      }
+      free(node->ctor.fldnams);
+      free(node->ctor.flds);
+      if (node->ctor.src)
+        opi_ast_delete(node->ctor.src);
+      break;
   }
 
   free(node);
@@ -160,7 +172,7 @@ opi_ast_use(const char *old, const char *new)
   OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_USE;
   node->use.old = strdup(old);
-  node->use.new = strdup(new);
+  node->use.nw = strdup(new);
   return node;
 }
 
@@ -296,7 +308,7 @@ opi_ast_block(OpiAst **exprs, size_t n)
   memcpy(node->block.exprs, exprs, sizeof(OpiAst*) * n);
   node->block.n = n;
   node->block.drop = TRUE;
-  node->block.namespace = NULL;
+  node->block.ns = NULL;
   return node;
 }
 
@@ -311,9 +323,9 @@ void
 opi_ast_block_set_namespace(OpiAst *block, const char *namespace)
 {
   opi_assert(block->tag == OPI_AST_BLOCK);
-  if (block->block.namespace)
-    free(block->block.namespace);
-  block->block.namespace = strdup(namespace);
+  if (block->block.ns)
+    free(block->block.ns);
+  block->block.ns = strdup(namespace);
 }
 
 void
@@ -419,7 +431,7 @@ opi_ast_struct(const char *typename, char** fields, size_t nfields)
 {
   OpiAst *node = malloc(sizeof(OpiAst));
   node->tag = OPI_AST_STRUCT;
-  node->strct.typename = strdup(typename);
+  node->strct.name = strdup(typename);
   node->strct.fields = malloc(sizeof(char*) * nfields);
   for (size_t i = 0; i < nfields; ++i)
     node->strct.fields[i] = strdup(fields[i]);
@@ -539,5 +551,23 @@ opi_ast_isof(OpiAst *expr, const char *of)
   node->tag = OPI_AST_ISOF;
   node->isof.expr = expr;
   node->isof.of = strdup(of);
+  return node;
+}
+
+OpiAst*
+opi_ast_ctor(const char *name, char* const fldnams[], OpiAst *flds[], int nflds,
+    OpiAst *src)
+{
+  OpiAst *node = malloc(sizeof(OpiAst));
+  node->tag = OPI_AST_CTOR;
+  node->ctor.name = strdup(name);
+  node->ctor.fldnams = malloc(sizeof(char*) * nflds);
+  node->ctor.flds = malloc(sizeof(OpiAst*) * nflds);
+  node->ctor.nflds = nflds;
+  node->ctor.src = src;
+  for (int i = 0; i < nflds; ++i) {
+    node->ctor.fldnams[i] = strdup(fldnams[i]);
+    node->ctor.flds[i] = flds[i];
+  }
   return node;
 }

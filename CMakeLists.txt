@@ -10,14 +10,21 @@ find_package (FLEX REQUIRED)
 
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -Wextra -Wno-unused -Wno-error=cpp -Wno-strict-aliasing -rdynamic")
 set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Og -ggdb -DOPI_DEBUG_MODE")
-set (CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3")
+set (CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Ofast")
 
-file (GLOB OPIUM_OBJ_LIB_SRC ${CMAKE_SOURCE_DIR}/src/*.c ${CMAKE_SOURCE_DIR}/codeine/src/*.c)
+set (CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
+set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+set (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
+
+add_definitions (-Wfatal-errors)
+
+file (GLOB OPIUM_OBJ_LIB_SRC
+  ${CMAKE_SOURCE_DIR}/src/*.c
+  #${CMAKE_SOURCE_DIR}/src/*.cpp
+  ${CMAKE_SOURCE_DIR}/codeine/src/*.c)
 set (OPIUM_INCLUDE ${CMAKE_SOURCE_DIR}/include)
 
 include_directories (${CMAKE_SOURCE_DIR}/include)
-#include_directories (${CMAKE_SOURCE_DIR}/include/opium/generic_vector)
-#include_directories (${CMAKE_SOURCE_DIR}/include/opium/uniform_allocator)
 include_directories (${CMAKE_SOURCE_DIR}/codeine/include)
 
 
@@ -123,7 +130,7 @@ install (
   DIRECTORY
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/codeine/include
-  DESTINATION .)
+  DESTINATION ${CMAKE_INSTALL_PREFIX})
 
 ################################################################################
 #                                   doctor

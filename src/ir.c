@@ -6,6 +6,7 @@
 #include <dlfcn.h>
 #include <unistd.h>
 #include <libgen.h>
+#include <sys/stat.h>
 
 void
 opi_alist_init(OpiAlist *a)
@@ -80,8 +81,7 @@ opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
   opi_builder_def_type(bldr, "Seq"      , opi_seq_type      ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Array"    , opi_array_type    ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Table"    , opi_table_type    ); cod_vec_pop(ctx->types);
-  opi_builder_def_type(bldr, "svector"  , opi_svector_type  ); cod_vec_pop(ctx->types);
-  opi_builder_def_type(bldr, "dvector"  , opi_dvector_type  ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "Buffer"   , opi_buffer_type   ); cod_vec_pop(ctx->types);
 }
 
 void
@@ -153,17 +153,26 @@ opi_builder_add_source_directory(OpiBuilder *bldr, const char *path)
   cod_strvec_push(bldr->srcdirs, fullpath);
 }
 
+static int
+is_regular_file(const char *path)
+{
+  struct stat path_stat;
+  stat(path, &path_stat);
+  return S_ISREG(path_stat.st_mode);
+}
+
 char*
 opi_builder_find_path(OpiBuilder *bldr, const char *path, char *fullpath)
 {
-  if (realpath(path, fullpath))
+  if (realpath(path, fullpath) && is_regular_file(fullpath))
     return fullpath;
 
   char buf[PATH_MAX];
   for (size_t i = 0; i < bldr->srcdirs->size; ++i) {
     sprintf(buf, "%s/%s", bldr->srcdirs->data[i], path);
-    if (realpath(buf, fullpath))
+    if (realpath(buf, fullpath) && is_regular_file(fullpath)) {
       return fullpath;
+    }
   }
   return NULL;
 }
@@ -318,6 +327,7 @@ opi_builder_begin_scope(OpiBuilder *bldr, OpiScope *scp)
   scp->nvars1 = bldr->decls.size - bldr->frame_offset;
   scp->ntypes1 = bldr->types->size;
   scp->ntraits1 = bldr->traits->size;
+  scp->nconsts1 = bldr->const_vals->size;
   scp->vasize1 = opi_alist_get_size(bldr->alist);
 }
 
@@ -336,6 +346,10 @@ opi_builder_drop_scope(OpiBuilder *bldr, OpiScope *scp)
   size_t ntraits2 = bldr->traits->size;
   size_t ntraits = ntraits2 - ntraits1;
 
+  size_t nconsts1 = scp->nconsts1;
+  size_t nconsts2 = bldr->const_vals->size;
+  size_t nconsts = nconsts2 - nconsts1;
+
   size_t vasize1 = scp->vasize1;
   size_t vasize2 = opi_alist_get_size(bldr->alist);
   size_t vasize = vasize2 - vasize1;
@@ -349,6 +363,11 @@ opi_builder_drop_scope(OpiBuilder *bldr, OpiScope *scp)
   while (ntypes--) {
     cod_strvec_pop(bldr->type_names);
     cod_ptrvec_pop(bldr->types, NULL);
+  }
+  // pop consts
+  while (nconsts--) {
+    cod_strvec_pop(bldr->const_names);
+    cod_ptrvec_pop(bldr->const_vals, (void*)opi_unref);
   }
   // pop traits
   while (ntraits--) {
@@ -371,6 +390,10 @@ opi_builder_make_namespace(OpiBuilder *bldr, OpiScope *scp, const char *prefix)
   size_t ntraits1 = scp->ntraits1;
   size_t ntraits2 = bldr->traits->size;
   size_t ntraits = ntraits2 - ntraits1;
+
+  size_t nconsts1 = scp->nconsts1;
+  size_t nconsts2 = bldr->const_vals->size;
+  size_t nconsts = nconsts2 - nconsts1;
 
   size_t vasize1 = scp->vasize1;
   size_t vasize2 = opi_alist_get_size(bldr->alist);
@@ -420,6 +443,20 @@ opi_builder_make_namespace(OpiBuilder *bldr, OpiScope *scp, const char *prefix)
     // push new trait name into a-list
     opi_alist_push(bldr->alist, newname, NULL);
   }
+
+  // fetch constants and prefix with namespace name
+  for (size_t i = bldr->const_names->size - nconsts; i < bldr->const_names->size; ++i) {
+    // add namespace prefix
+    size_t len = strlen(bldr->const_names->data[i]) + nslen;
+    char *newname = malloc(len + 1);
+    sprintf(newname, "%s%s", prefix, bldr->const_names->data[i]);
+    // change declaration
+    free(bldr->const_names->data[i]);
+    bldr->const_names->data[i] = newname;
+    // push new type name into a-list
+    opi_alist_push(bldr->alist, newname, NULL);
+  }
+
 }
 
 static void
@@ -454,6 +491,47 @@ make_struct(void)
   }
   opi_popn(nfields);
   opi_init_cell(s, type);
+  return (opi_t)s;
+}
+
+typedef struct CopyCtorData_s {
+  opi_type_t type;
+  int offs[];
+} CopyCtorData;
+
+static void
+copy_ctor_delete(OpiFn *fn)
+{
+  free(fn->data);
+  opi_fn_delete(fn);
+}
+
+// TODO: reuse source if RC = 0.
+static opi_t
+copy_ctor(void)
+{
+  CopyCtorData *restrict data = opi_fn_get_data(opi_current_fn);
+  if (opi_get(1)->type != data->type) {
+    OPI_FN()
+    OPI_THROW("type-error");
+  }
+
+  int nflds = opi_type_get_nfields(data->type);
+  struct opi_struct *s = malloc(sizeof(struct opi_struct) + sizeof(opi_t) * nflds);
+  struct opi_struct *src = (struct opi_struct*)opi_pop();
+
+  int n_new = opi_nargs - 1;
+  for (int i = 0, i_offs = 0; i < nflds; ++i) {
+    if (i_offs < n_new && data->offs[i_offs] == i) {
+      opi_inc_rc(s->data[i] = opi_pop());
+      i_offs++;
+    } else {
+      opi_inc_rc(s->data[i] = src->data[i]);
+    }
+  }
+
+  opi_init_cell(s, data->type);
+  opi_drop((opi_t)src);
   return (opi_t)s;
 }
 
@@ -660,7 +738,7 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
 
     case OPI_AST_USE:
     {
-      if (strcmp(ast->use.new, "*") == 0) {
+      if (strcmp(ast->use.nw, "*") == 0) {
         char *prefix = ast->use.old;
         size_t prefixlen = strlen(ast->use.old);
         for (size_t i = 0, n = opi_alist_get_size(bldr->alist); i < n; ++i) {
@@ -669,7 +747,7 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
             opi_alist_push(bldr->alist, vname + prefixlen, vname);
         }
       } else {
-        opi_alist_push(bldr->alist, ast->use.new, ast->use.old);
+        opi_alist_push(bldr->alist, ast->use.nw, ast->use.old);
       }
       return opi_ir_const(opi_nil);
     }
@@ -785,8 +863,8 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
 
       if (ast->block.drop)
         opi_builder_drop_scope(bldr, &scp);
-      else if (ast->block.namespace)
-        opi_builder_make_namespace(bldr, &scp, ast->block.namespace);
+      else if (ast->block.ns)
+        opi_builder_make_namespace(bldr, &scp, ast->block.ns);
 
       OpiIr *ret = opi_ir_block(exprs, ast->block.n);
       opi_ir_block_set_drop(ret, ast->block.drop);
@@ -841,7 +919,7 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
           if (!dl) {
             dl = dlopen(path, RTLD_NOW | RTLD_LOCAL);
             if (!dl) {
-              opi_error(dlerror());
+              opi_error("%s\n", dlerror());
               opi_assert(chdir(cwd) == 0);
               return build_error();
             }
@@ -925,27 +1003,106 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
     case OPI_AST_STRUCT:
     {
       // create type
-      opi_type_t type = opi_type_new(ast->strct.typename);
+      opi_type_t type = opi_type_new(ast->strct.name);
       size_t offset = offsetof(struct opi_struct, data);
       opi_type_set_fields(type, offset, ast->strct.fields, ast->strct.nfields);
       opi_type_set_delete_cell(type, opi_struct_delete);
       opi_type_set_write(type, write_struct);
 
       // create constructor
-      opi_t ctor = opi_fn(ast->strct.typename, make_struct, ast->strct.nfields);
+      opi_t ctor = opi_fn(ast->strct.name, make_struct, ast->strct.nfields);
       opi_fn_set_data(ctor, type, NULL);
 
       // declare type
-      if (opi_builder_add_type(bldr, ast->strct.typename, type) == OPI_ERR) {
+      if (opi_builder_add_type(bldr, ast->strct.name, type) == OPI_ERR) {
         opi_drop(ctor);
         opi_type_delete(type);
         return build_error();
       }
 
       // declare constructor
-      opi_builder_push_decl(bldr, ast->strct.typename);
+      opi_builder_push_decl(bldr, ast->strct.name);
       OpiIr *ctor_ir = opi_ir_const(ctor);
       return opi_ir_let(&ctor_ir, 1, NULL);
+    }
+
+    case OPI_AST_CTOR:
+    {
+      OpiType *type = opi_builder_find_type(bldr, ast->ctor.name);
+      if (type == NULL) {
+        opi_error("no such type, '%s'\n", ast->ctor.name);
+        opi_error = 1;
+        return build_error();
+      }
+
+      // validate fields
+      int nflds = opi_type_get_nfields(type);
+      char* const* fields = opi_type_get_fields(type);
+      for (int i = 0; i < ast->ctor.nflds; ++i) {
+        if (opi_find_string(ast->ctor.fldnams[i], fields, nflds) < 0) {
+          opi_error("no field '%s' in struct %s\n",
+              ast->ctor.fldnams[i], ast->ctor.name);
+          opi_error = 1;
+          return build_error();
+        }
+      }
+
+      if (ast->ctor.src) {
+        // Copy constructor.
+
+        CopyCtorData *data = malloc(sizeof(CopyCtorData) + sizeof(int) * ast->ctor.nflds);
+        data->type = type;
+
+        // resolve fields
+        for (int i = 0; i < ast->ctor.nflds; ++i) {
+          int idx = opi_find_string(ast->ctor.fldnams[i], fields, nflds);
+          opi_assert(idx >= 0);
+          data->offs[i] = idx;
+        }
+
+        // sort fields
+        int compare(const void* a, const void* b) {
+          int int_a = *(int*)a;
+          int int_b = *(int*)b;
+          if (int_a == int_b) return 0;
+          else if (int_a < int_b) return -1;
+          else return 1;
+        }
+        qsort(data->offs, ast->ctor.nflds, sizeof(int), compare);
+
+        OpiIr *args[ast->ctor.nflds + 1];
+        args[0] = opi_builder_build_ir(bldr, ast->ctor.src);
+        for (int i = 0; i < ast->ctor.nflds; ++i)
+          args[i + 1] = opi_builder_build_ir(bldr, ast->ctor.flds[i]);
+        opi_t fn = opi_fn(0, copy_ctor, ast->ctor.nflds + 1);
+        opi_fn_set_data(fn, data, copy_ctor_delete);
+        OpiIr *fn_ir = opi_ir_const(fn);
+        return opi_ir_apply(fn_ir, args, ast->ctor.nflds + 1);
+
+      } else {
+        // test if number of fields in constructor matches number of fields
+        // of the struct
+        if (nflds != ast->ctor.nflds) {
+          opi_error("not enought fields to construct struct %s\n",
+              ast->ctor.name);
+          opi_error = 1;
+          return build_error();
+        }
+
+        // resolve fields offsets
+        int idxs[nflds];
+        for (int i = 0; i < nflds; ++i)
+          idxs[i] = opi_find_string(fields[i], ast->ctor.fldnams, nflds);
+
+        // apply default constructor
+        OpiIr *args[nflds];
+        for (int i = 0; i < nflds; ++i)
+          args[i] = opi_builder_build_ir(bldr, ast->ctor.flds[idxs[i]]);
+        OpiAst *tmp = opi_ast_var(ast->ctor.name);
+        OpiIr *ctor = opi_builder_build_ir(bldr, tmp);
+        opi_ast_delete(tmp);
+        return opi_ir_apply(ctor, args, nflds);
+      }
     }
 
     case OPI_AST_TRAIT:
@@ -1151,6 +1308,25 @@ opi_build(OpiBuilder *bldr, OpiAst *ast, int mode)
   opi_bytecode_finalize(bc);
 
   return bc;
+}
+
+int
+opi_load(OpiBuilder *bldr, const char *path)
+{
+  OpiAst *ast = opi_ast_load(path);
+  OpiBytecode *bc = opi_build(bldr, ast, OPI_BUILD_EXPORT);
+  opi_ast_delete(ast);
+  if (bc == NULL)
+    return OPI_ERR;
+  opi_t ret = opi_vm(bc);
+  opi_context_drain_bytecode(bldr->ctx, bc);
+  opi_bytecode_delete(bc);
+  if (ret->type == opi_undefined_type) {
+    opi_drop(ret);
+    return OPI_ERR;
+  }
+  opi_drop(ret);
+  return OPI_OK;
 }
 
 void

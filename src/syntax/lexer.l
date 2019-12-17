@@ -56,7 +56,9 @@ cod_vec(int) g_braces;
 %x qq1 qq2 qq3 qq4 qq5 qq6
 %x sr1 sr2 sr3
 
+IDENT [a-z_][0-9a-zA-Z_]*['?]?
 TYPE_IDENT [A-Z][0-9a-zA-Z_]*
+OP_CHAR "="|"+"|"-"|"*"|"/"|"%"|\.|">"|"<"|":"|"\\"|"|"|"$"|"!"|"@"
 
 %%
 
@@ -180,6 +182,8 @@ s[g]*[/|+] {
 <string,shell,qq1,qq2,qq3,qq4,qq5,qq6,sr1,sr2,sr3>"\\?" { yylval->c = '\?'; return CHAR; }
 <string,shell,qq1,qq2,qq3,qq4,qq5,qq6,sr1,sr2,sr3>"\\%" { yylval->c = '%'; return CHAR; }
 
+<string>"\\\"" { yylval->c = '"'; return CHAR; }
+<shell>"\\`" { yylval->c = '`'; return CHAR; }
 <qq1>"\\]" { yylval->c = ']'; return CHAR; }
 <qq2>"\\)" { yylval->c = ')'; return CHAR; }
 <qq3>"\\}" { yylval->c = '}'; return CHAR; }
@@ -222,19 +226,6 @@ is[ \n\t]+not { return ISNOT; }
     /*return ISOF;*/
   /*}*/
 
-"&&" { return SCAND; }
-"||" { return SCOR; }
-"<" { return NUMLT; }
-">" { return NUMGT; }
-"<=" { return NUMLE; }
-">=" { return NUMGE; }
-"==" { return NUMEQ; }
-"/=" { return NUMNE; }
-"++" { return PLUSPLUS; }
-".." { return DOTDOT; }
-"." { return '.'; }
-"#" { return TABLEREF; }
-
 "{" {
   cod_vec_push(g_braces, BRACE_CODE);
   return '{';
@@ -254,7 +245,7 @@ is[ \n\t]+not { return ISNOT; }
       return FMT_END;
 
     case BRACE_SHELL:
-      BEGIN(shell); 
+      BEGIN(shell);
       return FMT_END;
 
     case BRACE_QQ1:
@@ -298,6 +289,19 @@ is[ \n\t]+not { return ISNOT; }
   }
 }
 
+
+"&&" { return SCAND; }
+"||" { return SCOR; }
+"<" { return NUMLT; }
+">" { return NUMGT; }
+"<=" { return NUMLE; }
+">=" { return NUMGE; }
+"==" { return NUMEQ; }
+"/=" { return NUMNE; }
+"++" { return PLUSPLUS; }
+".." { return DOTDOT; }
+"." { return '.'; }
+"#" { return TABLEREF; }
 ";" { return ';'; }
 ";;" { return BRK; }
 "@"|"!" |
@@ -308,10 +312,10 @@ is[ \n\t]+not { return ISNOT; }
 "\\" { return FN; }
 
 "'"[^ \t\n(){}\[\]'\";,:]+ { yylval->opi = opi_symbol(yytext+1); return CONST; }
-[a-z_][0-9a-zA-Z_]*['?]? { yylval->str = strdup(yytext); return SYMBOL; }
+{IDENT} { yylval->str = strdup(yytext); return SYMBOL; }
 {TYPE_IDENT} { yylval->str = strdup(yytext); return TYPE; }
 
-"("{TYPE_IDENT}")" {
+"("{OP_CHAR}+")" {
   char *start = yytext + 1;
   int len = yyleng - 2;
   char buf[len + 1];

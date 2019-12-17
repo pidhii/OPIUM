@@ -355,6 +355,7 @@ apply(void)
 {
   opi_t f = opi_pop();
   opi_t l = opi_pop();
+  opi_write(l, OPI_DEBUG); putc('\n', OPI_DEBUG);
 
   if (f->type != opi_fn_type) {
     opi_drop(f);
@@ -368,6 +369,7 @@ apply(void)
   size_t iarg = 1;
   for (opi_t it = l; it->type == opi_pair_type; it = opi_cdr(it))
     opi_sp[-iarg++] = opi_car(it);
+  opi_debug("apply %zu args\n", nargs);
   opi_t ret = opi_apply(f, nargs);
 
   opi_inc_rc(ret);
@@ -426,11 +428,9 @@ static opi_t
 compose_aux(void)
 {
   struct compose_data *data = opi_fn_get_data(opi_current_fn);
-
   opi_t tmp = opi_apply(data->g, opi_nargs);
   if (opi_unlikely(tmp->type == opi_undefined_type))
     return tmp;
-
   opi_push(tmp);
   return opi_apply(data->f, 1);
 }
@@ -443,7 +443,7 @@ compose(void)
   struct compose_data *data = malloc(sizeof(struct compose_data));
   opi_inc_rc(data->f = f);
   opi_inc_rc(data->g = g);
-  opi_t aux = opi_fn("composition", compose_aux, opi_fn_get_arity(g));
+  opi_t aux = opi_fn("composition", compose_aux, 1);
   opi_fn_set_data(aux, data, compose_delete);
   return aux;
 }
@@ -483,8 +483,6 @@ TYPE_PRED(undefined_p, opi_undefined_type)
 TYPE_PRED(number_p, opi_num_type)
 TYPE_PRED(symbol_p, opi_symbol_type)
 TYPE_PRED(fn_p, opi_fn_type)
-TYPE_PRED(svector_p, opi_svector_type)
-TYPE_PRED(dvector_p, opi_dvector_type)
 TYPE_PRED(file_p, opi_file_type)
 TYPE_PRED(table_p, opi_table_type)
 TYPE_PRED(lazy_p, opi_lazy_type)
@@ -616,67 +614,6 @@ shell(void)
 }
 
 static opi_t
-loadfile(void)
-{
-  OpiContext *ctx = opi_fn_get_data(opi_current_fn);
-
-  opi_t path = opi_pop();
-  opi_t srcd = opi_nargs > 1 ? opi_pop() : opi_nil;
-  if (opi_unlikely(path->type != opi_string_type)) {
-    opi_drop(path);
-    opi_drop(srcd);
-    return opi_undefined(opi_symbol("type-error"));
-  }
-
-  FILE *fs = fopen(opi_string_get_value(path), "r");
-  opi_drop(path);
-  if (!fs) {
-    opi_drop(srcd);
-    return opi_undefined(opi_string_new(strerror(errno)));
-  }
-
-  opi_error = 0;
-  OpiAst *ast = opi_parse(fs);
-  fclose(fs);
-  if (opi_error) {
-    opi_drop(srcd);
-    return opi_undefined(opi_symbol("parse-error"));
-  }
-
-  OpiBuilder bldr;
-  opi_builder_init(&bldr, ctx);
-  opi_builtins(&bldr);
-  for (opi_t it = srcd; it->type == opi_pair_type; it = opi_cdr(it)) {
-    opi_t d = opi_car(it);
-    if (d->type != opi_string_type) {
-      opi_drop(srcd);
-      opi_ast_delete(ast);
-      opi_builder_destroy(&bldr);
-      return opi_undefined(opi_symbol("type-error"));
-    }
-    opi_builder_add_source_directory(&bldr, opi_string_get_value(d));
-  }
-  opi_drop(srcd);
-
-  OpiBytecode *bc = opi_build(&bldr, ast, OPI_BUILD_DEFAULT);
-  opi_ast_delete(ast);
-  if (bc == NULL) {
-    opi_builder_destroy(&bldr);
-    return opi_undefined(opi_symbol("build-error"));
-  }
-
-  opi_t ret = opi_vm(bc);
-  opi_inc_rc(ret);
-
-  opi_context_drain_bytecode(ctx, bc);
-  opi_bytecode_delete(bc);
-  opi_builder_destroy(&bldr);
-
-  opi_dec_rc(ret);
-  return ret;
-}
-
-static opi_t
 exit_(void)
 {
   opi_t err = opi_pop();
@@ -694,51 +631,13 @@ exit_(void)
 }
 
 static opi_t
-dvector(void)
-{
-  cod_vec(double) buf;
-  cod_vec_init(buf);
-  opi_t l = opi_pop();
-  for (opi_t it = l; it->type == opi_pair_type; it = opi_cdr(it)) {
-    opi_t x = opi_car(it);
-    if (opi_unlikely(x->type != opi_num_type)) {
-      cod_vec_destroy(buf);
-      opi_drop(l);
-      return opi_undefined(opi_symbol("type-error"));
-    }
-    cod_vec_push(buf, OPI_NUM(x));
-  }
-  opi_drop(l);
-  return opi_dvector_new_moved(buf.data, buf.len);
-}
-
-static opi_t
-svector(void)
-{
-  cod_vec(float) buf;
-  cod_vec_init(buf);
-  opi_t l = opi_pop();
-  for (opi_t it = l; it->type == opi_pair_type; it = opi_cdr(it)) {
-    opi_t x = opi_car(it);
-    if (opi_unlikely(x->type != opi_num_type)) {
-      cod_vec_destroy(buf);
-      opi_drop(l);
-      return opi_undefined(opi_symbol("type-error"));
-    }
-    cod_vec_push(buf, OPI_NUM(x));
-  }
-  opi_drop(l);
-  return opi_svector_new_moved(buf.data, buf.len);
-}
-
-static opi_t
 regex(void)
 {
   opi_t pattern = opi_pop();
   opi_assert(pattern->type == opi_string_type);
 
   const char *err;
-  opi_t regex = opi_regex_new(OPI_STR(pattern), 0, &err);
+  opi_t regex = opi_regex_new(OPI_STR(pattern)->str, 0, &err);
   if (regex == NULL) {
     opi_error("%s\n", err);
     abort();
@@ -797,10 +696,10 @@ search_replace(void)
   OPI_ARG(opt_, opi_string_type);
   OPI_ARG(str_, opi_string_type);
 
-  const char *pat = OPI_STR(pat_);
-  const char *str = OPI_STR(str_);
+  const char *pat = OPI_STR(pat_)->str;
+  const char *str = OPI_STR(str_)->str;
   int len = OPI_STRLEN(str_);
-  const char *opt = OPI_STR(opt_);
+  const char *opt = OPI_STR(opt_)->str;
 
   int g = !!strchr(opt, 'g');
 
@@ -842,8 +741,8 @@ number(void)
   OPI_FN()
   OPI_ARG(str, opi_string_type)
   char *endptr;
-  long double num = strtold(OPI_STR(str), &endptr);
-  if (endptr == OPI_STR(str))
+  long double num = strtold(OPI_STR(str)->str, &endptr);
+  if (endptr == OPI_STR(str)->str)
     OPI_THROW("format-error");
   OPI_RETURN(opi_num_new(num));
 }
@@ -860,8 +759,6 @@ opi_builtins(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "symbol?", opi_fn("symbol?", symbol_p, 1));
   opi_builder_def_const(bldr, "fn?", opi_fn("fn?", fn_p, 1));
   opi_builder_def_const(bldr, "lazy?", opi_fn("lazy?", lazy_p, 1));
-  opi_builder_def_const(bldr, "svector?", opi_fn("svector?", svector_p, 1));
-  opi_builder_def_const(bldr, "dvector?", opi_fn("dvector?", dvector_p, 1));
   opi_builder_def_const(bldr, "file?", opi_fn("file?", file_p, 1));
   opi_builder_def_const(bldr, "table?", opi_fn("table?", table_p, 1));
 
@@ -872,8 +769,6 @@ opi_builtins(OpiBuilder *bldr)
 
   opi_builder_def_const(bldr, "List", opi_fn("List", List, -1));
   opi_builder_def_const(bldr, "Table", opi_fn(0, Table, 1));
-  opi_builder_def_const(bldr, "dvector", opi_fn("dvector", dvector, 1));
-  opi_builder_def_const(bldr, "svector", opi_fn("svector", svector, 1));
   opi_builder_def_const(bldr, "number", opi_fn("number", number, 1));
 
   opi_builder_def_const(bldr, "regex", opi_fn("regex", regex, 1));
@@ -904,10 +799,6 @@ opi_builtins(OpiBuilder *bldr)
 
   opi_builder_def_const(bldr, "system", opi_fn("system", system_, 1));
   opi_builder_def_const(bldr, "shell", opi_fn("shell", shell, 1));
-
-  opi_t loadfile_fn = opi_fn("loadfile", loadfile, -2);
-  opi_fn_set_data(loadfile_fn, bldr->ctx, NULL);
-  opi_builder_def_const(bldr, "loadfile", loadfile_fn);
 
   opi_builder_def_const(bldr, "exit", opi_fn("exit", exit_, 1));
 
