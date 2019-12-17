@@ -565,17 +565,6 @@ opi_insn_set(int reg, int val)
   return insn;
 }
 
-OpiInsn*
-opi_insn_and(int out, int lhs, int rhs)
-{
-  OpiInsn *insn = malloc(sizeof(OpiInsn));
-  insn->opc = OPI_OPC_AND;
-  OPI_AND_REG_OUT(insn) = out;
-  OPI_AND_REG_LHS(insn) = lhs;
-  OPI_AND_REG_RHS(insn) = rhs;
-  return insn;
-}
-
 int
 opi_insn_is_using(OpiInsn *insn, int vid)
 {
@@ -594,7 +583,6 @@ opi_insn_is_using(OpiInsn *insn, int vid)
     case OPI_OPC_GUARD:
     case OPI_OPC_VAR:
     case OPI_OPC_SET:
-    case OPI_OPC_AND:
       return FALSE;
 
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
@@ -681,7 +669,6 @@ opi_insn_is_killing(OpiInsn *insn, int vid)
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
     case OPI_OPC_VAR:
     case OPI_OPC_SET:
-    case OPI_OPC_AND:
       return FALSE;
 
     // ignore manual RC-management
@@ -734,7 +721,6 @@ opi_insn_is_creating(OpiInsn *insn, int vid)
     case OPI_OPC_GUARD:
     case OPI_OPC_VAR:
     case OPI_OPC_SET:
-    case OPI_OPC_AND:
       return FALSE;
 
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
@@ -1012,12 +998,4 @@ opi_bytecode_var(OpiBytecode *bc)
 void
 opi_bytecode_set(OpiBytecode *bc, int reg, int val)
 { opi_bytecode_write(bc, opi_insn_set(reg, val)); }
-
-int
-opi_bytecode_and(OpiBytecode *bc, int lhs, int rhs)
-{
-  int out = opi_bytecode_new_val(bc, OPI_VAL_BOOL);
-  opi_bytecode_write(bc, opi_insn_and(out, lhs, rhs));
-  return out;
-}
 

@@ -691,14 +691,20 @@ opi_pair_init(void);
 void
 opi_pair_cleanup(void);
 
-static inline opi_t
-opi_cons(opi_t car, opi_t cdr)
+static inline void
+_opi_cons_at(opi_t car, opi_t cdr, OpiPair *p)
 {
-  OpiPair *p = (OpiPair*)opi_h2w();
   opi_inc_rc(p->car = car);
   opi_inc_rc(p->cdr = cdr);
   opi_init_cell(p, opi_pair_type);
   p->header.meta = cdr->meta + 1;
+}
+
+static inline opi_t
+opi_cons(opi_t car, opi_t cdr)
+{
+  OpiPair *p = (OpiPair*)opi_h2w();
+  _opi_cons_at(car, cdr, p);
   return (opi_t)p;
 }
 
@@ -1546,11 +1552,6 @@ typedef enum OpiOpc_e {
   OPI_OPC_SET,
 #define OPI_SET_REG(insn) (insn)->reg[0]
 #define OPI_SET_ARG_VAL(insn) (insn)->reg[1]
-
-  OPI_OPC_AND,
-#define OPI_AND_REG_OUT(insn) (insn)->reg[0]
-#define OPI_AND_REG_LHS(insn) (insn)->reg[1]
-#define OPI_AND_REG_RHS(insn) (insn)->reg[2]
 } OpiOpc;
 
 typedef struct OpiFlatInsn_s {
