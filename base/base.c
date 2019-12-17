@@ -261,9 +261,11 @@ revappend(void)
 
   while (l->rc == 0 && l->type == opi_pair_type) {
     opi_t x = opi_car(l);
-    acc = opi_cons(x, acc);
     opi_t tmp = opi_cdr(l);
-    opi_h2w_free(l);
+
+    _opi_cons_at(x, acc, (OpiPair*)l);
+    acc = l;
+
     opi_dec_rc(tmp);
     opi_dec_rc(x);
     l = tmp;
