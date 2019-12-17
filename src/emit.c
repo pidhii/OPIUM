@@ -183,6 +183,20 @@ emit_match_onelevel_with_then(OpiIr *then, OpiIr *els, int expr,
   return phi;
 }
 
+// TODO: don't generate new handler each time
+static void
+handle_application_error(OpiIr *ir, OpiBytecode *bc, int err)
+{
+  if (ir->apply.loc) {
+    opi_t trace_fn = opi_fn(0, trace, 1);
+    opi_fn_set_data(trace_fn, opi_location_copy(ir->apply.loc), trace_delete);
+    int trace_var = opi_bytecode_const(bc, trace_fn);
+    opi_bytecode_ret(bc, opi_bytecode_apply_arr(bc, trace_var, 1, &err));
+  } else {
+    opi_bytecode_ret(bc, err);
+  }
+}
+
 static int
 emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
 {
@@ -204,52 +218,75 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
         args[i] = emit(ir->apply.args[i], bc, stack, FALSE);
       int fn = emit(ir->apply.fn, bc, stack, FALSE);
 
-      if (tc && opi_bytecode_value_is_global(bc, fn)) {
-        return opi_bytecode_apply_tailcall_arr(bc, fn, ir->apply.nargs, args);
-      } else {
+      // validate function
+      OpiValInfo *fninfo = bc->vinfo + fn;
+      OpiIf fnif;
+      int dotestfn = fninfo->c == NULL;
 
-        int ret = opi_bytecode_apply_arr(bc, fn, ir->apply.nargs, args);
+      // validate constant function
+      if (fninfo->c && fninfo->c->type != opi_fn_type) {
+        opi_error("not a function\n");
+        opi_error = 1;
+        abort();
+      }
+
+      // begin IF-statement for runtime validation
+      if (dotestfn) {
+        int test = opi_bytecode_testty(bc, fn, opi_fn_type);
+        opi_bytecode_if(bc, test, &fnif);
+      }
+      int ret;
+      if (tc && opi_bytecode_value_is_global(bc, fn)) {
+        // Tail Call
+        ret = opi_bytecode_apply_tailcall_arr(bc, fn, ir->apply.nargs, args);
+      } else {
+        ret = opi_bytecode_apply_arr(bc, fn, ir->apply.nargs, args);
         if (ir->apply.eflag) {
           // Implicit error-test:
-          // if
           int test = opi_bytecode_testty(bc, ret, opi_undefined_type);
           OpiIf iff;
           opi_bytecode_if(bc, test, &iff);
-          // then
-          if (ir->apply.loc) {
-            opi_t trace_fn = opi_fn("__trace", trace, 1);
-            opi_fn_set_data(trace_fn, opi_location_copy(ir->apply.loc), trace_delete);
-            int trace_var = opi_bytecode_const(bc, trace_fn);
-            opi_bytecode_ret(bc, opi_bytecode_apply_arr(bc, trace_var, 1, &ret));
-          } else {
-            opi_bytecode_ret(bc, ret);
-          }
-          // else
+          handle_application_error(ir, bc, ret);
           opi_bytecode_if_else(bc, &iff);
           opi_bytecode_if_end(bc, &iff);
         }
-        return ret;
       }
+      if (dotestfn) {
+        opi_bytecode_if_else(bc, &fnif);
+        int err = opi_bytecode_const(bc, opi_symbol("not-a-function"));
+        handle_application_error(ir, bc, err);
+        opi_bytecode_if_end(bc, &fnif);
+      }
+      return ret;
     }
 
     case OPI_IR_BINOP:
     {
       int lhs = emit(ir->binop.lhs, bc, stack, FALSE);
       int rhs = emit(ir->binop.rhs, bc, stack, FALSE);
-      int ret = opi_bytecode_binop(bc, ir->binop.opc, lhs, rhs);
-      if (ir->binop.opc != OPI_OPC_CONS) {
-        // Implicit error-test:
-        // if
-        int test = opi_bytecode_testty(bc, ret, opi_undefined_type);
-        OpiIf iff;
-        opi_bytecode_if(bc, test, &iff);
-        // then
-        opi_bytecode_ret(bc, ret);
-        // else
-        opi_bytecode_if_else(bc, &iff);
-        opi_bytecode_if_end(bc, &iff);
+      switch (ir->binop.opc) {
+        case OPI_OPC_CONS:
+          return opi_bytecode_binop(bc, ir->binop.opc, lhs, rhs);
+
+        default: /* numeric operators */
+        {
+          // Implicit error-test:
+          // if
+          int test_lhs = opi_bytecode_testty(bc, lhs, opi_num_type);
+          int test_rhs = opi_bytecode_testty(bc, rhs, opi_num_type);
+          int test = opi_bytecode_and(bc, test_lhs, test_rhs);
+          OpiIf iff;
+          opi_bytecode_if(bc, test, &iff);
+          // then
+          int ret = opi_bytecode_binop(bc, ir->binop.opc, lhs, rhs);
+          // else
+          opi_bytecode_if_else(bc, &iff);
+          int err = opi_bytecode_const(bc, opi_undefined(opi_symbol("type-error")));
+          opi_bytecode_ret(bc, err);
+          opi_bytecode_if_end(bc, &iff);
+          return ret;
+        }
       }
-      return ret;
     }
 
     case OPI_IR_FN:

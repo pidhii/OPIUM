@@ -127,7 +127,7 @@ opi_current_fn;
  * This parameter is implemented as global due to a bug in LibJIT I have faced
  * once. With this bug it is impossible to pass arguments during tail call.
  */
-OPI_EXTERN size_t
+OPI_EXTERN uint32_t
 opi_nargs;
 
 /*
@@ -691,14 +691,20 @@ opi_pair_init(void);
 void
 opi_pair_cleanup(void);
 
-static inline opi_t
-opi_cons(opi_t car, opi_t cdr)
+static inline void
+_opi_cons_at(opi_t car, opi_t cdr, OpiPair *p)
 {
-  OpiPair *p = (OpiPair*)opi_h2w();
   opi_inc_rc(p->car = car);
   opi_inc_rc(p->cdr = cdr);
   opi_init_cell(p, opi_pair_type);
   p->header.meta = cdr->meta + 1;
+}
+
+static inline opi_t
+opi_cons(opi_t car, opi_t cdr)
+{
+  OpiPair *p = (OpiPair*)opi_h2w();
+  _opi_cons_at(car, cdr, p);
   return (opi_t)p;
 }
 
@@ -783,7 +789,7 @@ struct OpiFn_s {
   opi_fn_handle_t handle;
   void *data;
   void (*dtor)(OpiFn *self);
-  intptr_t arity;
+  int32_t arity; // Note: JIT expects it to be 32-bit integer.
 };
 
 void

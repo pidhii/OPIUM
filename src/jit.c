@@ -53,6 +53,16 @@ const_ptr(jit_function_t func, void *ptr)
 }
 
 static inline jit_value_t
+const_int(jit_function_t func, jit_int x)
+{
+  jit_constant_t c = {
+    .type = jit_type_int,
+    .un.int_value = x,
+  };
+  return jit_value_create_constant(func, &c);
+}
+
+static inline jit_value_t
 load_num(jit_function_t func, jit_value_t x)
 {
   int offset = offsetof(OpiNum, val);
@@ -105,11 +115,130 @@ guard(jit_function_t func)
   jit_type_free(sig);
 }
 
+static inline jit_value_t
+test_arity(jit_function_t func, jit_value_t arity, int nargs)
+{
+  jit_value_t mna = const_int(func, -nargs);
+  jit_value_t ap1 = jit_insn_add(func, arity, const_int(func, 1));
+
+  jit_value_t alt0 = jit_insn_lt(func, arity, const_int(func, 0));
+  jit_value_t mnaleap1 = jit_insn_le(func, mna, ap1);
+  jit_value_t testlt0 = jit_insn_and(func, alt0, mnaleap1);
+
+  jit_value_t aeqna = jit_insn_eq(func, arity, const_int(func, nargs));
+
+  return jit_insn_or(func, testlt0, aeqna);
+}
+
+static inline jit_value_t
+load_arity(jit_function_t func, jit_value_t f)
+{
+  int offs = offsetof(OpiFn, arity);
+  return jit_insn_load_relative(func, f, offs, jit_type_int);
+}
+
+static inline jit_value_t
+apply_fn(jit_function_t func, jit_value_t f, int nargs, int istc)
+{
+  jit_value_t nargsptr = const_ptr(func, &opi_nargs);
+  jit_insn_store_relative(func, nargsptr, 0, const_int(func, nargs));
+  jit_value_t curfnptr = const_ptr(func, &opi_current_fn);
+  jit_insn_store_relative(func, curfnptr, 0, f);
+
+  int offs = offsetof(OpiFn, handle);
+  jit_value_t handle = jit_insn_load_relative(func, f, offs, jit_type_void_ptr);
+
+  jit_type_t sig =
+    jit_type_create_signature(jit_abi_cdecl, jit_type_void_ptr, 0, 0, 0);
+  int flags = istc ? JIT_CALL_TAIL : 0;
+  jit_value_t ret = jit_insn_call_indirect(func, handle, sig, 0, 0, flags);
+  jit_type_free(sig);
+  return ret;
+}
+
+static inline jit_value_t
+apply_const_fn(jit_function_t func, opi_t f, int nargs, int istc)
+{
+  jit_value_t nargsptr = const_ptr(func, &opi_nargs);
+  jit_insn_store_relative(func, nargsptr, 0, const_int(func, nargs));
+  jit_value_t curfnptr = const_ptr(func, &opi_current_fn);
+  jit_insn_store_relative(func, curfnptr, 0, const_ptr(func, f));
+
+  int offs = offsetof(OpiFn, handle);
+  opi_fn_handle_t handle = opi_fn_get_handle(f);
+
+  jit_type_t sig =
+    jit_type_create_signature(jit_abi_cdecl, jit_type_void_ptr, 0, 0, 0);
+  int flags = istc ? JIT_CALL_TAIL : 0;
+  jit_value_t ret = jit_insn_call_native(func, 0, handle, sig, 0, 0, flags);
+  jit_type_free(sig);
+  return ret;
+}
+
+static inline jit_value_t
+apply_partial(jit_function_t func, jit_value_t f, int nargs)
+{
+  jit_type_t p[] = { jit_type_void_ptr, jit_type_sys_int };
+  jit_type_t sig = jit_type_create_signature(jit_abi_cdecl, jit_type_void_ptr, p, 2, 0);
+  jit_value_t arg[] = { f, const_int(func, nargs) };
+  jit_value_t ret = jit_insn_call_native(func, 0, opi_apply_partial, sig, arg, 2, 0);
+  jit_type_free(sig);
+  return ret;
+}
+
+// TODO: optimize.
+static inline jit_value_t
+apply_const_partial(jit_function_t func, opi_t f, int nargs)
+{
+  jit_type_t p[] = { jit_type_void_ptr, jit_type_sys_int };
+  jit_type_t sig = jit_type_create_signature(jit_abi_cdecl, jit_type_void_ptr, p, 2, 0);
+  jit_value_t arg[] = { const_ptr(func, f), const_int(func, nargs) };
+  jit_value_t ret = jit_insn_call_native(func, 0, opi_apply_partial, sig, arg, 2, 0);
+  jit_type_free(sig);
+  return ret;
+}
+
+static inline jit_value_t
+apply_with_dispatch(jit_function_t func, jit_value_t f, int nargs, int istc)
+{
+  jit_label_t els = jit_label_undefined, cnt = jit_label_undefined;
+  jit_value_t arity = load_arity(func, f);
+  jit_value_t test = test_arity(func, arity, nargs);
+  if (istc) {
+    jit_insn_branch_if_not(func, test, &els);
+    jit_insn_return(func, apply_fn(func, f, nargs, TRUE));
+    jit_insn_label(func, &els);
+    jit_insn_return(func, apply_partial(func, f, nargs));
+    return const_ptr(func, opi_nil); // dummy value
+  } else {
+    jit_value_t ret = jit_value_create(func, jit_type_void_ptr);
+    jit_insn_branch_if_not(func, test, &els);
+    jit_insn_store(func, ret, apply_fn(func, f, nargs, FALSE));
+    jit_insn_branch(func, &cnt);
+    jit_insn_label(func, &els);
+    jit_insn_store(func, ret, apply_partial(func, f, nargs));
+    jit_insn_label(func, &cnt);
+    return ret;
+  }
+}
+
+static inline jit_value_t
+alloc_fn(jit_function_t func)
+{
+  jit_type_t sig = jit_type_create_signature(jit_abi_cdecl, jit_type_void_ptr, 0, 0, 0);
+  jit_value_t ret = jit_insn_call_native(func, 0, opi_fn_alloc, sig, 0, 0, 0);
+  jit_type_free(sig);
+  return ret;
+}
+
 static int
 jit(OpiJIT *jit, OpiBytecode *bc)
 {
   jit_value_t r[bc->nvals];
   OpiInsn *ip = bc->head;
+
+  jit_value_t sp = NULL;
+  int pushcnt = 0;
 
   cod_vec(Block) tail_blocks;
   cod_vec_init(tail_blocks);
@@ -120,7 +249,7 @@ jit(OpiJIT *jit, OpiBytecode *bc)
     switch (ip->opc) {
       case OPI_OPC_END:
         goto end;
-        
+
       case OPI_OPC_NOP:
         break;
 
@@ -195,7 +324,7 @@ jit(OpiJIT *jit, OpiBytecode *bc)
 
       case OPI_OPC_MOD:
       {
-        opi_error("unimplemented MOD\n");
+        opi_error("[JIT] unimplemented MOD\n");
         abort();
       }
 
@@ -309,12 +438,118 @@ jit(OpiJIT *jit, OpiBytecode *bc)
 
       case OPI_OPC_APPLY:
       {
-        jit_value_t fn = r[OPI_APPLY_REG_FN(ip)];
+        if (pushcnt) {
+          jit_value_t newsp = jit_insn_add_relative(func, sp, sizeof(opi_t) * pushcnt);
+          jit_value_t spptr = const_ptr(func, &opi_sp);
+          jit_insn_store_relative(func, spptr, 0, newsp);
+          pushcnt = 0;
+        }
+
+        int fnid = OPI_APPLY_REG_FN(ip);
         size_t nargs = OPI_APPLY_ARG_NARGS(ip);
-        r[OPI_APPLY_REG_OUT(ip)] = opi_apply(fn, nargs);
+        if (bc->vinfo[fnid].c) {
+          // handle constant function
+          opi_t fn = bc->vinfo[fnid].c;
+          if (opi_test_arity(opi_fn_get_arity(fn), nargs)) {
+            // instant application
+            jit_value_t ret = apply_const_fn(func, fn, nargs, FALSE);
+            r[OPI_APPLY_REG_OUT(ip)] = ret;
+          } else {
+            // partial application
+            jit_value_t ret = apply_const_partial(func, fn, nargs);
+            r[OPI_APPLY_REG_OUT(ip)] = ret;
+          }
+        } else {
+          // dynamic dispatch
+          jit_value_t fn = r[fnid];
+          jit_value_t ret = apply_with_dispatch(func, fn, nargs, FALSE);
+          r[OPI_APPLY_REG_OUT(ip)] = ret;
+        }
+
+        pushcnt = 0;
         break;
       }
 
+      case OPI_OPC_APPLYTC:
+      {
+        if (pushcnt) {
+          jit_value_t newsp = jit_insn_add_relative(func, sp, sizeof(opi_t) * pushcnt);
+          jit_value_t spptr = const_ptr(func, &opi_sp);
+          jit_insn_store_relative(func, spptr, 0, newsp);
+          pushcnt = 0;
+        }
+
+        int fnid = OPI_APPLY_REG_FN(ip);
+        size_t nargs = OPI_APPLY_ARG_NARGS(ip);
+        if (bc->vinfo[fnid].c) {
+          // handle constant function
+          opi_t fn = bc->vinfo[fnid].c;
+          if (opi_test_arity(opi_fn_get_arity(fn), nargs)) {
+            // instant application
+            jit_value_t ret = apply_const_fn(func, fn, nargs, TRUE);
+            r[OPI_APPLY_REG_OUT(ip)] = ret;
+          } else {
+            // partial application
+            jit_value_t ret = apply_const_partial(func, fn, nargs);
+            r[OPI_APPLY_REG_OUT(ip)] = ret;
+          }
+        } else {
+          // dynamic dispatch
+          jit_value_t fn = r[fnid];
+          jit_value_t ret = apply_with_dispatch(func, fn, nargs, TRUE);
+          r[OPI_APPLY_REG_OUT(ip)] = ret;
+        }
+
+        break;
+      }
+
+      case OPI_OPC_RET:
+        jit_insn_return(func, r[OPI_RET_REG_VAL(ip)]);
+        break;
+
+      case OPI_OPC_PUSH:
+      {
+        if (sp == NULL) {
+          jit_value_t spptr = const_ptr(func, &opi_sp);
+          sp = jit_insn_load_relative(func, spptr, 0, jit_type_void_ptr);
+        }
+        jit_value_t x = r[OPI_PUSH_REG_VAL(ip)];
+        jit_insn_store_relative(func, sp, sizeof(opi_t) * pushcnt, x);
+        pushcnt += 1;
+        break;
+      }
+
+      case OPI_OPC_POP:
+      {
+        size_t n = OPI_POP_ARG_N(ip);
+        if (n == 0)
+          break;
+
+        opi_assert(sp != NULL);
+        sp = jit_insn_add_relative(func, sp, -(int)(sizeof(opi_t) * n));
+        jit_insn_store_relative(func, const_ptr(func, &opi_sp), 0, sp);
+        break;
+      }
+
+      case OPI_OPC_LDCAP:
+        opi_error("[JIT] unexpected LDCAP\n");
+        abort();
+
+      case OPI_OPC_PARAM:
+      {
+        if (sp == NULL) {
+          jit_value_t spptr = const_ptr(func, &opi_sp);
+          sp = jit_insn_load_relative(func, spptr, 0, jit_type_void_ptr);
+        }
+        int offs = -(int)(sizeof(opi_t) * OPI_PARAM_ARG_OFFS(ip));
+        jit_value_t param = jit_insn_load_relative(func, sp, offs, jit_type_void_ptr);
+        r[OPI_PARAM_REG_OUT(ip)] = param;
+        break;
+      }
+
+      case OPI_OPC_ALCFN:
+        r[OPI_ALCFN_REG_OUT(ip)] = alloc_fn(func);
+        break;
 
     }
 

@@ -10,7 +10,7 @@
 
 opi_t opi_current_fn = NULL;
 opi_t *opi_sp = NULL;
-size_t opi_nargs;
+uint32_t opi_nargs;
 
 int opi_error = 0;
 opi_trace_t oip_trace;
