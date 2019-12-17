@@ -10,3 +10,6 @@
 [submodule "codeine"]
 	path = codeine
 	url = git@github.com:pidhii/codeine.git
+[submodule "libs"]
+	path = libs
+	url = https://github.com/pidhii/opium-libs.git

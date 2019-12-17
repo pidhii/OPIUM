@@ -98,13 +98,11 @@ install (
   TARGETS opium
   DESTINATION bin)
 
-set (LIBS_ROOT ${CMAKE_SOURCE_DIR}/libs)
-
 ################################################################################
 #                                    base
 #
 # build library
-add_library (opium_base_dl SHARED ${LIBS_ROOT}/base/base.c)
+add_library (opium_base_dl SHARED ${CMAKE_SOURCE_DIR}/base/base.c)
 set_target_properties (opium_base_dl
   PROPERTIES
     PREFIX ""
@@ -115,11 +113,11 @@ install (
   DESTINATION lib/opium/baselib)
 # install scripts
 install (
-  FILES ${LIBS_ROOT}/base/base.opi
+  FILES ${CMAKE_SOURCE_DIR}/base/base.opi
   DESTINATION lib/opium/baselib)
 # install symlink
 install (
-  FILES ${LIBS_ROOT}/base/base
+  FILES ${CMAKE_SOURCE_DIR}/base/base
   DESTINATION lib/opium)
 
 ################################################################################
