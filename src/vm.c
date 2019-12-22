@@ -27,21 +27,35 @@ opi_vm(OpiBytecode *bc)
         r[OPI_SET_REG(ip)] = (void*)OPI_SET_ARG_VAL(ip);
         break;
 
-#define NUM_BINOP(opc, op)                                                                          \
-      case opc:                                                                                     \
-      {                                                                                             \
-        opi_t lhs = r[OPI_BINOP_REG_LHS(ip)];                                                       \
-        opi_t rhs = r[OPI_BINOP_REG_RHS(ip)];                                                       \
-        if (opi_unlikely(lhs->type != opi_num_type || rhs->type != opi_num_type))                   \
-          r[OPI_BINOP_REG_OUT(ip)] = opi_undefined(opi_symbol("type-error"));                       \
-        else                                                                                        \
-          r[OPI_BINOP_REG_OUT(ip)] = opi_num_new(opi_num_get_value(lhs) op opi_num_get_value(rhs)); \
-        break;                                                                                      \
+#define NUM_BINOP(opc, op, trait)                                                          \
+      case opc:                                                                            \
+      {                                                                                    \
+        opi_t lhs = r[OPI_BINOP_REG_LHS(ip)];                                              \
+        opi_t rhs = r[OPI_BINOP_REG_RHS(ip)];                                              \
+        if (opi_likely(lhs->type == opi_num_type && rhs->type == opi_num_type)) {          \
+          long double x = opi_num_get_value(lhs);                                          \
+          long double y = opi_num_get_value(rhs);                                          \
+          r[OPI_BINOP_REG_OUT(ip)] = opi_num_new(x op y);                                  \
+        } else {                                                                           \
+          opi_t gen = opi_trait_get_impl(opi_trait_##trait, lhs->type, 0);                 \
+          if (gen) {                                                                       \
+            opi_push(rhs);                                                                 \
+            opi_push(lhs);                                                                 \
+            r[OPI_BINOP_REG_OUT(ip)] = opi_apply(gen, 2);                                  \
+          } else if ((gen = opi_trait_get_impl(opi_trait_##trait, rhs->type, 1))) {        \
+            opi_push(lhs);                                                                 \
+            opi_push(rhs);                                                                 \
+            r[OPI_BINOP_REG_OUT(ip)] = opi_apply(gen, 2);                                  \
+          } else {                                                                         \
+            r[OPI_BINOP_REG_OUT(ip)] = opi_undefined(opi_symbol("method-dispatch-error")); \
+          }                                                                                \
+        }                                                                                  \
+        break;                                                                             \
       }
-      NUM_BINOP(OPI_OPC_ADD, +)
-      NUM_BINOP(OPI_OPC_SUB, -)
-      NUM_BINOP(OPI_OPC_MUL, *)
-      NUM_BINOP(OPI_OPC_DIV, /)
+      NUM_BINOP(OPI_OPC_ADD, +, add)
+      NUM_BINOP(OPI_OPC_SUB, -, sub)
+      NUM_BINOP(OPI_OPC_MUL, *, mul)
+      NUM_BINOP(OPI_OPC_DIV, /, div)
       case OPI_OPC_MOD:
       {
         opi_t lhs = r[OPI_BINOP_REG_LHS(ip)];

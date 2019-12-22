@@ -71,7 +71,7 @@ let range from to =
 
 --let gt x y = x > y
 let take n = map cdr . zip (range 0 n)
-let drop n = map cdr . filter ((fn x -> x >= n) . car) . zip (range 0 999999999)
+let drop n = map cdr . filter (fn (x:_) -> x >= n) . zip (range 0 inf)
 
 let rec any? f l =
   unless let x:xs = l then false
@@ -82,6 +82,10 @@ let rec all? f l =
   unless let x:xs = l then true
   else f x && all? f xs
 let all? f = all? f . list
+
+let join sep l =
+  let start = [nil] in
+  foldl (\acc x -> if acc is start then x else acc ++ sep ++ x) start l
 
 --------------------------------------------------------------------------------
 -- I/O

@@ -410,7 +410,7 @@ read_(void)
 
   if (opi_nargs == 2) {
     OPI_ARG(size, opi_num_type)
-    size_t n = OPI_NUM(size);
+    size_t n = OPI_NUM(size)->val;
     char *buf = malloc(n + 1);
     size_t nrd = fread(buf, 1, n, fs);
     if (nrd == 0) {
@@ -599,7 +599,7 @@ Array_empty(void)
 {
   OPI_FN()
   OPI_ARG(reserve, opi_num_type)
-  OPI_RETURN(opi_array_new_empty(OPI_NUM(reserve)));
+  OPI_RETURN(opi_array_new_empty(OPI_NUM(reserve)->val));
 }
 
 static opi_t
@@ -608,7 +608,7 @@ Array_init(void)
   OPI_FN()
   OPI_ARG(size, opi_num_type);
   OPI_ARG(f, opi_fn_type);
-  size_t n = OPI_NUM(size);
+  size_t n = OPI_NUM(size)->val;
   opi_t arr = opi_array_new_empty(n);
   for (size_t i = 0; i < n; ++i ) {
     opi_push(opi_num_new(i));
@@ -652,7 +652,7 @@ Array_get(void)
     return opi_undefined(opi_symbol("type-error"));
   }
 
-  size_t i = OPI_NUM(nth);
+  size_t i = OPI_NUM(nth)->val;
   if (opi_unlikely(i >= opi_array_get_length(arr))) {
     opi_unref(arr);
     opi_unref(nth);

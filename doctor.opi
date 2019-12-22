@@ -1,6 +1,6 @@
 #!/bin/env opium
 
-{- Function: Show help and exit. -}
+{- Show help and exit. -}
 let helpAndExit out err =
   fprintf out "\
 usage: %{car Sys.argv} [OPTIONS] COMMAND
@@ -15,7 +15,7 @@ COMMANDS:
 ";
   exit err
 
-{- Function: Parse command-line arguments into table. -}
+{- Parse command-line arguments into table. -}
 let rec parseArgs args =
   unless let arg:args = args then nil
   else if arg eq "help" then helpAndExit stdout 0
@@ -43,23 +43,23 @@ let rec parseArgs args =
     exit 1;
   end
 
-{- Function: Get full path given a relative one. -}
+{- Get full path given a relative one. -}
 let realpath path = `test -e '%{path}' && realpath '%{path}'`
 
 
-{- Global: Parsed command-line options. -}
+{- Parsed command-line options. -}
 let cmdArgs = table . parseArgs $ cdr Sys.argv
 
-{- Global: Force mode. -}
+{- Force mode. -}
 let force? = cmdArgs#force or false
 
-{- Global: Path to opium libraries. -}
+{- Path to opium libraries. -}
 let installPath = cmdArgs#path or Sys.env#OPIUM_PATH or begin
   fprintf stderr "error: path to opium libraries not set\n";
   exit 1;
 end
 
-{- Function: Install package. -}
+{- Install package. -}
 let install () = begin
   let packageRoot = realpath cmdArgs#install or begin
       fprintf stderr "error: failed to resolve package directory\n";
@@ -119,7 +119,7 @@ let install () = begin
 end
 
 
-{- Function: Reomve package. -}
+{- Reomve package. -}
 let remove () = begin
   let packageName = cmdArgs#remove in
   system "rm -rfv %{installPath}/%{packageName}{,-dir}";

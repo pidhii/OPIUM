@@ -255,26 +255,51 @@ int
 opi_type_is_hashable(opi_type_t ty);
 
 void
-opi_type_set_fields(opi_type_t ty, size_t offs, char **fields, size_t n);
+opi_type_set_fields(opi_type_t type, size_t offs, char **fields, size_t n);
+
+typedef struct OpiRefVec_s {
+  cod_vec(opi_t) vec;
+} OpiRefVec;
+
+static inline void
+opi_ref_vec_init(OpiRefVec *vec)
+{ cod_vec_init(vec->vec); }
+
+static inline void
+opi_ref_vec_destroy(OpiRefVec *vec)
+{ cod_vec_destroy(vec->vec); }
+
+static inline void
+opi_ref_vec_push(OpiRefVec *vec, opi_t x)
+{ cod_vec_push(vec->vec, x); }
+
+static void
+OPI_GET_REFS_NONE(opi_type_t type, opi_t x, OpiRefVec *vec)
+{ }
+
+void
+opi_type_set_get_refs(opi_type_t type, void (*)(opi_type_t,opi_t,OpiRefVec*));
 
 const char*
-opi_type_get_name(opi_type_t ty);
+opi_type_get_name(opi_type_t type);
 
 int
-opi_type_get_field_idx(opi_type_t ty, const char *field);
+opi_type_get_field_idx(opi_type_t type, const char *field);
 
 size_t
-opi_type_get_field_offset(opi_type_t ty, size_t field_idx);
+opi_type_get_field_offset(opi_type_t type, size_t field_idx);
 
 size_t
-opi_type_get_nfields(opi_type_t ty);
+opi_type_get_nfields(opi_type_t type);
 
 char* const*
-opi_type_get_fields(opi_type_t ty);
+opi_type_get_fields(opi_type_t type);
 
 void*
-opi_type_get_data(opi_type_t ty);
+opi_type_get_data(opi_type_t type);
 
+void
+opi_get_refs(opi_t x, OpiRefVec *vec);
 
 /* ==========================================================================
  * Trait
@@ -357,6 +382,20 @@ opi_trait_get_impl(OpiTrait *trait, opi_type_t type, int metoffs);
 opi_t
 opi_trait_get_generic(OpiTrait *trait, int metoffs);
 
+OPI_EXTERN OpiTrait
+*opi_trait_add, *opi_trait_sub, *opi_trait_mul, *opi_trait_div;
+
+OPI_EXTERN opi_t
+opi_generic_add, opi_generic_radd,
+opi_generic_sub, opi_generic_rsub,
+opi_generic_mul, opi_generic_rmul,
+opi_generic_div, opi_generic_rdiv;
+
+void
+opi_traits_init(void);
+
+void
+opi_traits_cleanup(void);
 
 /* ==========================================================================
  * Cell
@@ -503,6 +542,8 @@ typedef struct OpiNum_s {
 
 OPI_EXTERN opi_type_t
 opi_num_type;
+
+#define OPI_NUM(x) ((OpiNum*)(x))
 
 void
 opi_num_init(void);
@@ -997,6 +1038,39 @@ opi_buffer_cleanup(void);
 
 OpiBuffer*
 opi_buffer_new(void *ptr, size_t size, void (*free)(void* ptr,void* c), void *c);
+
+/* ==========================================================================
+ * Ref
+ */
+OPI_EXTERN opi_type_t
+opi_ref_type;
+
+typedef struct OpiRef_s {
+  OpiHeader header;
+  opi_t val;
+  uint32_t gc_refs;
+  uint32_t gc_mark;
+} OpiRef;
+
+#define OPI_REF(x) ((OpiRef*)(x))
+
+void
+opi_ref_init(void);
+
+void
+opi_ref_cleanup(void);
+
+opi_t
+opi_ref_new(opi_t x);
+
+static inline void
+opi_ref_set(opi_t r, opi_t x)
+{
+  OpiRef *ref = OPI_REF(r);
+  opi_inc_rc(x);
+  opi_unref(ref->val);
+  ref->val = x;
+}
 
 /* ==========================================================================
  * AST
@@ -1950,13 +2024,13 @@ opi_drop_args(int nargs)
   {                         \
     OPI_FN()                \
     body                    \
+    opi_return(opi_nil);    \
   }
 
 #define opi_arg OPI_ARG
 #define opi_throw OPI_THROW
 #define opi_return OPI_RETURN
 
-#define OPI_NUM(x) opi_num_get_value(x)
 #define OPI_STRLEN(x) opi_string_get_length(x)
 #define OPI_SYM(x) opi_symbol_get_string(x)
 #define OPI_SVEC(x) opi_svector_get_data(x)

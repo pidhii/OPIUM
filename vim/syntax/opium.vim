@@ -77,8 +77,9 @@ syn keyword Function foreach
 syn keyword Function foldl foldr
 syn keyword Function unfold
 syn keyword Function revfilter filter
+syn keyword Function drop take
 syn keyword Function zero? positive? negative? even? odd?
-syn keyword Function match split
+syn keyword Function match split join
 
 
 syn keyword opiKeyword let rec and or in return
@@ -116,6 +117,8 @@ syn match opiCommentLabel /[A-Z]\w*:/ contained
 
 " Integer with - + or nothing in front
 syn match Number '\<\d\+'
+syn keyword Number nan
+syn match Number /[\-+]\?inf\>/
 
 " Floating point number with decimal no E or e
 syn match Number '\<\d\+\.\d*'

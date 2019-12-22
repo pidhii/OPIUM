@@ -82,6 +82,8 @@ opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
   opi_builder_def_type(bldr, "Array"    , opi_array_type    ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Table"    , opi_table_type    ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Buffer"   , opi_buffer_type   ); cod_vec_pop(ctx->types);
+
+  opi_builder_def_trait(bldr, "Add", opi_trait_add); cod_vec_pop(ctx->traits);
 }
 
 void

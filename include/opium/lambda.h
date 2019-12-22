@@ -3,22 +3,22 @@
 
 #include "opium/opium.h"
 
-typedef struct OpiRef_s {
+typedef struct OpiRecRef_s {
   opi_t val;
   void (*destroy)(void*);
   void (*free)(void*);
-} OpiRef;
+} OpiRecRef;
 
 typedef struct OpiRecScope_s {
   size_t rc;
   size_t nrefs;
-  OpiRef refs[];
+  OpiRecRef refs[];
 } OpiRecScope;
 
 static inline OpiRecScope*
 opi_rec_scope(size_t nrefs)
 {
-  OpiRecScope *scp = malloc(sizeof(OpiRecScope) + sizeof(OpiRef) * nrefs);
+  OpiRecScope *scp = malloc(sizeof(OpiRecScope) + sizeof(OpiRecRef) * nrefs);
   scp->nrefs = nrefs;
   return scp;
 }
@@ -35,7 +35,7 @@ static inline void
 opi_rec_scope_set(OpiRecScope *scp, size_t iref, opi_t val,
     void (*destroy)(void*), void (*free)(void*))
 {
-  OpiRef *ref = scp->refs + iref;
+  OpiRecRef *ref = scp->refs + iref;
   ref->val = val;
   ref->destroy = destroy;
   ref->free = free;
