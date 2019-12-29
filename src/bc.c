@@ -565,6 +565,16 @@ opi_insn_set(int reg, int val)
   return insn;
 }
 
+OpiInsn*
+opi_insn_setvar(int var, int val)
+{
+  OpiInsn *insn = malloc(sizeof(OpiInsn));
+  insn->opc = OPI_OPC_SETVAR;
+  OPI_SETVAR_REG_REF(insn) = var;
+  OPI_SETVAR_REG_VAL(insn) = val;
+  return insn;
+}
+
 int
 opi_insn_is_using(OpiInsn *insn, int vid)
 {
@@ -588,6 +598,10 @@ opi_insn_is_using(OpiInsn *insn, int vid)
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
       return (int)OPI_BINOP_REG_LHS(insn) == vid ||
              (int)OPI_BINOP_REG_RHS(insn) == vid;
+
+    case OPI_OPC_SETVAR:
+      return (int)OPI_SETVAR_REG_REF(insn) == vid ||
+             (int)OPI_SETVAR_REG_VAL(insn) == vid;
 
     // ignore manual RC-management
     case OPI_OPC_INCRC:
@@ -669,6 +683,7 @@ opi_insn_is_killing(OpiInsn *insn, int vid)
     case OPI_OPC_BINOP_START ... OPI_OPC_BINOP_END:
     case OPI_OPC_VAR:
     case OPI_OPC_SET:
+    case OPI_OPC_SETVAR:
       return FALSE;
 
     // ignore manual RC-management
@@ -720,6 +735,7 @@ opi_insn_is_creating(OpiInsn *insn, int vid)
     case OPI_OPC_TEST:
     case OPI_OPC_GUARD:
     case OPI_OPC_VAR:
+    case OPI_OPC_SETVAR:
     case OPI_OPC_SET:
       return FALSE;
 
@@ -998,4 +1014,14 @@ opi_bytecode_var(OpiBytecode *bc)
 void
 opi_bytecode_set(OpiBytecode *bc, int reg, int val)
 { opi_bytecode_write(bc, opi_insn_set(reg, val)); }
+
+void
+opi_bytecode_setvar(OpiBytecode *bc, int ref, int val)
+{
+  if (bc->vinfo[ref].type == OPI_VAL_GLOBAL)
+    // force LOCAL-semantics
+    bc->vinfo[ref].type = OPI_VAL_LOCAL;
+  else opi_assert(bc->vinfo[ref].type == OPI_VAL_LOCAL);
+  opi_bytecode_write(bc, opi_insn_setvar(ref, val));
+}
 

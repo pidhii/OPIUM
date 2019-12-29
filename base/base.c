@@ -1172,6 +1172,91 @@ Buffer_toStr(void)
   OPI_RETURN(opi_string_new_with_len(buf->ptr, buf->size));
 }
 
+static
+OPI_DEF(Buffer_malloc,
+  opi_arg(size, opi_num_type)
+  size_t sz = OPI_NUM(size)->val;
+  void *ptr = malloc(sz);
+  if (ptr == NULL)
+    opi_throw("out-of-memory");
+  void delete(void *ptr, void *c) { free(ptr); }
+  opi_return(OPI(opi_buffer_new(ptr, sz, delete, NULL)));
+)
+
+static
+OPI_DEF(Buffer_calloc,
+  opi_arg(nelts, opi_num_type)
+  opi_arg(size, opi_num_type)
+  size_t sz = OPI_NUM(size)->val;
+  size_t n = OPI_NUM(nelts)->val;
+  void *ptr = calloc(n, sz);
+  if (ptr == NULL)
+    opi_throw("out-of-memory");
+  void delete(void *ptr, void *c) { free(ptr); }
+  opi_return(OPI(opi_buffer_new(ptr, sz * n, delete, NULL)));
+)
+
+#define BUFFER_GET(name, type)                          \
+  static                                                \
+  OPI_DEF(name,                                         \
+    opi_arg(buf, opi_buffer_type)                       \
+    opi_arg(at, opi_num_type)                           \
+    OpiBuffer *b = OPI_BUFFER(buf);                     \
+    size_t i = OPI_NUM(at)->val;                        \
+    if (i * sizeof(type) + sizeof(type) - 1 >= b->size) \
+      opi_throw("out-of-range");                        \
+    opi_return(opi_num_new(((type*)b->ptr)[i]));        \
+)
+BUFFER_GET(Buffer_getS8, int8_t)
+BUFFER_GET(Buffer_getU8, uint8_t)
+BUFFER_GET(Buffer_getS16, int16_t)
+BUFFER_GET(Buffer_getU16, uint16_t)
+BUFFER_GET(Buffer_getS32, int32_t)
+BUFFER_GET(Buffer_getU32, uint32_t)
+BUFFER_GET(Buffer_getS64, int64_t)
+BUFFER_GET(Buffer_getU64, uint64_t)
+BUFFER_GET(Buffer_getFloat, float)
+BUFFER_GET(Buffer_getDouble, double)
+
+#define BUFFER_OFSEQ(name, ty)                                                \
+  static                                                                      \
+  OPI_DEF(name,                                                               \
+    opi_arg(seq, opi_seq_type)                                                \
+    cod_vec(ty) vec;                                                          \
+    cod_vec_init(vec);                                                        \
+    opi_t x;                                                                  \
+    opi_t s = opi_seq_copy(seq);                                              \
+    opi_unref(seq);                                                           \
+    while ((x = opi_seq_next(s))) {                                           \
+      if (opi_unlikely(x->type == opi_undefined_type)) {                      \
+        cod_vec_destroy(vec);                                                 \
+        opi_drop(s);                                                          \
+        return x;                                                             \
+      }                                                                       \
+      cod_vec_push(vec, OPI_NUM(x)->val);                                     \
+      opi_drop(x);                                                            \
+    }                                                                         \
+    opi_drop(s);                                                              \
+    void delete(void *ptr, void *c) { free(ptr); }                            \
+    return OPI(opi_buffer_new(vec.data, vec.len * sizeof(ty), delete, NULL)); \
+  )
+BUFFER_OFSEQ(Buffer_ofS8Seq, int8_t)
+BUFFER_OFSEQ(Buffer_ofU8Seq, uint8_t)
+BUFFER_OFSEQ(Buffer_ofS16Seq, int16_t)
+BUFFER_OFSEQ(Buffer_ofU16Seq, uint16_t)
+BUFFER_OFSEQ(Buffer_ofS32Seq, int32_t)
+BUFFER_OFSEQ(Buffer_ofU32Seq, uint32_t)
+BUFFER_OFSEQ(Buffer_ofS64Seq, int64_t)
+BUFFER_OFSEQ(Buffer_ofU64Seq, uint64_t)
+BUFFER_OFSEQ(Buffer_ofFloatSeq, float)
+BUFFER_OFSEQ(Buffer_ofDoubleSeq, double)
+
+static
+OPI_DEF(Buffer_size,
+  opi_arg(buf, opi_buffer_type)
+  opi_return(opi_num_new(OPI_BUFFER(buf)->size));
+)
+
 int
 opium_library(OpiBuilder *bldr)
 {
@@ -1201,6 +1286,31 @@ opium_library(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "Array.toRevList", opi_fn(0, Array_toList, 1));
   opi_builder_def_const(bldr, "Array.ofSeq", opi_fn(0, Array_ofSeq, 1));
   opi_builder_def_const(bldr, "Array.toSeq", opi_fn(0, Array_toSeq, 1));
+
+  opi_builder_def_const(bldr, "Buffer.malloc", opi_fn(0, Buffer_malloc, 1));
+  opi_builder_def_const(bldr, "Buffer.calloc", opi_fn(0, Buffer_calloc, 2));
+  opi_builder_def_const(bldr, "Buffer.size", opi_fn(0, Buffer_size, 1));
+  opi_builder_def_const(bldr, "Buffer.toStr", opi_fn(0, Buffer_toStr, 1));
+  opi_builder_def_const(bldr, "Buffer.getS8", opi_fn(0, Buffer_getS8, 2));
+  opi_builder_def_const(bldr, "Buffer.getU8", opi_fn(0, Buffer_getU8, 2));
+  opi_builder_def_const(bldr, "Buffer.getS16", opi_fn(0, Buffer_getS16, 2));
+  opi_builder_def_const(bldr, "Buffer.getU16", opi_fn(0, Buffer_getU16, 2));
+  opi_builder_def_const(bldr, "Buffer.getS32", opi_fn(0, Buffer_getS32, 2));
+  opi_builder_def_const(bldr, "Buffer.getU32", opi_fn(0, Buffer_getU32, 2));
+  opi_builder_def_const(bldr, "Buffer.getS64", opi_fn(0, Buffer_getS64, 2));
+  opi_builder_def_const(bldr, "Buffer.getU64", opi_fn(0, Buffer_getU64, 2));
+  opi_builder_def_const(bldr, "Buffer.getFloat", opi_fn(0, Buffer_getFloat, 2));
+  opi_builder_def_const(bldr, "Buffer.getDouble", opi_fn(0, Buffer_getDouble, 2));
+  opi_builder_def_const(bldr, "Buffer.ofS8Seq", opi_fn(0, Buffer_ofS8Seq, 1));
+  opi_builder_def_const(bldr, "Buffer.ofU8Seq", opi_fn(0, Buffer_ofU8Seq, 1));
+  opi_builder_def_const(bldr, "Buffer.ofS16Seq", opi_fn(0, Buffer_ofS16Seq, 1));
+  opi_builder_def_const(bldr, "Buffer.ofU16Seq", opi_fn(0, Buffer_ofU16Seq, 1));
+  opi_builder_def_const(bldr, "Buffer.ofS32Seq", opi_fn(0, Buffer_ofS32Seq, 1));
+  opi_builder_def_const(bldr, "Buffer.ofU32Seq", opi_fn(0, Buffer_ofU32Seq, 1));
+  opi_builder_def_const(bldr, "Buffer.ofS64Seq", opi_fn(0, Buffer_ofS64Seq, 1));
+  opi_builder_def_const(bldr, "Buffer.ofU64Seq", opi_fn(0, Buffer_ofU64Seq, 1));
+  opi_builder_def_const(bldr, "Buffer.ofFloatSeq", opi_fn(0, Buffer_ofFloatSeq, 1));
+  opi_builder_def_const(bldr, "Buffer.ofDoubleSeq", opi_fn(0, Buffer_ofDoubleSeq, 1));
 
   opi_builder_def_const(bldr, "strlen", opi_fn("strlen", strlen_, 1));
   opi_builder_def_const(bldr, "substr", opi_fn("substr", substr ,-3));

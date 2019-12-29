@@ -1,13 +1,32 @@
 load "base.so"
 
+let (+) x y = x + y
+let (-) x y = x - y
+let (*) x y = x * y
+let (/) x y = x / y
+let (fmod) x y = x fmod y
+let (:) x y = x : y
+let (is not) x y = x is not y
+let (not eq) x y = x not eq y
+let (not equal) x y = x not equal y
+let (||) x y = x || y
+let (&&) x y = x && y
+let (==) x y = x == y
+let (/=) x y = x /= y
+let (<) x y = x < y
+let (>) x y = x > y
+let (<=) x y = x <= y
+let (>=) x y = x >= y
+
 let const x = \_ -> x
 let flip f = \x y -> f y x
+let uncurry f (p1:p2) = f p1 p2
 
 let zero? x = x == 0
 let positive? x = x > 0
 let negative? x = x < 0
-let even? x = x % 2 == 0
-let odd? x = x % 2 /= 0
+let even? x = x fmod 2 == 0
+let odd? x = x fmod 2 /= 0
 
 let trim = ltrim . rtrim
 
@@ -101,7 +120,7 @@ let write x = printf "%w" x
 let display x = printf "%d" x
 
 let read = __base_read
-let readline = __base_readline
+let readline ..x = __base_readline (car x or stdin)
 let readlines file =
   assert file is File;
   unfold (fn s ->

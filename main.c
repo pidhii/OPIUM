@@ -253,6 +253,8 @@ main(int argc, char **argv, char **env)
           if (strcmp(errorptr, "syntax error, unexpected $end") == 0) {
             // must read more lines
             free(errorptr);
+            cod_vec_push(input_buf, ' ');
+            cnt--;
           } else {
             // real parse error
             opi_error("%s\n", errorptr);

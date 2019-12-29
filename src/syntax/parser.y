@@ -82,6 +82,10 @@ int opi_start_token;
   struct binds *binds;
   struct cod_strvec *strvec;
   struct cod_ptrvec *ptrvec;
+  struct {
+    struct cod_ptrvec *ptrvec;
+    int iref;
+  } args;
 
   OpiAstPattern *pattern;
   struct {
@@ -179,7 +183,7 @@ int opi_start_token;
 
 %type<binds> binds recbinds
 %type<pattvec> param
-%type<ptrvec> arg arg_aux
+%type<args> arg arg_aux
 %type<ast> block block_stmnt block_stmnt_only block_expr
 %type<ptrvec> block_aux
 %type<ast> fn_aux vafn_aux anyfn_aux
@@ -197,6 +201,7 @@ int opi_start_token;
 %type<table> table_aux cond_table_aux
 %type<table> ctor_aux
 
+%right LARROW
 %right OR
 %right '$'
 %right SCOR
@@ -205,7 +210,7 @@ int opi_start_token;
 %nonassoc<str> ISOF
 %right ':' PLUSPLUS
 %right '+' '-'
-%left '*' '/' '%'
+%left '*' '/' FMOD MOD
 %right '.'
 %right NOT
 %left TABLEREF
@@ -261,16 +266,18 @@ Atom
   }
   | '(' Expr ')' { $$ = $2; }
   | '[' arg_aux ']' {
-    $$ = opi_ast_apply(opi_ast_var("List"), (OpiAst**)$2->data, $2->size);
+    opi_assert($2.iref < 0);
+    $$ = opi_ast_apply(opi_ast_var("List"), (OpiAst**)$2.ptrvec->data, $2.ptrvec->size);
     $$->apply.loc = location(&@$);
-    cod_ptrvec_destroy($2, NULL);
-    free($2);
+    cod_ptrvec_destroy($2.ptrvec, NULL);
+    free($2.ptrvec);
   }
   | '[' '|' arg_aux '|' ']' {
-    $$ = opi_ast_apply(opi_ast_var("Array"), (OpiAst**)$3->data, $3->size);
+    opi_assert($3.iref < 0);
+    $$ = opi_ast_apply(opi_ast_var("Array"), (OpiAst**)$3.ptrvec->data, $3.ptrvec->size);
     $$->apply.loc = location(&@$);
-    cod_ptrvec_destroy($3, NULL);
-    free($3);
+    cod_ptrvec_destroy($3.ptrvec, NULL);
+    free($3.ptrvec);
   }
   | '[' ']' { $$ = opi_ast_const(opi_nil); }
   | Atom TABLEREF SYMBOL {
@@ -318,17 +325,36 @@ Type
 Form
   : Atom
   | Atom arg {
-    $$ = opi_ast_apply($1, (OpiAst**)$2->data, $2->size);
+    $$ = opi_ast_apply($1, (OpiAst**)$2.ptrvec->data, $2.ptrvec->size);
     $$->apply.loc = location(&@$);
-    cod_ptrvec_destroy($2, NULL);
-    free($2);
+    if ($2.iref >= 0) {
+      char retnam[] = "$ ret";
+      char sttnam[] = "$ stt";
+      char *fields[] = { "car", "cdr" };
+      OpiAstPattern *pats[] = {
+        opi_ast_pattern_new_ident(retnam),
+        opi_ast_pattern_new_ident(sttnam)
+      };
+      OpiAstPattern *pat = opi_ast_pattern_new_unpack("Cons", pats, fields, 2);
+      OpiAst *ref = $2.ptrvec->data[$2.iref];
+      opi_assert(ref->tag == OPI_AST_VAR);
+      OpiAst *body[] = {
+        opi_ast_match(pat, $$, NULL, NULL),
+        opi_ast_setref(ref->var, opi_ast_var(sttnam)),
+        opi_ast_var("$ ret"),
+      };
+      $$ = opi_ast_block(body, 3);
+    }
+    cod_ptrvec_destroy($2.ptrvec, NULL);
+    free($2.ptrvec);
   }
   | Type arg {
-    $$ = opi_ast_apply(opi_ast_var($1), (OpiAst**)$2->data, $2->size);
+    opi_assert($2.iref < 0);
+    $$ = opi_ast_apply(opi_ast_var($1), (OpiAst**)$2.ptrvec->data, $2.ptrvec->size);
     $$->apply.loc = location(&@$);
-    cod_ptrvec_destroy($2, NULL);
+    cod_ptrvec_destroy($2.ptrvec, NULL);
     free($1);
-    free($2);
+    free($2.ptrvec);
   }
 ;
 
@@ -442,7 +468,7 @@ Expr
   | Expr '-' Expr { $$ = opi_ast_binop(OPI_OPC_SUB, $1, $3); }
   | Expr '*' Expr { $$ = opi_ast_binop(OPI_OPC_MUL, $1, $3); }
   | Expr '/' Expr { $$ = opi_ast_binop(OPI_OPC_DIV, $1, $3); }
-  | Expr '%' Expr { $$ = opi_ast_binop(OPI_OPC_MOD, $1, $3); }
+  | Expr FMOD Expr { $$ = opi_ast_binop(OPI_OPC_MOD, $1, $3); }
   | Expr ':' Expr { $$ = opi_ast_binop(OPI_OPC_CONS, $1, $3); }
   | Expr '.' Expr {
     OpiAst *p[] = { $1, $3 };
@@ -466,6 +492,10 @@ Expr
   | Expr OR Expr { $$ = opi_ast_eor($1, $3, " "); }
   | Expr OR SYMBOL RARROW Expr %prec THEN { $$ = opi_ast_eor($1, $5, $3); free($3); }
   | table
+  | Symbol LARROW Expr {
+    $$ = opi_ast_setref($1, $3);
+    free($1);
+  }
 ;
 
 if
@@ -673,27 +703,44 @@ param
 
 arg
   : '(' ')' {
-    $$ = malloc(sizeof(struct cod_ptrvec));
-    cod_ptrvec_init($$);
+    $$.ptrvec = malloc(sizeof(struct cod_ptrvec));
+    $$.iref = -1;
+    cod_ptrvec_init($$.ptrvec);
   }
   | arg_aux
   | FN anyfn_aux {
-    $$ = malloc(sizeof(struct cod_ptrvec));
-    cod_ptrvec_init($$);
-    cod_ptrvec_push($$, $2, NULL);
+    $$.ptrvec = malloc(sizeof(struct cod_ptrvec));
+    $$.iref = -1;
+    cod_ptrvec_init($$.ptrvec);
+    cod_ptrvec_push($$.ptrvec, $2, NULL);
   }
-  | arg_aux FN anyfn_aux { $$ = $1; cod_ptrvec_push($$, $3, NULL); }
+  | arg_aux FN anyfn_aux { $$ = $1; cod_ptrvec_push($$.ptrvec, $3, NULL); }
 ;
 
 arg_aux
   : Atom {
-    $$ = malloc(sizeof(struct cod_ptrvec));
-    cod_ptrvec_init($$);
-    cod_ptrvec_push($$, $1, NULL);
+    $$.ptrvec = malloc(sizeof(struct cod_ptrvec));
+    $$.iref = -1;
+    cod_ptrvec_init($$.ptrvec);
+    cod_ptrvec_push($$.ptrvec, $1, NULL);
+  }
+  | '&' Symbol {
+    $$.ptrvec = malloc(sizeof(struct cod_ptrvec));
+    $$.iref = 0;
+    cod_ptrvec_init($$.ptrvec);
+    cod_ptrvec_push($$.ptrvec, opi_ast_var($2), NULL);
+    free($2);
   }
   | arg_aux Atom {
     $$ = $1;
-    cod_ptrvec_push($$, $2, NULL);
+    cod_ptrvec_push($$.ptrvec, $2, NULL);
+  }
+  | arg_aux '&' Symbol {
+    $$ = $1;
+    opi_assert($$.iref < 0);
+    $$.iref = $$.ptrvec->size;
+    cod_ptrvec_push($$.ptrvec, opi_ast_var($3), NULL);
+    free($3);
   }
 ;
 

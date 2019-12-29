@@ -8,9 +8,10 @@ find_package (BISON REQUIRED)
 find_package (FLEX REQUIRED)
 
 
+set (CMAKE_C_STANDARD 99)
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -Wextra -Wno-unused -Wno-error=cpp -Wno-strict-aliasing -rdynamic")
 set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Og -ggdb -DOPI_DEBUG_MODE")
-set (CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Ofast")
+set (CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Ofast -flive-patching=inline-clone")
 
 set (CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
 set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")

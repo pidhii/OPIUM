@@ -58,7 +58,7 @@ cod_vec(int) g_braces;
 
 IDENT [a-z_][0-9a-zA-Z_]*['?]?
 TYPE_IDENT [A-Z][0-9a-zA-Z_]*
-OP_CHAR "="|"+"|"-"|"*"|"/"|"%"|\.|">"|"<"|":"|"\\"|"|"|"$"|"!"|"@"
+OP_CHAR "="|"+"|"-"|"*"|"/"|"%"|\.|">"|"<"|":"|"\\"|"|"|"&"|"$"|"!"|"@"
 
 %%
 
@@ -220,13 +220,6 @@ is { return IS; }
 eq { return EQ; }
 equal { return EQUAL; }
 is[ \n\t]+not { return ISNOT; }
-  /*is\s+{TYPE_IDENT} {*/
-    /*char *p = yytext + 2;*/
-    /*while (isspace(*p++));*/
-    /*yylval->str = strdup(p);*/
-    /*opi_debug("is %s\n", p);*/
-    /*return ISOF;*/
-  /*}*/
 
 "{" {
   cod_vec_push(g_braces, BRACE_CODE);
@@ -309,15 +302,18 @@ is[ \n\t]+not { return ISNOT; }
 "@"|"!" |
 "$"|":" { return yytext[0]; }
 "->" { return RARROW; }
-"="|"+"|"-"|"*"|"/"|"%"|\. { return yytext[0]; }
+"<-" { return LARROW; }
+"="|"+"|"-"|"*"|"/"|"%"|"&"|\. { return yytext[0]; }
 "["|"]"|"("|")"|","|"|" { return yytext[0]; }
 "\\" { return FN; }
+mod { return MOD; }
+fmod { return FMOD; }
 
 "'"[^ \t\n(){}\[\]'\";,:]+ { yylval->opi = opi_symbol(yytext+1); return CONST; }
 {IDENT} { yylval->str = strdup(yytext); return SYMBOL; }
 {TYPE_IDENT} { yylval->str = strdup(yytext); return TYPE; }
 
-"("{OP_CHAR}+")" {
+"("({OP_CHAR}+|is|eq|equal|not|(is[ \n\t]+not)|(not[ \n\t]+(eq|equal))|mod|fmod)")" {
   char *start = yytext + 1;
   int len = yyleng - 2;
   char buf[len + 1];

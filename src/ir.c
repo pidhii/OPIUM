@@ -1230,6 +1230,19 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       opi_error = 1;
       return build_error();
     }
+
+    case OPI_AST_SETREF:
+    {
+      // get offset of the variable
+      OpiAst *astvar = opi_ast_var(ast->setref.var);
+      OpiIr *irvar = opi_builder_build_ir(bldr, astvar);
+      opi_assert(irvar->tag == OPI_IR_VAR);
+      int offs = irvar->var;
+      opi_ast_delete(astvar);
+      opi_ir_delete(irvar);
+
+      return opi_ir_setref(offs, opi_builder_build_ir(bldr, ast->setref.val));
+    }
   }
 
   abort();
@@ -1396,6 +1409,10 @@ opi_ir_delete(OpiIr *node)
       opi_ir_delete(node->binop.lhs);
       opi_ir_delete(node->binop.rhs);
       break;
+
+    case OPI_IR_SETREF:
+      opi_ir_delete(node->setref.val);
+      break;
   }
 
   free(node);
@@ -1559,3 +1576,12 @@ opi_ir_binop(int opc, OpiIr *lhs, OpiIr *rhs)
   return node;
 }
 
+OpiIr*
+opi_ir_setref(int var, OpiIr *val)
+{
+  OpiIr *node = malloc(sizeof(OpiIr));
+  node->tag = OPI_IR_SETREF;
+  node->setref.var = var;
+  node->setref.val = val;
+  return node;
+}

@@ -60,7 +60,6 @@ opi_init(int flags)
   opi_array_init();
   opi_seq_init();
   opi_buffer_init();
-  opi_ref_init();
 
   opi_traits_init();
 }
@@ -85,7 +84,6 @@ opi_cleanup(void)
   opi_array_cleanup();
   opi_seq_cleanup();
   opi_buffer_cleanup();
-  opi_ref_cleanup();
 
   opi_lexer_cleanup();
   opi_allocators_cleanup();
@@ -110,7 +108,6 @@ struct OpiType_s {
   int (*eq)(opi_type_t ty, opi_t x, opi_t y);
   int (*equal)(opi_type_t ty, opi_t x, opi_t y);
   size_t (*hash)(opi_type_t ty, opi_t x);
-  void (*get_refs)(opi_type_t ty, opi_t x, OpiRefVec *vec);
 
   size_t fields_offset;
   size_t nfields;
@@ -142,13 +139,6 @@ default_equal(opi_type_t ty, opi_t x, opi_t y)
 { return ty->eq(ty, x, y); }
 
 static void
-get_refs_default(opi_type_t ty, opi_t x, OpiRefVec *vec)
-{
-  opi_error("undefined handle for OpiType.get_refs of type %s\n", ty->name);
-  abort();
-}
-
-static void
 type_init(OpiType *ty, const char *name)
 {
   static OpiType type_type = {
@@ -161,7 +151,6 @@ type_init(OpiType *ty, const char *name)
     .eq = default_eq,
     .equal = default_equal,
     .hash = NULL,
-    .get_refs = get_refs_default,
     .fields = NULL,
   };
 
@@ -178,7 +167,6 @@ type_init(OpiType *ty, const char *name)
   ty->hash = NULL;
   ty->fields = NULL;
   ty->nfields = 0;
-  ty->get_refs = get_refs_default;
 }
 
 opi_type_t
@@ -253,10 +241,6 @@ opi_type_set_fields(opi_type_t ty, size_t offs, char **fields, size_t n)
     ty->fields[i] = strdup(fields[i]);
 }
 
-void
-opi_type_set_get_refs(opi_type_t type, void (*fn)(opi_type_t,opi_t,OpiRefVec*))
-{ type->get_refs = fn; }
-
 int
 opi_type_get_field_idx(opi_type_t ty, const char *field)
 {
@@ -311,10 +295,6 @@ opi_delete(opi_t x)
 size_t
 opi_hashof(opi_t x)
 { return x->type->hash(x->type, x); }
-
-void
-opi_get_refs(opi_t x, OpiRefVec *vec)
-{ x->type->get_refs(x->type, x, vec); }
 
 /******************************************************************************/
 typedef struct Impl_s {
@@ -714,7 +694,6 @@ opi_num_init(void)
   opi_type_set_delete_cell(opi_num_type, num_delete);
   opi_type_set_eq(opi_num_type, num_eq);
   opi_type_set_hash(opi_num_type, num_hash);
-  opi_type_set_get_refs(opi_num_type, OPI_GET_REFS_NONE);
 }
 
 void
@@ -1136,13 +1115,6 @@ pair_delete(opi_type_t ty, opi_t x) {
   opi_drop(x);
 }
 
-static void
-pair_get_refs(opi_type_t type, opi_t x, OpiRefVec *vec)
-{
-  opi_ref_vec_push(vec, opi_car(x));
-  opi_ref_vec_push(vec, opi_cdr(x));
-}
-
 void
 opi_pair_init(void)
 {
@@ -1152,7 +1124,6 @@ opi_pair_init(void)
   opi_type_set_delete_cell(opi_pair_type, pair_delete);
   char *fields[] = { "car", "cdr" };
   opi_type_set_fields(opi_pair_type, offsetof(OpiPair, car), fields, 2);
-  opi_type_set_get_refs(opi_pair_type, pair_get_refs);
 }
 
 void
@@ -1736,48 +1707,6 @@ opi_buffer_new(void *ptr, size_t size, void (*free)(void* ptr,void* c), void *c)
   buf->c = c;
   opi_init_cell(buf, opi_buffer_type);
   return buf;
-}
-
-/******************************************************************************/
-opi_type_t
-opi_ref_type;
-
-static void
-ref_delete(opi_type_t type, opi_t x)
-{
-  OpiRef *ref = OPI_REF(x);
-  opi_unref(ref->val);
-  opi_h2w_free(ref);
-}
-
-static void
-ref_get_refs(opi_type_t type, opi_t x, OpiRefVec *vec)
-{
-  OpiRef *ref = OPI_REF(x);
-  opi_ref_vec_push(vec, ref->val);
-}
-
-void
-opi_ref_init(void)
-{
-  opi_ref_type = opi_type_new("Ref");
-  opi_type_set_delete_cell(opi_ref_type, ref_delete);
-  opi_type_set_get_refs(opi_ref_type, ref_get_refs);
-}
-
-void
-opi_ref_cleanup(void)
-{
-  opi_type_delete(opi_ref_type);
-}
-
-opi_t
-opi_ref_new(opi_t x)
-{
-  OpiRef *ref = opi_h2w();
-  opi_inc_rc(ref->val = x);
-  opi_init_cell(ref, opi_ref_type);
-  return OPI(ref);
 }
 
 /******************************************************************************/

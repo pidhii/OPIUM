@@ -400,6 +400,19 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
       opi_bytecode_ret(bc, ret);
       return opi_bytecode_const(bc, opi_nil);
     }
+
+    case OPI_IR_SETREF:
+    {
+      if ((int)stack->size < ir->setref.var) {
+        opi_error("[ir:emit:setref] try reference %zu/%zu\n",
+            (size_t)ir->setref.var, stack->size);
+        abort();
+      }
+      int val = emit(ir->setref.val, bc, stack, FALSE);
+      int vid = stack->vals[stack->size - ir->setref.var];
+      opi_bytecode_setvar(bc, vid, val);
+      return opi_bytecode_const(bc, opi_nil);
+    }
   }
 
   abort();

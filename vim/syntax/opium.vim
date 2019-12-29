@@ -67,7 +67,7 @@ syn keyword Function length
 syn keyword Function strlen substr strstr chop ltrim rtrim trim concat
 syn keyword Function open popen
 syn keyword Function read readline readlines
-syn keyword Function flip const
+syn keyword Function flip const uncurry
 syn keyword Function range
 syn keyword Function revappend reverse
 syn keyword Function any? all?
@@ -92,7 +92,7 @@ syn keyword opiLazy lazy
 syn match opiOperator /[-+=*/%><&|.][-+=*/%><&|.!]*/
 syn match opiOperator /![-+=*/%><&|!.]\+/
 syn match opiOperator /:\|\$/
-syn keyword opiOperator is eq equal not
+syn keyword opiOperator is eq equal not mod fmod
 
 syn match opiDelimiter /[,;()]/
 

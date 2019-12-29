@@ -143,6 +143,11 @@ opi_ast_delete(OpiAst *node)
       if (node->ctor.src)
         opi_ast_delete(node->ctor.src);
       break;
+
+    case OPI_AST_SETREF:
+      free(node->setref.var);
+      opi_ast_delete(node->setref.val);
+      break;
   }
 
   free(node);
@@ -569,5 +574,15 @@ opi_ast_ctor(const char *name, char* const fldnams[], OpiAst *flds[], int nflds,
     node->ctor.fldnams[i] = strdup(fldnams[i]);
     node->ctor.flds[i] = flds[i];
   }
+  return node;
+}
+
+OpiAst*
+opi_ast_setref(const char *var, OpiAst *val)
+{
+  OpiAst *node = malloc(sizeof(OpiAst));
+  node->tag = OPI_AST_SETREF;
+  node->setref.var = strdup(var);
+  node->setref.val = val;
   return node;
 }

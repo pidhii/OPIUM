@@ -93,13 +93,19 @@ opi_vm(OpiBytecode *bc)
         break;
       }
 
+      case OPI_OPC_SETVAR:
+      {
+        opi_t *ref = &r[OPI_SETVAR_REG_REF(ip)];
+        opi_t val = r[OPI_SETVAR_REG_VAL(ip)];
+        opi_inc_rc(val);
+        opi_unref(*ref);
+        *ref = val;
+        break;
+      }
+
       case OPI_OPC_PHI:
         r[OPI_PHI_REG(ip)] = opi_nil;
         break;
-
-      case OPI_OPC_END:
-        opi_assert(!"unexpected end");
-        abort();
 
       case OPI_OPC_TEST:
       {
@@ -268,8 +274,8 @@ opi_vm(OpiBytecode *bc)
         break;
       }
 
-      case OPI_OPC_BINOP_START:
-      case OPI_OPC_BINOP_END:
+      case OPI_OPC_END:
+        opi_assert(!"unexpected end");
         abort();
     }
 
