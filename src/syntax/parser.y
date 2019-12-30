@@ -529,14 +529,14 @@ when
    * then <then-expr>
    */
   : WHEN Expr THEN Expr {
-    $$ = opi_ast_when($2, "", $4, "", NULL);
+    $$ = opi_ast_when($2, "", $4, "", opi_ast_const(opi_nil));
   }
   /*
    * when <tets-expr>
    * then <then-bind> -> <then-expr>
    */
   | WHEN Expr THEN SYMBOL RARROW Expr {
-    $$ = opi_ast_when($2, $4, $6, "", NULL);
+    $$ = opi_ast_when($2, $4, $6, "", opi_ast_const(opi_nil));
     free($4);
   }
   /*

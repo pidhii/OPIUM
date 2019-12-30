@@ -8,6 +8,7 @@ usage: %{car Sys.argv} [OPTIONS] COMMAND
 OPTIONS:
   path <opium-path>
   force
+  clean
 
 COMMANDS:
   help
@@ -20,28 +21,17 @@ let rec parseArgs args =
   unless let arg:args = args then nil
   else if arg eq "help" then helpAndExit stdout 0
   else if arg eq "force" then ('force: true) : parseArgs args
+  else if arg eq "clean" then ('clean: true) : parseArgs args
   else if arg eq "install" then
     if let path:args = args then ('install: path) : parseArgs args
-    else begin
-      fprintf stderr "error: missing path argument to install\n";
-      exit 1;
-    end
+    else die "missing path argument to install"
   else if arg eq "remove" then
     if let name:args = args then ('remove: name) : parseArgs args
-    else begin
-      fprintf stderr "error: missing argument to remove\n";
-      exit 1;
-    end
+    else die "missing argument to remove"
   else if arg eq "path" then
     if let path:args = args then ('path: path) : parseArgs args
-    else begin
-      fprintf stderr "error: missing opium-path argument\n";
-      exit 1;
-    end
-  else begin
-    fprintf stderr "error: unknown command-line option\n";
-    exit 1;
-  end
+    else die "missing opium-path argument"
+  else die "unknown command-line option"
 
 {- Get full path given a relative one. -}
 let realpath path = `test -e '%{path}' && realpath '%{path}'`
@@ -99,8 +89,10 @@ let install () =
   let link_path = "%{installPath}/%{packageName}" in
   `ln -s %{force? && "-f" || ""} %{rel_path} %{link_path}`;
 
-  print "running post-install hooks...";
-  packagePostinstall packageRoot;
+  when cmdArgs#clean then begin
+    print "running post-install hooks...";
+    packagePostinstall packageRoot;
+  end;
 
   print "package %{packageName} was succesfully installed to %{installPath}"
 
