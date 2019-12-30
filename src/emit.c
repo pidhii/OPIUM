@@ -94,7 +94,7 @@ trace_delete(OpiFn *fn)
 static opi_t
 trace(void)
 {
-  OpiLocation *loc = opi_fn_get_data(opi_current_fn);
+  OpiLocation *loc = opi_current_fn->data;
   opi_t err = opi_pop();
   opi_assert(err->type == opi_undefined_type);
   OpiUndefined *u = (void*)err;

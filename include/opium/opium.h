@@ -86,6 +86,9 @@ typedef OpiType *opi_type_t;
 typedef struct OpiHeader_s OpiHeader;
 typedef OpiHeader *opi_t;
 
+typedef struct OpiFn_s OpiFn;
+#define OPI_FN(x) ((OpiFn*)(x))
+
 typedef struct OpiInsn_s OpiInsn;
 typedef struct OpiFlatInsn_s OpiFlatInsn;
 
@@ -104,8 +107,8 @@ typedef struct OpiBytecode_s OpiBytecode;
  * e.g. lists and arrays are constructed by passing all the elemnts of a future
  * container to corresponding function.
  */
-OPI_EXTERN opi_t*
-opi_sp;
+OPI_EXTERN
+opi_t* opi_sp;
 
 /*
  * Pointer to the "current" function object.
@@ -116,8 +119,8 @@ opi_sp;
  * This parameter is implemented as global due to a bug in LibJIT I have faced
  * once. With this bug it is impossible to pass arguments during tail call.
  */
-OPI_EXTERN opi_t
-opi_current_fn;
+OPI_EXTERN
+OpiFn *opi_current_fn;
 
 /*
  * Number of arguments passed to the function via argument-stack.
@@ -127,8 +130,8 @@ opi_current_fn;
  * This parameter is implemented as global due to a bug in LibJIT I have faced
  * once. With this bug it is impossible to pass arguments during tail call.
  */
-OPI_EXTERN size_t
-opi_nargs;
+OPI_EXTERN
+size_t opi_nargs;
 
 /*
  * Flags for opi_init().
@@ -272,6 +275,12 @@ opi_type_get_fields(opi_type_t type);
 void*
 opi_type_get_data(opi_type_t type);
 
+void
+opi_type_set_is_struct(opi_type_t type, int is_struct);
+
+int
+opi_type_is_struct(const opi_type_t type);
+
 /* ==========================================================================
  * Trait
  */
@@ -353,14 +362,17 @@ opi_trait_get_impl(OpiTrait *trait, opi_type_t type, int metoffs);
 opi_t
 opi_trait_get_generic(OpiTrait *trait, int metoffs);
 
-OPI_EXTERN OpiTrait
-*opi_trait_add, *opi_trait_sub, *opi_trait_mul, *opi_trait_div;
+OPI_EXTERN
+OpiTrait *opi_trait_add,
+         *opi_trait_sub,
+         *opi_trait_mul,
+         *opi_trait_div;
 
-OPI_EXTERN opi_t
-opi_generic_add, opi_generic_radd,
-opi_generic_sub, opi_generic_rsub,
-opi_generic_mul, opi_generic_rmul,
-opi_generic_div, opi_generic_rdiv;
+OPI_EXTERN
+opi_t opi_generic_add, opi_generic_radd,
+      opi_generic_sub, opi_generic_rsub,
+      opi_generic_mul, opi_generic_rmul,
+      opi_generic_div, opi_generic_rdiv;
 
 void
 opi_traits_init(void);
@@ -762,7 +774,6 @@ opi_file_get_value(opi_t x);
  */
 typedef opi_t (*opi_fn_handle_t)(void);
 
-typedef struct OpiFn_s OpiFn;
 struct OpiFn_s {
   OpiHeader header;
   char *name;
@@ -806,10 +817,6 @@ static inline int
 opi_fn_get_arity(opi_t cell)
 { return opi_as(cell, OpiFn).arity; }
 
-static inline void*
-opi_fn_get_data(opi_t cell)
-{ return opi_as(cell, OpiFn).data; }
-
 static inline opi_fn_handle_t
 opi_fn_get_handle(opi_t cell)
 { return opi_as(cell, OpiFn).handle; }
@@ -819,11 +826,11 @@ opi_fn_apply(opi_t cell, size_t nargs)
 {
   OpiFn *fn = (OpiFn*)cell;
   opi_nargs = nargs;
-  opi_current_fn = cell;
+  opi_current_fn = OPI_FN(cell);
   return fn->handle();
 }
 
-static inline int
+static inline int __attribute__((pure))
 opi_test_arity(int arity, int nargs)
 { return ((arity < 0) & (nargs >= -(1 + arity))) | (arity == nargs); }
 
@@ -1350,6 +1357,7 @@ opi_ir_pattern_delete(OpiIrPattern *pattern);
 typedef struct OpiIr_s OpiIr;
 struct OpiIr_s {
   OpiIrTag tag;
+  size_t rc;
   union {
     opi_t cnst;
     size_t var;
@@ -1518,7 +1526,7 @@ typedef enum OpiOpc_e {
 
   OPI_OPC_BINOP_START,
   OPI_OPC_CONS = OPI_OPC_BINOP_START,
-  OPI_OPC_ADD, OPI_OPC_SUB, OPI_OPC_MUL, OPI_OPC_DIV, OPI_OPC_MOD,
+  OPI_OPC_ADD, OPI_OPC_SUB, OPI_OPC_MUL, OPI_OPC_DIV, OPI_OPC_MOD, OPI_OPC_FMOD,
   OPI_OPC_NUMEQ, OPI_OPC_NUMNE, OPI_OPC_LT, OPI_OPC_GT, OPI_OPC_LE, OPI_OPC_GE,
   OPI_OPC_BINOP_END = OPI_OPC_GE,
 #define OPI_BINOP_REG_OUT(insn) (insn)->reg[0]
@@ -1886,7 +1894,7 @@ opi_apply(opi_t f, size_t nargs)
 /* ==========================================================================
  * Misc
  */
-#define OPI_FN()                                                         \
+#define OPI_BEGIN_FN()                                                   \
   struct { int nargs, iarg; opi_t arg[opi_nargs]; opi_t ret; } opi_this; \
   opi_this.nargs = opi_nargs;                                            \
   opi_this.iarg = 0;                                                     \
@@ -1937,7 +1945,7 @@ opi_drop_args(int nargs)
   opi_t                     \
   name(void)                \
   {                         \
-    OPI_FN()                \
+    OPI_BEGIN_FN()          \
     body                    \
     opi_return(opi_nil);    \
   }

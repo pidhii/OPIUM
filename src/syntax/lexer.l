@@ -303,7 +303,7 @@ is[ \n\t]+not { return ISNOT; }
 "$"|":" { return yytext[0]; }
 "->" { return RARROW; }
 "<-" { return LARROW; }
-"="|"+"|"-"|"*"|"/"|"%"|"&"|\. { return yytext[0]; }
+"="|"+"|"-"|"*"|"/"|"%"|"&"|\.|"^" |
 "["|"]"|"("|")"|","|"|" { return yytext[0]; }
 "\\" { return FN; }
 mod { return MOD; }

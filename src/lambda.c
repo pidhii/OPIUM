@@ -65,7 +65,7 @@ opi_lambda_delete(OpiFn *fn)
 opi_t
 opi_lambda_fn(void)
 {
-  OpiLambda *lam = opi_fn_get_data(opi_current_fn);
+  OpiLambda *lam = opi_current_fn->data;
   return opi_vm(lam->bc);
 }
 

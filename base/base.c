@@ -5,11 +5,12 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <math.h>
 
 static opi_t
 loadfile(void)
 {
-  OpiContext *ctx = opi_fn_get_data(opi_current_fn);
+  OpiContext *ctx = opi_current_fn->data;
 
   opi_t path = opi_pop();
   opi_t srcd = opi_nargs > 1 ? opi_pop() : opi_nil;
@@ -329,7 +330,7 @@ popen_(void)
 static opi_t
 File_dup_(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(f_old, opi_file_type)
   OPI_ARG(mod, opi_string_type)
 
@@ -404,7 +405,7 @@ readline(void)
 static opi_t
 read_(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(file, opi_file_type)
   FILE *fs = opi_file_get_value(file);
 
@@ -469,7 +470,7 @@ read_(void)
 static opi_t
 match(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(regex, opi_regex_type)
   OPI_ARG(str, opi_string_type)
 
@@ -492,7 +493,7 @@ match(void)
 static opi_t
 split(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(regex, opi_regex_type)
   OPI_ARG(str, opi_string_type)
 
@@ -597,7 +598,7 @@ Array(void)
 static opi_t
 Array_empty(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(reserve, opi_num_type)
   OPI_RETURN(opi_array_new_empty(OPI_NUM(reserve)->val));
 }
@@ -605,7 +606,7 @@ Array_empty(void)
 static opi_t
 Array_init(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(size, opi_num_type);
   OPI_ARG(f, opi_fn_type);
   size_t n = OPI_NUM(size)->val;
@@ -729,7 +730,7 @@ Array_toRevList(void)
 static opi_t
 Array_ofSeq(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(seq, opi_seq_type)
 
   cod_vec(opi_t) buf;
@@ -784,7 +785,7 @@ Array_toSeq(void)
     free(iter);
   }
 
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(arr, opi_array_type)
   ArrayIter *iter = malloc(sizeof(ArrayIter));
   iter->arr = arr;
@@ -799,7 +800,7 @@ Array_toSeq(void)
 static opi_t
 Seq_iter(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(f, opi_fn_type)
   OPI_ARG(seq, opi_seq_type)
 
@@ -833,7 +834,7 @@ Seq_iter(void)
 static opi_t
 Seq_foldl(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(f, opi_fn_type)
   OPI_ARG(z, NULL)
   OPI_ARG(seq, opi_seq_type)
@@ -871,7 +872,7 @@ Seq_foldl(void)
 static opi_t
 Seq_map(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(f, opi_fn_type)
   OPI_ARG(s, opi_seq_type)
 
@@ -919,7 +920,7 @@ Seq_map(void)
 static opi_t
 Seq_zip(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(s1, opi_seq_type)
   OPI_ARG(s2, opi_seq_type)
 
@@ -975,7 +976,7 @@ Seq_zip(void)
 static opi_t
 Seq_filter(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(f, opi_fn_type)
   OPI_ARG(s, opi_seq_type)
 
@@ -1035,7 +1036,7 @@ Seq_filter(void)
 static opi_t
 Seq_unfold(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(f, opi_fn_type)
   OPI_ARG(i, NULL);
 
@@ -1144,7 +1145,7 @@ List_toSeq(void)
 static opi_t
 List_ofRevSeq(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(seq, opi_seq_type)
 
   opi_t l = opi_nil;
@@ -1166,7 +1167,7 @@ List_ofRevSeq(void)
 static opi_t
 Buffer_toStr(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(x, opi_buffer_type)
   OpiBuffer *buf = OPI_BUFFER(x);
   OPI_RETURN(opi_string_new_with_len(buf->ptr, buf->size));
@@ -1257,6 +1258,85 @@ OPI_DEF(Buffer_size,
   opi_return(opi_num_new(OPI_BUFFER(buf)->size));
 )
 
+static
+OPI_DEF(sin_,
+  opi_arg(x, opi_num_type)
+  opi_return(opi_num_new(sinl(OPI_NUM(x)->val)));
+)
+
+static
+OPI_DEF(cos_,
+  opi_arg(x, opi_num_type)
+  opi_return(opi_num_new(cosl(OPI_NUM(x)->val)));
+)
+
+static
+OPI_DEF(tan_,
+  opi_arg(x, opi_num_type)
+  opi_return(opi_num_new(tanl(OPI_NUM(x)->val)));
+)
+
+static
+OPI_DEF(asin_,
+  opi_arg(x, opi_num_type)
+  opi_return(opi_num_new(asinl(OPI_NUM(x)->val)));
+)
+
+static
+OPI_DEF(acos_,
+  opi_arg(x, opi_num_type)
+  opi_return(opi_num_new(acosl(OPI_NUM(x)->val)));
+)
+
+static
+OPI_DEF(atan_,
+  opi_arg(x, opi_num_type)
+  opi_return(opi_num_new(atanl(OPI_NUM(x)->val)));
+)
+
+static
+OPI_DEF(atan2_,
+  opi_arg(x, opi_num_type)
+  opi_arg(y, opi_num_type)
+  opi_return(opi_num_new(atan2l(OPI_NUM(x)->val, OPI_NUM(y)->val)));
+)
+
+static
+OPI_DEF(floor_,
+  opi_arg(x, opi_num_type)
+  opi_return(opi_num_new(floorl(OPI_NUM(x)->val)));
+)
+
+static
+OPI_DEF(ceil_,
+  opi_arg(x, opi_num_type)
+  opi_return(opi_num_new(ceill(OPI_NUM(x)->val)));
+)
+
+static
+OPI_DEF(trunc_,
+  opi_arg(x, opi_num_type)
+  opi_return(opi_num_new(truncl(OPI_NUM(x)->val)));
+)
+
+static
+OPI_DEF(round_,
+  opi_arg(x, opi_num_type)
+  opi_return(opi_num_new(roundl(OPI_NUM(x)->val)));
+)
+
+static
+OPI_DEF(sqrt_,
+  opi_arg(x, opi_num_type)
+  opi_return(opi_num_new(sqrtl(OPI_NUM(x)->val)));
+)
+
+static
+OPI_DEF(cbrt_,
+  opi_arg(x, opi_num_type)
+  opi_return(opi_num_new(cbrtl(OPI_NUM(x)->val)));
+)
+
 int
 opium_library(OpiBuilder *bldr)
 {
@@ -1322,11 +1402,25 @@ opium_library(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "match", opi_fn("match", match, 2));
   opi_builder_def_const(bldr, "split", opi_fn("split", split, 2));
 
-  opi_builder_def_const(bldr, "__base_open", opi_fn("__base_open", open_, 2));
-  opi_builder_def_const(bldr, "__base_popen", opi_fn("__base_popen", popen_, 2));
-  opi_builder_def_const(bldr, "__base_read", opi_fn("read", read_, -2));
-  opi_builder_def_const(bldr, "__base_readline", opi_fn("readline", readline, 1));
+  opi_builder_def_const(bldr, "__base_open", opi_fn(0, open_, 2));
+  opi_builder_def_const(bldr, "__base_popen", opi_fn(0, popen_, 2));
+  opi_builder_def_const(bldr, "__base_read", opi_fn(0, read_, -2));
+  opi_builder_def_const(bldr, "__base_readline", opi_fn(0, readline, 1));
   opi_builder_def_const(bldr, "__base_file_dup", opi_fn(0, File_dup_, 2));
+
+  opi_builder_def_const(bldr, "sin", opi_fn(0, sin_, 1));
+  opi_builder_def_const(bldr, "cos", opi_fn(0, cos_, 1));
+  opi_builder_def_const(bldr, "tan", opi_fn(0, tan_, 1));
+  opi_builder_def_const(bldr, "asin", opi_fn(0, asin_, 1));
+  opi_builder_def_const(bldr, "acos", opi_fn(0, acos_, 1));
+  opi_builder_def_const(bldr, "atan", opi_fn(0, atan_, 1));
+  opi_builder_def_const(bldr, "atan2", opi_fn(0, atan2_, 2));
+  opi_builder_def_const(bldr, "floor", opi_fn(0, floor_, 1));
+  opi_builder_def_const(bldr, "ceil", opi_fn(0, ceil_, 1));
+  opi_builder_def_const(bldr, "trunc", opi_fn(0, trunc_, 1));
+  opi_builder_def_const(bldr, "round", opi_fn(0, round_, 1));
+  opi_builder_def_const(bldr, "sqrt", opi_fn(0, sqrt_, 1));
+  opi_builder_def_const(bldr, "cbrt", opi_fn(0, cbrt_, 1));
 
   return 0;
 }

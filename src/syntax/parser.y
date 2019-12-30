@@ -209,10 +209,11 @@ int opi_start_token;
 %nonassoc IS ISNOT EQ EQUAL NUMLT NUMGT NUMLE NUMGE NUMEQ NUMNE
 %nonassoc<str> ISOF
 %right ':' PLUSPLUS
-%right '+' '-'
+%left '+' '-'
 %left '*' '/' FMOD MOD
+%right '^'
 %right '.'
-%right NOT
+%nonassoc NOT
 %left TABLEREF
 
 %left UMINUS
@@ -468,7 +469,13 @@ Expr
   | Expr '-' Expr { $$ = opi_ast_binop(OPI_OPC_SUB, $1, $3); }
   | Expr '*' Expr { $$ = opi_ast_binop(OPI_OPC_MUL, $1, $3); }
   | Expr '/' Expr { $$ = opi_ast_binop(OPI_OPC_DIV, $1, $3); }
-  | Expr FMOD Expr { $$ = opi_ast_binop(OPI_OPC_MOD, $1, $3); }
+  | Expr FMOD Expr { $$ = opi_ast_binop(OPI_OPC_FMOD, $1, $3); }
+  | Expr MOD Expr { $$ = opi_ast_binop(OPI_OPC_MOD, $1, $3); }
+  | Expr '^' Expr {
+    OpiAst *p[] = { $1, $3 };
+    $$ = opi_ast_apply(opi_ast_var("^"), p, 2);
+    $$->apply.loc = location(&@$);
+  }
   | Expr ':' Expr { $$ = opi_ast_binop(OPI_OPC_CONS, $1, $3); }
   | Expr '.' Expr {
     OpiAst *p[] = { $1, $3 };

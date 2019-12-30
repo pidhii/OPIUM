@@ -4,6 +4,7 @@ let (+) x y = x + y
 let (-) x y = x - y
 let (*) x y = x * y
 let (/) x y = x / y
+let (mod) x y = x mod y
 let (fmod) x y = x fmod y
 let (:) x y = x : y
 let (is not) x y = x is not y
@@ -126,7 +127,7 @@ let readlines file =
   unfold (fn s ->
     let file =
       if let [file] = s then
-        (File.dup file) -- duplicate file stream to own cursor
+        File.dup file -- duplicate file stream to own cursor
       else s
     in
     let line = readline file in

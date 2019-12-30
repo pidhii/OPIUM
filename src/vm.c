@@ -56,14 +56,26 @@ opi_vm(OpiBytecode *bc)
       NUM_BINOP(OPI_OPC_SUB, -, sub)
       NUM_BINOP(OPI_OPC_MUL, *, mul)
       NUM_BINOP(OPI_OPC_DIV, /, div)
-      case OPI_OPC_MOD:
+      case OPI_OPC_FMOD:
       {
         opi_t lhs = r[OPI_BINOP_REG_LHS(ip)];
         opi_t rhs = r[OPI_BINOP_REG_RHS(ip)];
         if (opi_unlikely(lhs->type != opi_num_type || rhs->type != opi_num_type))
           r[OPI_BINOP_REG_OUT(ip)] = opi_undefined(opi_symbol("type-error"));
         else
-          r[OPI_BINOP_REG_OUT(ip)] = opi_num_new(fmodl(opi_num_get_value(lhs), opi_num_get_value(rhs)));
+          r[OPI_BINOP_REG_OUT(ip)] = opi_num_new(fmodl(OPI_NUM(lhs)->val, OPI_NUM(rhs)->val));
+        break;
+      }
+      case OPI_OPC_MOD:
+      {
+        opi_t lhs = r[OPI_BINOP_REG_LHS(ip)];
+        opi_t rhs = r[OPI_BINOP_REG_RHS(ip)];
+        if (opi_unlikely(lhs->type != opi_num_type || rhs->type != opi_num_type))
+          r[OPI_BINOP_REG_OUT(ip)] = opi_undefined(opi_symbol("type-error"));
+        else {
+          intptr_t x = OPI_NUM(lhs)->val, y = OPI_NUM(rhs)->val;
+          r[OPI_BINOP_REG_OUT(ip)] = opi_num_new(x % y);
+        }
         break;
       }
 
@@ -148,8 +160,8 @@ opi_vm(OpiBytecode *bc)
         }
         if (opi_is_lambda(fn) & opi_test_arity(opi_fn_get_arity(fn), nargs)) {
           // Tail Call
-          OpiLambda *lam = opi_fn_get_data(fn);
-          opi_current_fn = fn;
+          OpiLambda *lam = OPI_FN(fn)->data;
+          opi_current_fn = OPI_FN(fn);
           bc = lam->bc;
           ip = bc->tape;
           if (bc->nvals > r_cap) {
@@ -184,7 +196,7 @@ opi_vm(OpiBytecode *bc)
 
       case OPI_OPC_LDCAP:
       {
-        OpiLambda *data = opi_fn_get_data(opi_current_fn);
+        OpiLambda *data = opi_current_fn->data;
         r[OPI_LDCAP_REG_OUT(ip)] = data->caps[OPI_LDCAP_ARG_IDX(ip)];
         break;
       }

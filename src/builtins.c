@@ -427,7 +427,7 @@ compose_delete(OpiFn *fn)
 static opi_t
 compose_aux(void)
 {
-  struct compose_data *data = opi_fn_get_data(opi_current_fn);
+  struct compose_data *data = opi_current_fn->data;
   opi_t tmp = opi_apply(data->g, opi_nargs);
   if (opi_unlikely(tmp->type == opi_undefined_type))
     return tmp;
@@ -451,7 +451,7 @@ compose(void)
 static opi_t
 concat(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(s1, opi_string_type)
   OPI_ARG(s2, opi_string_type)
   size_t l1 = opi_string_get_length(s1);
@@ -465,27 +465,6 @@ concat(void)
   opi_unref(s2);
   return opi_string_drain_with_len(buf, l1 + l2);
 }
-
-#define TYPE_PRED(name, ty)                          \
-  static opi_t                                       \
-  name(void)                                         \
-  {                                                  \
-    opi_t x = opi_pop();                             \
-    opi_t ret = x->type == ty? opi_true : opi_false; \
-    opi_drop(x);                                     \
-    return ret;                                      \
-  }
-
-TYPE_PRED(boolean_p, opi_boolean_type)
-TYPE_PRED(pair_p, opi_pair_type)
-TYPE_PRED(string_p, opi_string_type)
-TYPE_PRED(undefined_p, opi_undefined_type)
-TYPE_PRED(number_p, opi_num_type)
-TYPE_PRED(symbol_p, opi_symbol_type)
-TYPE_PRED(fn_p, opi_fn_type)
-TYPE_PRED(file_p, opi_file_type)
-TYPE_PRED(table_p, opi_table_type)
-TYPE_PRED(lazy_p, opi_lazy_type)
 
 struct vaarg_data {
   opi_t f;
@@ -504,7 +483,7 @@ vaarg_delete(OpiFn *fn)
 static opi_t
 vaarg_aux(void)
 {
-  struct vaarg_data *data = opi_fn_get_data(opi_current_fn);
+  struct vaarg_data *data = opi_current_fn->data;
 
   if (opi_unlikely(opi_nargs < data->nmin)) {
     while (opi_nargs--)
@@ -690,7 +669,7 @@ replace(int n, const char *src, const char *p, string_t* out)
 static opi_t
 search_replace(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(re, opi_regex_type)
   OPI_ARG(pat_, opi_string_type);
   OPI_ARG(opt_, opi_string_type);
@@ -738,7 +717,7 @@ search_replace(void)
 static opi_t
 number(void)
 {
-  OPI_FN()
+  OPI_BEGIN_FN()
   OPI_ARG(str, opi_string_type)
   char *endptr;
   long double num = strtold(OPI_STR(str)->str, &endptr);
@@ -747,21 +726,20 @@ number(void)
   OPI_RETURN(opi_num_new(num));
 }
 
+static
+OPI_DEF(power,
+  opi_arg(x, opi_num_type)
+  opi_arg(y, opi_num_type)
+  opi_t ret = opi_num_new(powl(OPI_NUM(x)->val, OPI_NUM(y)->val));
+  opi_unref(x);
+  opi_unref(y);
+  return ret;
+)
+
 void
 opi_builtins(OpiBuilder *bldr)
 {
-  opi_builder_def_const(bldr, "null?", opi_fn("null?", null_, 1));
-  opi_builder_def_const(bldr, "boolean?", opi_fn("boolean?", boolean_p, 1));
-  opi_builder_def_const(bldr, "pair?", opi_fn("pair?", pair_p, 1));
-  opi_builder_def_const(bldr, "string?", opi_fn("string?", string_p, 1));
-  opi_builder_def_const(bldr, "undefined?", opi_fn("undefined?", undefined_p, 1));
-  opi_builder_def_const(bldr, "number?", opi_fn("number?", number_p, 1));
-  opi_builder_def_const(bldr, "symbol?", opi_fn("symbol?", symbol_p, 1));
-  opi_builder_def_const(bldr, "fn?", opi_fn("fn?", fn_p, 1));
-  opi_builder_def_const(bldr, "lazy?", opi_fn("lazy?", lazy_p, 1));
-  opi_builder_def_const(bldr, "file?", opi_fn("file?", file_p, 1));
-  opi_builder_def_const(bldr, "table?", opi_fn("table?", table_p, 1));
-
+  opi_builder_def_const(bldr, "^", opi_fn(0, power, 2));
   opi_builder_def_const(bldr, ".", opi_fn(".", compose, 2));
   opi_builder_def_const(bldr, "++", opi_fn("++", concat, 2));
   opi_builder_def_const(bldr, "car", opi_fn("car", car_, 1));

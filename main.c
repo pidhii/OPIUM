@@ -52,7 +52,7 @@ logo() {
               ? logo_template[i]
               : alphabet[rand() % (sizeof alphabet - 1)];
   }
-  
+
   return logo;
 }
 
@@ -155,7 +155,7 @@ main(int argc, char **argv, char **env)
   if (in == stdin)
     argv_ = opi_cons(opi_string_from_char('-'), argv_);
   opi_builder_def_const(&builder, "Sys.argv", argv_);
-  
+
   // Add environment variables.
   opi_t env_list = opi_nil;
   for (int i = 0; env[i]; ++i) {
@@ -260,6 +260,7 @@ main(int argc, char **argv, char **env)
             opi_error("%s\n", errorptr);
             free(errorptr);
             input_buf.len = 0;
+            opi_error = 0;
           }
         } else {
           // parser succeed
@@ -273,8 +274,10 @@ main(int argc, char **argv, char **env)
 
       bc = opi_build(&builder, ast, OPI_BUILD_EXPORT);
       opi_ast_delete(ast);
-      if (bc == NULL)
+      if (bc == NULL) {
+        opi_error = 0;
         continue;
+      }
 
       if (show_bytecode) {
         opi_debug("bytecode:\n");
@@ -294,6 +297,7 @@ main(int argc, char **argv, char **env)
             opi_show_location(OPI_ERROR, loc->path, loc->fc, loc->fl, loc->lc, loc->ll);
           }
         }
+        opi_error = 0;
       } else if (ret != opi_nil) {
         opi_display(ret, stdout);
         putc('\n', stdout);

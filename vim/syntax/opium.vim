@@ -62,6 +62,9 @@ syn keyword Function next
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Base:
+syn keyword Function sin cos tan asin acos atan atan2
+syn keyword Function floor ceil trunc round
+syn keyword Function sqrt cbrt
 syn keyword Function list rlist array table 
 syn keyword Function length
 syn keyword Function strlen substr strstr chop ltrim rtrim trim concat

@@ -8,7 +8,7 @@
 #include <errno.h>
 #include <pcre.h>
 
-opi_t opi_current_fn = NULL;
+OpiFn *opi_current_fn = NULL;
 opi_t *opi_sp = NULL;
 size_t opi_nargs;
 
@@ -112,6 +112,8 @@ struct OpiType_s {
   size_t fields_offset;
   size_t nfields;
   char **fields;
+
+  int is_struct;
 };
 
 static void
@@ -152,6 +154,7 @@ type_init(OpiType *ty, const char *name)
     .equal = default_equal,
     .hash = NULL,
     .fields = NULL,
+    .is_struct = FALSE,
   };
 
   opi_assert(strlen(name) <= OPI_TYPE_NAME_MAX);
@@ -167,6 +170,7 @@ type_init(OpiType *ty, const char *name)
   ty->hash = NULL;
   ty->fields = NULL;
   ty->nfields = 0;
+  ty->is_struct = FALSE;
 }
 
 opi_type_t
@@ -271,6 +275,14 @@ opi_type_get_fields(opi_type_t ty)
 void*
 opi_type_get_data(opi_type_t ty)
 { return ty->data; }
+
+void
+opi_type_set_is_struct(opi_type_t type, int is_struct)
+{ type->is_struct = is_struct; }
+
+int
+opi_type_is_struct(const opi_type_t type)
+{ return type->is_struct; }
 
 void
 opi_display(opi_t x, FILE *out)
@@ -431,7 +443,7 @@ generic_data_delete(OpiFn *fn)
 static opi_t
 generic(void)
 {
-  GenericData *data = opi_fn_get_data(opi_current_fn);
+  GenericData *data = opi_current_fn->data;
   opi_t x = opi_get(1);
   opi_t m = opi_trait_get_impl(data->trait, x->type, data->moffs);
   if (m == NULL) {
@@ -1419,8 +1431,8 @@ curry_delete(OpiFn *fn)
 static opi_t
 curry(void)
 {
-  struct curry_data *data = opi_fn_get_data(opi_current_fn);
-  if (opi_current_fn->rc == 0) {
+  struct curry_data *data = opi_current_fn->data;
+  if (OPI(opi_current_fn)->rc == 0) {
     // remove reference from curried arguments
     for (int i = data->n - 1; i >= 0; --i) {
       opi_dec_rc(data->p[i]);

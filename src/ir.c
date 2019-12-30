@@ -84,6 +84,9 @@ opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
   opi_builder_def_type(bldr, "Buffer"   , opi_buffer_type   ); cod_vec_pop(ctx->types);
 
   opi_builder_def_trait(bldr, "Add", opi_trait_add); cod_vec_pop(ctx->traits);
+  opi_builder_def_trait(bldr, "Sub", opi_trait_sub); cod_vec_pop(ctx->traits);
+  opi_builder_def_trait(bldr, "Mul", opi_trait_mul); cod_vec_pop(ctx->traits);
+  opi_builder_def_trait(bldr, "Div", opi_trait_div); cod_vec_pop(ctx->traits);
 }
 
 void
@@ -483,7 +486,7 @@ opi_struct_delete(opi_type_t type, opi_t x)
 static opi_t
 make_struct(void)
 {
-  opi_type_t type = opi_fn_get_data(opi_current_fn);
+  opi_type_t type = opi_current_fn->data;
   size_t nfields = opi_type_get_nfields(type);
 
   struct opi_struct *s = malloc(sizeof(struct opi_struct) + sizeof(opi_t) * nfields);
@@ -512,29 +515,49 @@ copy_ctor_delete(OpiFn *fn)
 static opi_t
 copy_ctor(void)
 {
-  CopyCtorData *restrict data = opi_fn_get_data(opi_current_fn);
+  CopyCtorData *restrict data = opi_current_fn->data;
   if (opi_get(1)->type != data->type) {
-    OPI_FN()
+    OPI_BEGIN_FN()
     OPI_THROW("type-error");
   }
 
   int nflds = opi_type_get_nfields(data->type);
-  struct opi_struct *s = malloc(sizeof(struct opi_struct) + sizeof(opi_t) * nflds);
   struct opi_struct *src = (struct opi_struct*)opi_pop();
 
-  int n_new = opi_nargs - 1;
-  for (int i = 0, i_offs = 0; i < nflds; ++i) {
-    if (i_offs < n_new && data->offs[i_offs] == i) {
-      opi_inc_rc(s->data[i] = opi_pop());
-      i_offs++;
-    } else {
-      opi_inc_rc(s->data[i] = src->data[i]);
+  if (OPI(src)->rc > 0) {
+    //
+    // Construct new struct.
+    //
+    struct opi_struct *s = malloc(sizeof(struct opi_struct) + sizeof(opi_t) * nflds);
+    int n_new = opi_nargs - 1;
+    for (int i = 0, i_offs = 0; i < nflds; ++i) {
+      if (i_offs < n_new && data->offs[i_offs] == i) {
+        opi_inc_rc(s->data[i] = opi_pop());
+        i_offs++;
+      } else {
+        opi_inc_rc(s->data[i] = src->data[i]);
+      }
     }
-  }
+    opi_init_cell(s, data->type);
+    return OPI(s);
 
-  opi_init_cell(s, data->type);
-  opi_drop((opi_t)src);
-  return (opi_t)s;
+  } else {
+    //
+    // Destructive update (reuse old struct).
+    //
+    int n_new = opi_nargs - 1;
+    for (int i = 0, i_offs = 0; i < nflds; ++i) {
+      // Update supplied fields.
+      if (i_offs < n_new && data->offs[i_offs] == i) {
+        opi_t x = opi_pop();
+        opi_inc_rc(x);
+        opi_unref(src->data[i]);
+        src->data[i] = x;
+        i_offs++;
+      }
+    }
+    return OPI(src);
+  }
 }
 
 static void
@@ -574,7 +597,7 @@ impl_data_delete(OpiFn *fn)
 static opi_t
 impl_default(void)
 {
-  ImplData *data = opi_fn_get_data(opi_current_fn);
+  ImplData *data = opi_current_fn->data;
   opi_assert((int)opi_nargs == data->nnams);
   opi_t fs[data->nnams];
   for (int i = 0; i < data->nnams; ++i)
@@ -586,7 +609,7 @@ impl_default(void)
 static opi_t
 impl_for_type(void)
 {
-  ImplData *data = opi_fn_get_data(opi_current_fn);
+  ImplData *data = opi_current_fn->data;
   opi_assert((int)opi_nargs == data->nnams);
   opi_t fs[data->nnams];
   for (int i = 0; i < data->nnams; ++i)
@@ -604,7 +627,7 @@ impl_for_type(void)
 static opi_t
 test_trait(void)
 {
-  OpiTrait *trait = opi_fn_get_data(opi_current_fn);
+  OpiTrait *trait = opi_current_fn->data;
   opi_t x = opi_pop();
   opi_type_t type = x->type;
   opi_drop(x);
@@ -1010,6 +1033,7 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       opi_type_set_fields(type, offset, ast->strct.fields, ast->strct.nfields);
       opi_type_set_delete_cell(type, opi_struct_delete);
       opi_type_set_write(type, write_struct);
+      opi_type_set_is_struct(type, TRUE);
 
       // create constructor
       opi_t ctor = opi_fn(ast->strct.name, make_struct, ast->strct.nfields);
@@ -1033,7 +1057,6 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       OpiType *type = opi_builder_find_type(bldr, ast->ctor.name);
       if (type == NULL) {
         opi_error("no such type, '%s'\n", ast->ctor.name);
-        opi_error = 1;
         return build_error();
       }
 
@@ -1050,32 +1073,39 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       }
 
       if (ast->ctor.src) {
+        //
         // Copy constructor.
+        //
+        if (!opi_type_is_struct(type)) {
+          opi_error("can't use copy-construct for non-struct types\n");
+          return build_error();
+        }
+
+        // Resolve fields and sort arguments.
+        typedef struct Field_s { OpiAst *fld; int offs; } Field;
+        Field fldarg[ast->ctor.nflds];
+        for (int i = 0; i < ast->ctor.nflds; ++i) {
+          int idx = opi_find_string(ast->ctor.fldnams[i], fields, nflds);
+          fldarg[i].fld = ast->ctor.flds[i];
+          fldarg[i].offs = idx;
+          opi_assert(idx >= 0);
+        }
+        int compare(const Field* a, const Field* b) {
+          if (a->offs == b->offs) return 0;
+          else if (a->offs < b->offs) return -1;
+          else return 1;
+        }
+        qsort(fldarg, ast->ctor.nflds, sizeof(Field), (void*)compare);
 
         CopyCtorData *data = malloc(sizeof(CopyCtorData) + sizeof(int) * ast->ctor.nflds);
         data->type = type;
-
-        // resolve fields
-        for (int i = 0; i < ast->ctor.nflds; ++i) {
-          int idx = opi_find_string(ast->ctor.fldnams[i], fields, nflds);
-          opi_assert(idx >= 0);
-          data->offs[i] = idx;
-        }
-
-        // sort fields
-        int compare(const void* a, const void* b) {
-          int int_a = *(int*)a;
-          int int_b = *(int*)b;
-          if (int_a == int_b) return 0;
-          else if (int_a < int_b) return -1;
-          else return 1;
-        }
-        qsort(data->offs, ast->ctor.nflds, sizeof(int), compare);
+        for (int i = 0; i < ast->ctor.nflds; ++i)
+          data->offs[i] = fldarg[i].offs;
 
         OpiIr *args[ast->ctor.nflds + 1];
         args[0] = opi_builder_build_ir(bldr, ast->ctor.src);
         for (int i = 0; i < ast->ctor.nflds; ++i)
-          args[i + 1] = opi_builder_build_ir(bldr, ast->ctor.flds[i]);
+          args[i + 1] = opi_builder_build_ir(bldr, fldarg[i].fld);
         opi_t fn = opi_fn(0, copy_ctor, ast->ctor.nflds + 1);
         opi_fn_set_data(fn, data, copy_ctor_delete);
         OpiIr *fn_ir = opi_ir_const(fn);
@@ -1251,7 +1281,7 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
 static opi_t
 _export(void)
 {
-  OpiBuilder *bldr = opi_fn_get_data(opi_current_fn);
+  OpiBuilder *bldr = opi_current_fn->data;
   opi_t l = opi_pop();
   for (opi_t it = l; it != opi_nil; it = opi_cdr(it)) {
     opi_t elt = opi_car(it);
