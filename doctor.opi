@@ -51,28 +51,21 @@ let realpath path = `test -e '%{path}' && realpath '%{path}'`
 let cmdArgs = table . parseArgs $ cdr Sys.argv
 
 {- Force mode. -}
-let force? = cmdArgs#force or false
+let force? = when cmdArgs#force then true else false
 
 {- Path to opium libraries. -}
-let installPath = cmdArgs#path or Sys.env#OPIUM_PATH or begin
-  fprintf stderr "error: path to opium libraries not set\n";
-  exit 1;
-end
+let installPath = cmdArgs#path or Sys.env#OPIUM_PATH or
+  die "path to opium libraries not set"
 
 {- Install package. -}
-let install () = begin
-  let packageRoot = realpath cmdArgs#install or begin
-      fprintf stderr "error: failed to resolve package directory\n";
-      exit 1;
-    end
+let install () =
+  let packageRoot = realpath cmdArgs#install
+  or die "failed to resolve package directory"
   in
 
   -- find install-script
   let installScript = "%{packageRoot}/install.opi" in
-  `test -f %{installScript}` or begin
-    fprintf stderr "error: missing install-script\n";
-    exit 1;
-  end
+  `test -f %{installScript}` or die "missing install-script";
 
   -- load installer
   let installEnv = [installPath packageRoot] in
@@ -94,19 +87,13 @@ let install () = begin
   -- create package's private directory for dependencies
   let packageDirName = "%{packageName}-dir" in
   let packageInstallPath = "%{installPath}/%{packageDirName}" in
-  `mkdir %{force? && "-p" || ""} %{packageInstallPath}` or begin
-    fprintf stderr "error: failed to create package directory,";
-    fprintf stderr " try force-option to proceed\n";
-    exit 1;
-  end
+  `mkdir %{force? && "-p" || ""} %{packageInstallPath}`
+  or die "failed to create package directory, try force-option to proceed";
   -- copy dependencies
   let copy file =
-    `cp %{packageRoot}/%{file} %{packageInstallPath}` or begin
-      fprintf stderr "error: failed to copy \"%{file}\"\n";
-      exit 1;
-    end
-  in
-  foreach copy packageFiles;
+    `cp %{packageRoot}/%{file} %{packageInstallPath}`
+    or die "failed to copy \"%{file}\""
+  in foreach copy packageFiles;
   -- create symlink to the main script
   let rel_path = "%{packageDirName}/%{packageMain}" in
   let link_path = "%{installPath}/%{packageName}" in
@@ -115,25 +102,22 @@ let install () = begin
   print "running post-install hooks...";
   packagePostinstall packageRoot;
 
-  print "package %{packageName} was succesfully installed to %{installPath}";
-end
+  print "package %{packageName} was succesfully installed to %{installPath}"
 
 
 {- Reomve package. -}
-let remove () = begin
+let remove () =
   let packageName = cmdArgs#remove in
-  system "rm -rfv %{installPath}/%{packageName}{,-dir}";
-end
+  system "rm -rfv %{installPath}/%{packageName}{,-dir}"
 
 
 {- MAIN: -}
 begin
   when cmdArgs#install then install ()
   else when cmdArgs#remove then remove ()
-  else begin
-    fprintf stderr "error: neither of install nor remove commands specified, \n";
-    fprintf stderr "       see help for list of commands and options\n";
-    exit 1;
-  end
+  else die "\
+neither of install nor remove commands specified, see help (%{car Sys.argv}) for
+list of available commands and options\
+"
 end
 
