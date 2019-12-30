@@ -76,26 +76,52 @@ opi_die(const char *fmt, ...);
 
 #define OPI_OK (0)
 #define OPI_ERR (-1)
-OPI_EXTERN int
-opi_error;
+OPI_EXTERN
+int opi_error;
 
+typedef struct OpiLocation_s OpiLocation;
 typedef struct OpiType_s OpiType;
 typedef OpiType *opi_type_t;
-#define OPI(x) ((opi_t)(x))
+typedef struct OpiH2w_s OpiH2w;
+typedef struct OpiH6w_s OpiH6w;
+typedef struct OpiAst_s OpiAst;
+typedef struct OpiScanner_s OpiScanner;
+typedef struct OpiContext_s OpiContext;
+typedef struct OpiBuilder_s OpiBuilder;
+typedef struct OpiIr_s OpiIr;
+typedef struct OpiInsn_s OpiInsn;
+typedef struct OpiFlatInsn_s OpiFlatInsn;
+typedef struct OpiSeq_s OpiSeq;
+typedef struct OpiIter_s OpiIter;
+typedef struct OpiBytecode_s OpiBytecode;
 
 typedef struct OpiHeader_s OpiHeader;
 typedef OpiHeader *opi_t;
+#define OPI(x) ((opi_t)(x))
+
+typedef struct OpiNum_s OpiNum;
+#define OPI_NUM(x) ((OpiNum*)(x))
+
+typedef struct OpiUndefined_s OpiUndefined;
+#define OPI_UNDEFINED(x) ((OpiUndefined*)(x))
+
+typedef struct OpiStr_s OpiStr;
+#define OPI_STR(x) ((OpiStr*)(x))
+
+typedef struct OpiPair_s OpiPair;
+#define OPI_PAIR(x) ((OpiPair*)(x))
 
 typedef struct OpiFn_s OpiFn;
 #define OPI_FN(x) ((OpiFn*)(x))
 
-typedef struct OpiInsn_s OpiInsn;
-typedef struct OpiFlatInsn_s OpiFlatInsn;
+typedef struct OpiLazy_s OpiLazy;
+#define OPI_LAZY(x) ((OpiLazy*)(x))
 
-typedef struct OpiSeq_s OpiSeq;
-typedef struct OpiIter_s OpiIter;
+typedef struct OpiArray_s OpiArray;
+#define OPI_ARRAY(x) ((OpiArray*)(x))
 
-typedef struct OpiBytecode_s OpiBytecode;
+typedef struct OpiBuffer_s OpiBuffer;
+#define OPI_BUFFER(x) ((OpiBuffer*)(x))
 
 /*
  * Argument-stack pointer.
@@ -168,13 +194,13 @@ opi_cleanup(void);
 /* ==========================================================================
  * Locations
  */
-typedef struct OpiLocation_s {
+struct OpiLocation_s {
   char *path; /* file path */
   int fl, /* first line */
       fc, /* first column */
       ll, /* last line */
       lc; /* last column */
-} OpiLocation;
+};
 
 /*
  * Create new location object.
@@ -459,11 +485,10 @@ opi_allocators_init(void);
 void
 opi_allocators_cleanup(void);
 
-typedef struct OpiH2w_s {
+struct OpiH2w_s {
   OpiHeader header;
   opi_word_t w[2];
-} OpiH2w;
-
+};
 
 void*
 opi_h2w();
@@ -471,10 +496,10 @@ opi_h2w();
 void
 opi_h2w_free(void *ptr);
 
-typedef struct OpiH6w_s {
+struct OpiH6w_s {
   OpiHeader header;
   opi_word_t w[6];
-} OpiH6w;
+};
 
 void*
 opi_h6w();
@@ -504,15 +529,13 @@ opi_get(size_t offs)
 /* ==========================================================================
  * Num
  */
-typedef struct OpiNum_s {
+struct OpiNum_s {
   OpiHeader header;
   long double val;
-} OpiNum;
+};
 
 OPI_EXTERN opi_type_t
 opi_num_type;
-
-#define OPI_NUM(x) ((OpiNum*)(x))
 
 void
 opi_num_init(void);
@@ -555,11 +578,11 @@ opi_symbol_get_string(opi_t x);
  * Undefined
  */
 typedef cod_vec(OpiLocation*) opi_trace_t;
-typedef struct OpiUndefined_s {
+struct OpiUndefined_s {
   OpiHeader header;
   opi_t what;
   opi_trace_t* trace;
-} OpiUndefined;
+};
 
 OPI_EXTERN
 opi_type_t opi_undefined_type;
@@ -607,8 +630,6 @@ typedef struct OpiStr_s {
   char *restrict str;
   size_t len;
 } OpiStr;
-
-#define OPI_STR(x) ((OpiStr*)(x))
 
 void
 opi_string_init(void);
@@ -681,10 +702,10 @@ opi_t opi_true, opi_false;
 /* ==========================================================================
  * Pair
  */
-typedef struct OpiPair_s {
+struct OpiPair_s {
   OpiHeader header;
   opi_t car, cdr;
-} OpiPair;
+};
 
 OPI_EXTERN
 opi_type_t opi_pair_type;
@@ -840,11 +861,11 @@ opi_test_arity(int arity, int nargs)
 OPI_EXTERN
 opi_type_t opi_lazy_type;
 
-typedef struct OpiLazy_s {
+struct OpiLazy_s {
   OpiHeader header;
   opi_t cell;
   uint_fast8_t is_ready;
-} OpiLazy;
+};
 
 void
 opi_lazy_init(void);
@@ -954,15 +975,13 @@ opi_seq_copy(opi_t x);
 OPI_EXTERN opi_type_t
 opi_buffer_type;
 
-typedef struct OpiBuffer_s {
+struct OpiBuffer_s {
   OpiHeader header;
   void *ptr;
   size_t size;
   void (*free)(void* ptr, void *c);
   void *c;
-} OpiBuffer;
-
-#define OPI_BUFFER(x) ((OpiBuffer*)(x))
+};
 
 void
 opi_buffer_init(void);
@@ -1022,7 +1041,6 @@ opi_ast_pattern_new_unpack(const char *type, OpiAstPattern **subs, char **fields
 void
 opi_ast_pattern_delete(OpiAstPattern *pattern);
 
-typedef struct OpiAst_s OpiAst;
 struct OpiAst_s {
   OpiAstTag tag;
   union {
@@ -1046,8 +1064,6 @@ struct OpiAst_s {
     struct { char *var; OpiAst *val; } setref;
   };
 };
-
-typedef struct OpiScanner_s OpiScanner;
 
 OpiScanner*
 opi_scanner();
@@ -1171,13 +1187,13 @@ opi_ast_setref(const char *var, OpiAst *val);
 /* ==========================================================================
  * Context
  */
-typedef struct OpiContext_s {
+struct OpiContext_s {
   cod_vec(OpiType*) types;
   cod_vec(OpiTrait*) traits;
   cod_vec(OpiInsn*) bc;
   struct cod_strvec dl_paths;
   cod_vec(void*) dls;
-} OpiContext;
+};
 
 void
 opi_context_init(OpiContext *ctx);
@@ -1225,7 +1241,6 @@ opi_alist_push(OpiAlist *a, const char *var, const char *map);
 void
 opi_alist_pop(OpiAlist *a, size_t n);
 
-typedef struct OpiBuilder_s OpiBuilder;
 struct OpiBuilder_s {
   OpiBuilder *parent;
 
@@ -1354,7 +1369,6 @@ opi_ir_pattern_new_unpack(opi_type_t type, OpiIrPattern **subs, size_t *offs,
 void
 opi_ir_pattern_delete(OpiIrPattern *pattern);
 
-typedef struct OpiIr_s OpiIr;
 struct OpiIr_s {
   OpiIrTag tag;
   size_t rc;
@@ -1553,7 +1567,6 @@ typedef struct OpiFlatInsn_s {
   };
 } OpiFlatInsn;
 
-typedef struct OpiInsn_s OpiInsn;
 struct OpiInsn_s {
   OpiOpc opc;
   union {

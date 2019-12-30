@@ -1,0 +1,40 @@
+Clean up:
+* string -> str
+* remove redundant API
+
+:::::::::::::::::::::::::::::::::::TODO:::::::::::::::::::::::::::::::::::::::::
+1. Implement recursive definitions with type constructors.
+   Note: may be enabled only for types which has implemented related handlers.
+2. Try multiple number types:
+   1) Int -> intmax_t;
+      Float -> [long] double;
+      Complex -> complex<double,double>.
+   2) Leave Num as long double, add Complex and implement arithmetic operators.
+      Note: implement x-types first.
+3. Tuples:
+   3.1. n-tuples (n >= 2, and 2-tuple == Cons).
+   3.2. type products, "x-types". Constructed with tuples.
+4. Handle destructve assignments.
+5. Tracing jit:
+   5.1. insert captured values as constants;
+   5.2. inline constant functions whenever possible (maximal agressive);
+   5.3. evaluate constant expressions
+   5.4. dead code elimination
+6. Type analysis.
+7. Loops:
+   7.1. Imperative loops (for, while).
+   7.2. Generators (maybe consider old approach).
+8. Incremental compilation (LibJIT).
+9. List comprehensions.
+10. Math functions:
+    - trigonometric functions ✓
+    - rounding ✓
+    - exponent
+    - misc: sqrt, cbrt
+11. More Seq-functions.
+12. FFI (at least C).
+13. Sub-pattern aliasing (i.e. `@`-operator in Rust).
+14. Typed exceptions.
+    14.1. Types for builtin exceptions.
+    14.2. Type dispatch in OR and WHEN -statements.
+
