@@ -1,4 +1,5 @@
 #include "opium/opium.h"
+#include <gc.h>
 
 #if defined(OPI_DEBUG_MODE)
 #warning Will use malloc for all allocations.

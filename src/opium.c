@@ -49,7 +49,7 @@ opi_init(int flags)
   opi_nil_init();
   opi_num_init();
   opi_fn_init();
-  opi_string_init();
+  opi_str_init();
   opi_boolean_init();
   opi_pair_init();
   opi_symbol_init();
@@ -74,7 +74,7 @@ opi_cleanup(void)
   opi_symbol_cleanup();
   opi_undefined_cleanup();
   opi_nil_cleanup();
-  opi_string_cleanup();
+  opi_str_cleanup();
   opi_boolean_cleanup();
   opi_pair_cleanup();
   opi_fn_cleanup();
@@ -819,7 +819,7 @@ static void
 undefined_write(opi_type_t type, opi_t x, FILE *out)
 {
   fprintf(out, "undefined { ");
-  opi_write(opi_undefined_get_what(x), out);
+  opi_write(OPI_UNDEFINED(x)->what, out);
   fprintf(out, " }");
 }
 
@@ -827,7 +827,7 @@ static void
 undefined_display(opi_type_t type, opi_t x, FILE *out)
 {
   fprintf(out, "undefined { ");
-  opi_display(opi_undefined_get_what(x), out);
+  opi_display(OPI_UNDEFINED(x)->what, out);
   fprintf(out, " }");
 }
 
@@ -886,18 +886,18 @@ opi_nil_cleanup(void)
 }
 
 /******************************************************************************/
-opi_type_t opi_string_type;
+opi_type_t opi_str_type;
 
 static void
-string_write(opi_type_t ty, opi_t x, FILE *out)
+str_write(opi_type_t ty, opi_t x, FILE *out)
 { fprintf(out, "\"%s\"", opi_as(x, OpiStr).str); }
 
 static void
-string_display(opi_type_t ty, opi_t x, FILE *out)
+str_display(opi_type_t ty, opi_t x, FILE *out)
 { fprintf(out, "%s", opi_as(x, OpiStr).str); }
 
 static void
-string_delete(opi_type_t ty, opi_t x)
+str_delete(opi_type_t ty, opi_t x)
 {
   OpiStr *s = opi_as_ptr(x);
   free(s->str);
@@ -905,84 +905,76 @@ string_delete(opi_type_t ty, opi_t x)
 }
 
 static int
-string_eq(opi_type_t ty, opi_t x, opi_t y)
+str_eq(opi_type_t ty, opi_t x, opi_t y)
 {
-  size_t l1 = opi_string_get_length(x);
-  size_t l2 = opi_string_get_length(y);
-  const char *s1 = opi_string_get_value(x);
-  const char *s2 = opi_string_get_value(y);
+  size_t l1 = OPI_STR(x)->len;
+  size_t l2 = OPI_STR(y)->len;
+  const char *s1 = OPI_STR(x)->str;
+  const char *s2 = OPI_STR(y)->str;
   return l1 == l2 && memcmp(s1, s2, l1) == 0;
 }
 
 static size_t
-string_hash(opi_type_t ty, opi_t x)
+str_hash(opi_type_t ty, opi_t x)
 {
-  size_t len = opi_string_get_length(x);
-  const char *str = opi_string_get_value(x);
+  size_t len = OPI_STR(x)->len;
+  const char *str = OPI_STR(x)->str;
   return opi_hash(str, len);
 }
 
 void
-opi_string_init(void)
+opi_str_init(void)
 {
-  opi_string_type = opi_type_new("Str");
-  opi_type_set_display(opi_string_type, string_display);
-  opi_type_set_write(opi_string_type, string_write);
-  opi_type_set_delete_cell(opi_string_type, string_delete);
-  opi_type_set_eq(opi_string_type, string_eq);
-  opi_type_set_hash(opi_string_type, string_hash);
+  opi_str_type = opi_type_new("Str");
+  opi_type_set_display(opi_str_type, str_display);
+  opi_type_set_write(opi_str_type, str_write);
+  opi_type_set_delete_cell(opi_str_type, str_delete);
+  opi_type_set_eq(opi_str_type, str_eq);
+  opi_type_set_hash(opi_str_type, str_hash);
 }
 
 void
-opi_string_cleanup(void)
-{ opi_type_delete(opi_string_type); }
+opi_str_cleanup(void)
+{ opi_type_delete(opi_str_type); }
 
 extern inline opi_t
-opi_string_drain_with_len(char *str, size_t len)
+opi_str_drain_with_len(char *str, size_t len)
 {
   OpiStr *s = opi_h2w();
-  opi_init_cell(s, opi_string_type);
+  opi_init_cell(s, opi_str_type);
   s->str = str;
   s->len = len;
   return (opi_t)s;
 }
 
 extern inline opi_t
-opi_string_drain(char *str)
-{ return opi_string_drain_with_len(str, strlen(str)); }
+opi_str_drain(char *str)
+{ return opi_str_drain_with_len(str, strlen(str)); }
 
 opi_t
-opi_string_new_with_len(const char *str, size_t len)
+opi_str_new_with_len(const char *str, size_t len)
 {
   char *mystr = malloc(len + 1);
   memcpy(mystr, str, len);
   mystr[len] = 0;
-  return opi_string_drain_with_len(mystr, len);
+  return opi_str_drain_with_len(mystr, len);
 }
 
 opi_t
-opi_string_new(const char *str)
-{ return opi_string_drain(strdup(str)); }
+opi_str_new(const char *str)
+{ return opi_str_drain(strdup(str)); }
 
 opi_t
-opi_string_from_char(char c)
+opi_str_from_char(char c)
 {
   OpiStr *s = opi_h2w();
-  opi_init_cell(s, opi_string_type);
+  opi_init_cell(s, opi_str_type);
   s->str = malloc(2);;
   s->str[0] = c;
   s->str[1] = 0;
   s->len = 1;
   return (opi_t)s;
 }
-
-const char*
-opi_string_get_value(opi_t x)
-{ return opi_as(x, OpiStr).str; }
-
-size_t
-opi_string_get_length(opi_t x)
-{ return opi_as(x, OpiStr).len; }
 
 /******************************************************************************/
 typedef struct OpiRegEx_s {

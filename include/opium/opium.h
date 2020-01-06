@@ -184,8 +184,8 @@ opi_init(int flags);
 /*
  * Release all runtime environment. Call to obtain clean picture from valgrind.
  *
- * Generally, behaviour of any function in this library becomes undefined once
- * this functions is called.
+ * Behaviour of any function in this library becomes undefined once this
+ * functions is called.
  */
 void
 opi_cleanup(void);
@@ -596,11 +596,11 @@ opi_undefined_cleanup(void);
 opi_t
 opi_undefined(opi_t what);
 
-static inline opi_t __attribute__((pure))
+static inline opi_t __attribute__((pure, deprecated))
 opi_undefined_get_what(opi_t x)
 { return opi_as(x, OpiUndefined).what; }
 
-static inline opi_trace_t* __attribute__((pure))
+static inline opi_trace_t* __attribute__((pure, deprecated))
 opi_undefined_get_trace(opi_t x)
 { return opi_as(x, OpiUndefined).trace; }
 
@@ -623,7 +623,7 @@ opi_t opi_nil;
  * String
  */
 OPI_EXTERN
-opi_type_t opi_string_type;
+opi_type_t opi_str_type;
 
 typedef struct OpiStr_s {
   OpiHeader header;
@@ -632,31 +632,33 @@ typedef struct OpiStr_s {
 } OpiStr;
 
 void
-opi_string_init(void);
+opi_str_init(void);
 
 void
-opi_string_cleanup(void);
+opi_str_cleanup(void);
 
 opi_t
-opi_string_new(const char *str);
+opi_str_new(const char *str);
 
 opi_t
-opi_string_new_with_len(const char *str, size_t len);
+opi_str_new_with_len(const char *str, size_t len);
 
 opi_t
-opi_string_drain(char *str);
+opi_str_drain(char *str);
 
 opi_t
-opi_string_drain_with_len(char *str, size_t len);
+opi_str_drain_with_len(char *str, size_t len);
 
 opi_t
-opi_string_from_char(char c);
+opi_str_from_char(char c);
 
-const char* __attribute__((pure))
-opi_string_get_value(opi_t x);
+static inline const char* __attribute__((pure, deprecated))
+opi_str_get_value(opi_t x)
+{ return opi_as(x, OpiStr).str; }
 
-size_t __attribute__((pure))
-opi_string_get_length(opi_t x);
+static inline size_t __attribute__((pure, deprecated))
+opi_str_get_length(opi_t x)
+{ return opi_as(x, OpiStr).len; }
 
 /* ==========================================================================
  * RegEx
@@ -1907,17 +1909,18 @@ opi_apply(opi_t f, size_t nargs)
 /* ==========================================================================
  * Misc
  */
-#define OPI_BEGIN_FN()                                                   \
-  struct { int nargs, iarg; opi_t arg[opi_nargs]; opi_t ret; } opi_this; \
-  opi_this.nargs = opi_nargs;                                            \
-  opi_this.iarg = 0;                                                     \
-  for (size_t i = 0; i < opi_nargs; ++i)                                 \
-    opi_inc_rc(opi_this.arg[i] = opi_pop());
+#define OPI_BEGIN_FN()                             \
+  opi_t opi_this_arg[opi_nargs];                   \
+  struct { int nargs, iarg; opi_t ret; } opi_this; \
+  opi_this.nargs = opi_nargs;                      \
+  opi_this.iarg = 0;                               \
+  for (size_t i = 0; i < opi_nargs; ++i)           \
+    opi_inc_rc(opi_this_arg[i] = opi_pop());
 
 #define OPI_UNREF_ARGS()                     \
   for (int i = 0; i < opi_this.nargs; ++i) { \
-    if (opi_this.arg[i])                     \
-      opi_unref(opi_this.arg[i]);            \
+    if (opi_this_arg[i])                     \
+      opi_unref(opi_this_arg[i]);            \
   }
 
 #define OPI_THROW(error_string)                     \
@@ -1928,7 +1931,7 @@ opi_apply(opi_t f, size_t nargs)
 
 #define OPI_ARG(ident, arg_type)                           \
   opi_assert(opi_this.iarg < opi_this.nargs);              \
-  opi_t ident = opi_this.arg[opi_this.iarg++];             \
+  opi_t ident = opi_this_arg[opi_this.iarg++];             \
   if (arg_type && opi_unlikely(ident->type != arg_type)) { \
     OPI_UNREF_ARGS()                                       \
     OPI_THROW("type-error");                               \
@@ -1966,12 +1969,6 @@ opi_drop_args(int nargs)
 #define opi_arg OPI_ARG
 #define opi_throw OPI_THROW
 #define opi_return OPI_RETURN
-
-#define OPI_STRLEN(x) opi_string_get_length(x)
-#define OPI_SYM(x) opi_symbol_get_string(x)
-#define OPI_SVEC(x) opi_svector_get_data(x)
-#define OPI_DVEC(x) opi_dvector_get_data(x)
-#define OPI_VECSZ(x) opi_vector_get_size(x)
 
 static inline uint32_t
 opi_flp2_u32(uint32_t x)
