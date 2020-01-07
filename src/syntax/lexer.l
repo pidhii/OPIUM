@@ -308,6 +308,7 @@ is[ \n\t]+not { return ISNOT; }
 "\\" { return FN; }
 mod { return MOD; }
 fmod { return FMOD; }
+"|>" { return RPIPE; }
 
 "'"[^ \t\n(){}\[\]'\";,:]+ { yylval->opi = opi_symbol(yytext+1); return CONST; }
 {IDENT} { yylval->str = strdup(yytext); return SYMBOL; }

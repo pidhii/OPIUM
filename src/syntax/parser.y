@@ -203,6 +203,7 @@ int opi_start_token;
 
 %right LARROW
 %right OR
+%left RPIPE
 %right '$'
 %right SCOR
 %right SCAND
@@ -493,6 +494,14 @@ Expr
       $$ = $1;
     } else {
       $$ = opi_ast_apply($1, &$3, 1);
+    }
+  }
+  | Expr RPIPE Expr {
+    if ($3->tag == OPI_AST_APPLY) {
+      opi_ast_append_arg($3, $1);
+      $$ = $3;
+    } else {
+      $$ = opi_ast_apply($3, &$1, 1);
     }
   }
   | Type '$' Expr { $$ = opi_ast_apply(opi_ast_var($1), &$3, 1); free($1); }
