@@ -195,7 +195,7 @@ int opi_start_token;
 %type<pattvec> list_pattern_aux
 %type<strvec> fields
 %type<ast> string shell qr sr
-%type<fmt> string_aux shell_aux qr_aux
+%type<fmt> str_aux shell_aux qr_aux
 %type<fmt> fmt
 %type<ast> table_binds table
 %type<table> table_aux cond_table_aux
@@ -1048,21 +1048,21 @@ recbinds
   }
 ;
 
-string: string_aux {
+string: str_aux {
   if ($1.p.len == 0) {
-    $$ = opi_ast_const(opi_string_drain_with_len($1.s.data, $1.s.len - 1));
+    $$ = opi_ast_const(opi_str_drain_with_len($1.s.data, $1.s.len - 1));
     cod_vec_destroy($1.p);
   } else {
     char *fmt = $1.s.data;
     OpiAst *p[$1.p.len + 1];
-    p[0] = opi_ast_const(opi_string_drain_with_len($1.s.data, $1.s.len - 1));
+    p[0] = opi_ast_const(opi_str_drain_with_len($1.s.data, $1.s.len - 1));
     for (size_t i = 0; i < $1.p.len; ++i)
       p[i + 1] = $1.p.data[i];
     cod_vec_destroy($1.p);
     $$ = opi_ast_apply(opi_ast_var("format"), p, $1.p.len + 1);
   }
 };
-string_aux
+str_aux
   : '"' fmt '"' { $$ = $2; cod_vec_push($$.s, 0); }
   | 'q' fmt 'q' { $$ = $2; cod_vec_push($$.s, 0); }
 ;
@@ -1070,12 +1070,12 @@ string_aux
 shell: shell_aux {
   OpiAst *cmd;
   if ($1.p.len == 0) {
-    cmd = opi_ast_const(opi_string_drain_with_len($1.s.data, $1.s.len - 1));
+    cmd = opi_ast_const(opi_str_drain_with_len($1.s.data, $1.s.len - 1));
     cod_vec_destroy($1.p);
   } else {
     char *fmt = $1.s.data;
     OpiAst *p[$1.p.len + 1];
-    p[0] = opi_ast_const(opi_string_drain_with_len($1.s.data, $1.s.len - 1));
+    p[0] = opi_ast_const(opi_str_drain_with_len($1.s.data, $1.s.len - 1));
     for (size_t i = 0; i < $1.p.len; ++i)
       p[i + 1] = $1.p.data[i];
     cod_vec_destroy($1.p);
@@ -1089,12 +1089,12 @@ shell_aux: '`' fmt '`' { $$ = $2; cod_vec_push($$.s, 0); };
 qr: qr_aux {
   OpiAst *str;
   if ($1.p.len == 0) {
-    str = opi_ast_const(opi_string_drain_with_len($1.s.data, $1.s.len - 1));
+    str = opi_ast_const(opi_str_drain_with_len($1.s.data, $1.s.len - 1));
     cod_vec_destroy($1.p);
   } else {
     char *fmt = $1.s.data;
     OpiAst *p[$1.p.len + 1];
-    p[0] = opi_ast_const(opi_string_drain_with_len($1.s.data, $1.s.len - 1));
+    p[0] = opi_ast_const(opi_str_drain_with_len($1.s.data, $1.s.len - 1));
     for (size_t i = 0; i < $1.p.len; ++i)
       p[i + 1] = $1.p.data[i];
     cod_vec_destroy($1.p);
@@ -1106,7 +1106,7 @@ qr: qr_aux {
 qr_aux: 'r' fmt 'q' { $$ = $2; cod_vec_push($$.s, 0); };
 
 sr: S qr string {
-  OpiAst *p[] = { $2, $3, opi_ast_const(opi_string_drain($1)) };
+  OpiAst *p[] = { $2, $3, opi_ast_const(opi_str_drain($1)) };
   $$ = opi_ast_apply(opi_ast_var("__builtin_sr"), p, 3);
 };
 

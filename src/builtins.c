@@ -149,12 +149,12 @@ fprintf_(void)
     err = opi_undefined(opi_symbol("type-error"));
     goto error;
   }
-  if (opi_unlikely(fmt->type != opi_string_type)) {
+  if (opi_unlikely(fmt->type != opi_str_type)) {
     err = opi_undefined(opi_symbol("type-error"));
     goto error;
   }
 
-  if ((err = format_aux(opi_string_get_value(fmt), 3, port, nargs - 2)))
+  if ((err = format_aux(OPI_STR(fmt)->str, 3, port, nargs - 2)))
     goto error;
 
   err = opi_nil;
@@ -190,16 +190,16 @@ format(void)
   opi_inc_rc(port);
 
   opi_t fmt = opi_get(1);
-  if (opi_unlikely(fmt->type != opi_string_type)) {
+  if (opi_unlikely(fmt->type != opi_str_type)) {
     err = opi_undefined(opi_symbol("type-error"));
     goto error;
   }
 
-  if ((err = format_aux(opi_string_get_value(fmt), 2, port, nargs - 1)))
+  if ((err = format_aux(OPI_STR(fmt)->str, 2, port, nargs - 1)))
     goto error;
 
   opi_unref(port);
-  err = opi_string_new(ptr);
+  err = opi_str_new(ptr);
   free(ptr);
   goto end;
 
@@ -318,14 +318,14 @@ pairs(void)
 }
 
 static opi_t
-string_at(void)
+str_at(void)
 {
   opi_t str = opi_pop();
   opi_inc_rc(str);
   opi_t idx = opi_pop();
   opi_inc_rc(idx);
 
-  if (opi_unlikely(str->type != opi_string_type)) {
+  if (opi_unlikely(str->type != opi_str_type)) {
     opi_unref(str);
     opi_unref(idx);
     return opi_undefined(opi_symbol("type-error"));
@@ -338,13 +338,13 @@ string_at(void)
   }
 
   size_t k = opi_num_get_value(idx);
-  if (opi_unlikely(k >= opi_string_get_length(str))) {
+  if (opi_unlikely(k >= OPI_STR(str)->len)) {
     opi_unref(str);
     opi_unref(idx);
     return opi_undefined(opi_symbol("out-of-range"));
   }
 
-  opi_t ret = opi_string_from_char(opi_string_get_value(str)[k]);
+  opi_t ret = opi_str_from_char(OPI_STR(str)->str[k]);
   opi_unref(str);
   opi_unref(idx);
   return ret;
@@ -452,18 +452,18 @@ static opi_t
 concat(void)
 {
   OPI_BEGIN_FN()
-  OPI_ARG(s1, opi_string_type)
-  OPI_ARG(s2, opi_string_type)
-  size_t l1 = opi_string_get_length(s1);
-  size_t l2 = opi_string_get_length(s2);
+  OPI_ARG(s1, opi_str_type)
+  OPI_ARG(s2, opi_str_type)
+  size_t l1 = OPI_STR(s1)->len;
+  size_t l2 = OPI_STR(s2)->len;
   char *buf = malloc(l1 + l2 + 1);
-  memcpy(buf, opi_string_get_value(s1), l1);
-  memcpy(buf + l1, opi_string_get_value(s2), l2);
+  memcpy(buf, OPI_STR(s1)->str, l1);
+  memcpy(buf + l1, OPI_STR(s2)->str, l2);
   buf[l1 + l2] = '\0';
 
   opi_unref(s1);
   opi_unref(s2);
-  return opi_string_drain_with_len(buf, l1 + l2);
+  return opi_str_drain_with_len(buf, l1 + l2);
 }
 
 struct vaarg_data {
@@ -535,11 +535,11 @@ static opi_t
 system_(void)
 {
   opi_t cmd = opi_pop();
-  if (opi_unlikely(cmd->type != opi_string_type)) {
+  if (opi_unlikely(cmd->type != opi_str_type)) {
     opi_drop(cmd);
     return opi_undefined(opi_symbol("type-error"));
   }
-  int err = system(opi_string_get_value(cmd));
+  int err = system(OPI_STR(cmd)->str);
   opi_drop(cmd);
   return opi_num_new(err);
 }
@@ -548,16 +548,16 @@ static opi_t
 shell(void)
 {
   opi_t cmd = opi_pop();
-  if (opi_unlikely(cmd->type != opi_string_type)) {
+  if (opi_unlikely(cmd->type != opi_str_type)) {
     opi_drop(cmd);
     return opi_undefined(opi_symbol("type-error"));
   }
 
-  FILE *fs = popen(opi_string_get_value(cmd), "r");
+  FILE *fs = popen(OPI_STR(cmd)->str, "r");
   opi_drop(cmd);
 
   if (!fs)
-    return opi_undefined(opi_string_new(strerror(errno)));
+    return opi_undefined(opi_str_new(strerror(errno)));
 
   cod_vec(char) buf;
   cod_vec_init(buf);
@@ -569,7 +569,7 @@ shell(void)
       if (errno) {
         pclose(fs);
         cod_vec_destroy(buf);
-        return opi_undefined(opi_string_new(strerror(errno)));
+        return opi_undefined(opi_str_new(strerror(errno)));
 
       } else {
         errno = 0;
@@ -579,13 +579,13 @@ shell(void)
           if (err)
             return opi_undefined(opi_symbol("shell-error"));
           else
-            return opi_undefined(opi_string_new(strerror(errno)));
+            return opi_undefined(opi_str_new(strerror(errno)));
         }
         if (buf.len > 0 && buf.data[buf.len - 1] == '\n')
           buf.data[buf.len - 1] = 0;
         else
           cod_vec_push(buf, '\0');
-        return opi_string_drain_with_len(buf.data, buf.len - 1);
+        return opi_str_drain_with_len(buf.data, buf.len - 1);
       }
     }
     cod_vec_push(buf, c);
@@ -613,7 +613,7 @@ static opi_t
 regex(void)
 {
   opi_t pattern = opi_pop();
-  opi_assert(pattern->type == opi_string_type);
+  opi_assert(pattern->type == opi_str_type);
 
   const char *err;
   opi_t regex = opi_regex_new(OPI_STR(pattern)->str, 0, &err);
@@ -671,13 +671,13 @@ search_replace(void)
 {
   OPI_BEGIN_FN()
   OPI_ARG(re, opi_regex_type)
-  OPI_ARG(pat_, opi_string_type);
-  OPI_ARG(opt_, opi_string_type);
-  OPI_ARG(str_, opi_string_type);
+  OPI_ARG(pat_, opi_str_type);
+  OPI_ARG(opt_, opi_str_type);
+  OPI_ARG(str_, opi_str_type);
 
   const char *pat = OPI_STR(pat_)->str;
   const char *str = OPI_STR(str_)->str;
-  int len = OPI_STRLEN(str_);
+  int len = OPI_STR(str_)->len;
   const char *opt = OPI_STR(opt_)->str;
 
   int g = !!strchr(opt, 'g');
@@ -711,14 +711,14 @@ search_replace(void)
   while (offs < len)
     cod_vec_push(out, str[offs++]);
   cod_vec_push(out, 0);
-  OPI_RETURN(opi_string_drain_with_len(out.data, out.len));
+  OPI_RETURN(opi_str_drain_with_len(out.data, out.len));
 }
 
 static opi_t
 number(void)
 {
   OPI_BEGIN_FN()
-  OPI_ARG(str, opi_string_type)
+  OPI_ARG(str, opi_str_type)
   char *endptr;
   long double num = strtold(OPI_STR(str)->str, &endptr);
   if (endptr == OPI_STR(str)->str)

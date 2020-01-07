@@ -151,9 +151,9 @@ main(int argc, char **argv, char **env)
   // Add command-line arguments.
   opi_t argv_ = opi_nil;
   for (int i = argc - 1; i >= optind; --i)
-    argv_ = opi_cons(opi_string_new(argv[i]), argv_);
+    argv_ = opi_cons(opi_str_new(argv[i]), argv_);
   if (in == stdin)
-    argv_ = opi_cons(opi_string_from_char('-'), argv_);
+    argv_ = opi_cons(opi_str_from_char('-'), argv_);
   opi_builder_def_const(&builder, "Sys.argv", argv_);
 
   // Add environment variables.
@@ -165,7 +165,7 @@ main(int argc, char **argv, char **env)
     memcpy(key_buf, env[i], eq - env[i]);
     key_buf[eq - env[i]] = 0;
     opi_t key = opi_symbol(key_buf);
-    opi_t val = opi_string_new(eq + 1);
+    opi_t val = opi_str_new(eq + 1);
     env_list = opi_cons(opi_cons(key, val), env_list);
   }
   opi_t env_ = opi_table(env_list, TRUE);
@@ -287,7 +287,7 @@ main(int argc, char **argv, char **env)
       opi_t ret = opi_vm(bc);
       if (ret->type == opi_undefined_type) {
         opi_error("unhandled error: ");
-        opi_display(opi_undefined_get_what(ret), OPI_ERROR);
+        opi_display(OPI_UNDEFINED(ret)->what, OPI_ERROR);
         putc('\n', OPI_ERROR);
         opi_trace_t *trace = opi_undefined_get_trace(ret);
         if (trace->len > 0) {
@@ -329,7 +329,7 @@ main(int argc, char **argv, char **env)
     opi_t ret = opi_vm(bc);
     if (ret->type == opi_undefined_type) {
       opi_error("unhandled error: ");
-      opi_display(opi_undefined_get_what(ret), OPI_ERROR);
+      opi_display(OPI_UNDEFINED(ret)->what, OPI_ERROR);
       putc('\n', OPI_ERROR);
       opi_trace_t *trace = opi_undefined_get_trace(ret);
       if (trace->len > 0) {

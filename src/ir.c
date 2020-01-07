@@ -72,7 +72,7 @@ opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
   opi_builder_def_type(bldr, "Num"      , opi_num_type      ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Sym"      , opi_symbol_type   ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Nil"      , opi_nil_type      ); cod_vec_pop(ctx->types);
-  opi_builder_def_type(bldr, "Str"      , opi_string_type   ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "Str"      , opi_str_type   ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Bool"     , opi_boolean_type  ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Cons"     , opi_pair_type     ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Fn"       , opi_fn_type       ); cod_vec_pop(ctx->types);
@@ -1287,7 +1287,7 @@ _export(void)
     opi_t elt = opi_car(it);
     opi_t nam = opi_car(elt);
     opi_t val = opi_cdr(elt);
-    opi_builder_def_const(bldr, opi_string_get_value(nam), val);
+    opi_builder_def_const(bldr, OPI_STR(nam)->str, val);
   }
   opi_drop(l);
   return opi_nil;
@@ -1327,7 +1327,7 @@ opi_build(OpiBuilder *bldr, OpiAst *ast, int mode)
         OpiAst *var_ast = opi_ast_var(decls->data[i]);
         OpiIr *var_ir = opi_builder_build_ir(bldr, var_ast);
         opi_ast_delete(var_ast);
-        OpiIr *nam_ir = opi_ir_const(opi_string_new(decls->data[i]));
+        OpiIr *nam_ir = opi_ir_const(opi_str_new(decls->data[i]));
         OpiIr *pair = opi_ir_binop(OPI_OPC_CONS, nam_ir, var_ir);
         list = opi_ir_binop(OPI_OPC_CONS, pair, list);
       }
