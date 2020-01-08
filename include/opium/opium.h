@@ -1029,7 +1029,11 @@ struct OpiAstPattern_s {
   OpiPatternTag tag;
   union {
     char *ident;
-    struct { char *type, **fields; OpiAstPattern **subs; size_t n; } unpack;
+    struct {
+      char *type, *alias, **fields;
+      OpiAstPattern **subs;
+      size_t n;
+    } unpack;
   };
 };
 
@@ -1038,7 +1042,7 @@ opi_ast_pattern_new_ident(const char *ident);
 
 OpiAstPattern*
 opi_ast_pattern_new_unpack(const char *type, OpiAstPattern **subs, char **fields,
-    size_t n);
+    size_t n, char *alias);
 
 void
 opi_ast_pattern_delete(OpiAstPattern *pattern);
@@ -1358,7 +1362,12 @@ typedef enum OpiIrTag_e {
 typedef struct OpiIrPattern_s OpiIrPattern;
 struct OpiIrPattern_s {
   OpiPatternTag tag;
-  struct { opi_type_t type; OpiIrPattern **subs; size_t *offs, n; } unpack;
+  struct {
+    opi_type_t type;
+    OpiIrPattern **subs;
+    size_t *offs, n;
+    char *alias;
+  } unpack;
 };
 
 OpiIrPattern*
@@ -1366,7 +1375,7 @@ opi_ir_pattern_new_ident(void);
 
 OpiIrPattern*
 opi_ir_pattern_new_unpack(opi_type_t type, OpiIrPattern **subs, size_t *offs,
-    size_t n);
+    size_t n, char *alias);
 
 void
 opi_ir_pattern_delete(OpiIrPattern *pattern);

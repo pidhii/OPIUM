@@ -33,6 +33,7 @@ syn region opiImplTail start=/=/me=s-1 matchgroup=opiTrait end=/\<end\>/me=s-1 s
 "hi link opiImplFor opiTrait
 "syn region opiImpl matchgroup=opiStructName start=/\<\k\+\>/ matchgroup=opiTrait end=/\<end\>/ skipwhite skipnl contains=TOP
 
+syn match Special /@/
 
 syn region opiTraitWrap matchgroup=opiTrait start=/\<trait\>/ end=/\<end\>/ contains=opiTraitDef
 syn region opiTraitDef matchgroup=opiTraitName start=/\<\k\+\>/ matchgroup=opiTrait end=/\<end\>/me=s-1 skipwhite skipnl contains=TOP containedin=opiTraitWrap contained

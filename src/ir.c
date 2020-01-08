@@ -670,11 +670,9 @@ build_pattern(OpiBuilder *bldr, OpiAstPattern *pattern)
       for (size_t i = 0; i < pattern->unpack.n; ++i) {
         // resolve field index
         int field_idx;
-        if (pattern->unpack.fields[i][0] == '#')
-          // index is set explicitly
+        if (pattern->unpack.fields[i][0] == '#') // index is set explicitly
           field_idx = atoi(pattern->unpack.fields[i] + 1);
-        else
-          // find index by field-name
+        else // find index by field-name
           field_idx = opi_type_get_field_idx(type, pattern->unpack.fields[i]);
         opi_assert(field_idx >= 0);
 
@@ -690,8 +688,12 @@ build_pattern(OpiBuilder *bldr, OpiAstPattern *pattern)
         }
       }
 
+      if (pattern->unpack.alias)
+        opi_builder_push_decl(bldr, pattern->unpack.alias);
+
       // create IR-pattern
-      return opi_ir_pattern_new_unpack(type, subs, offsets, pattern->unpack.n);
+      return opi_ir_pattern_new_unpack(type, subs, offsets, pattern->unpack.n,
+          pattern->unpack.alias);
     }
   }
   abort();
@@ -1237,17 +1239,21 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
 
     case OPI_AST_ISOF:
     {
-      OpiType *type = opi_builder_find_type(bldr, ast->isof.of);
+      const char *name = opi_builder_assoc(bldr, ast->isof.of);
+      if (!name)
+        name = ast->isof.of;
+
+      OpiType *type = opi_builder_find_type(bldr, name);
       if (type) {
         // TODO: need instruction to conver native bool into boolean object.
-        OpiIrPattern *pattern = opi_ir_pattern_new_unpack(type, NULL, NULL, 0);
+        OpiIrPattern *pattern = opi_ir_pattern_new_unpack(type, NULL, NULL, 0, NULL);
         OpiIr *expr = opi_builder_build_ir(bldr, ast->isof.expr);
         OpiIr *then = opi_ir_const(opi_true);
         OpiIr *els = opi_ir_const(opi_false);
         return opi_ir_match(pattern, expr, then, els);
       }
 
-      OpiTrait *trait = opi_builder_find_trait(bldr, ast->isof.of);
+      OpiTrait *trait = opi_builder_find_trait(bldr, name);
       if (trait) {
         // TODO: reuse these functions, don't create a new one each time.
         opi_t test_fn = opi_fn(NULL, test_trait, 1);
@@ -1547,7 +1553,7 @@ opi_ir_pattern_new_ident(void)
 
 OpiIrPattern*
 opi_ir_pattern_new_unpack(opi_type_t type, OpiIrPattern **subs, size_t *offs,
-    size_t n)
+    size_t n, char *alias)
 {
   OpiIrPattern *pattern = malloc(sizeof(OpiIrPattern));
   pattern->tag = OPI_PATTERN_UNPACK;
@@ -1559,6 +1565,7 @@ opi_ir_pattern_new_unpack(opi_type_t type, OpiIrPattern **subs, size_t *offs,
     pattern->unpack.offs[i] = offs[i];
   }
   pattern->unpack.n = n;
+  pattern->unpack.alias = alias ? strdup(alias) : NULL;
   return pattern;
 }
 
@@ -1570,6 +1577,8 @@ opi_ir_pattern_delete(OpiIrPattern *pattern)
       opi_ir_pattern_delete(pattern->unpack.subs[i]);
     free(pattern->unpack.subs);
     free(pattern->unpack.offs);
+    if (pattern->unpack.alias)
+      free(pattern->unpack.alias);
   }
   free(pattern);
 }

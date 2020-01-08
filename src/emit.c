@@ -124,6 +124,9 @@ emit_match_with_leak(int val, OpiIrPattern *pattern, OpiBytecode *bc, struct sta
         int field = opi_bytecode_ldfld(bc, val, pattern->unpack.offs[i]);
         emit_match_with_leak(field, pattern->unpack.subs[i], bc, stack);
       }
+
+      if (pattern->unpack.alias)
+        stack_push(stack, val);
     }
   }
 }
@@ -145,10 +148,13 @@ emit_match_with_then(int expr, OpiIrPattern *pattern, OpiBytecode *bc,
     OpiIrPattern *sub = pattern->unpack.subs[i];
 
     int field = opi_bytecode_ldfld(bc, expr, pattern->unpack.offs[i]);
-    if (sub->tag == OPI_PATTERN_UNPACK)
+    if (sub->tag == OPI_PATTERN_UNPACK) {
       emit_match_with_then(field, pattern->unpack.subs[i], bc, stack, iffs);
-    else
+      if (pattern->unpack.alias)
+        stack_push(stack, field);
+    } else {
       stack_push(stack, field);
+    }
   }
 }
 
@@ -170,8 +176,12 @@ emit_match_onelevel_with_then(OpiIr *then, OpiIr *els, int expr,
   // declare values
   for (size_t i = 0; i < pattern->unpack.n; ++i)
     stack_push(stack, vals[i]);
+  if (pattern->unpack.alias)
+    stack_push(stack, expr);
   int then_ret = emit(then, bc, stack, tc);
   stack_pop(stack, pattern->unpack.n);
+  if (pattern->unpack.alias)
+    stack_pop(stack, 1);
   opi_bytecode_dup(bc, phi, then_ret);
   // ELSE
   opi_bytecode_if_else(bc, &iff);

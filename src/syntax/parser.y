@@ -193,13 +193,15 @@ int opi_start_token;
 %type<pattern> pattern atomicPattern
 %type<patterns> patterns
 %type<pattvec> list_pattern_aux
-%type<strvec> fields
+%type<strvec> fields fields_aux
 %type<ast> string shell qr sr
 %type<fmt> str_aux shell_aux qr_aux
 %type<fmt> fmt
 %type<ast> table_binds table
 %type<table> table_aux cond_table_aux
 %type<table> ctor_aux
+
+%nonassoc '@'
 
 %right LARROW
 %right OR
@@ -260,12 +262,19 @@ Atom
     cod_vec_destroy($3.body);
     free($1);
   }
+  | Type '{' ctor_aux ',' '}' {
+    $$ = opi_ast_ctor($1, $3.names.data, $3.body.data, $3.body.len, NULL);
+    cod_strvec_destroy(&$3.names);
+    cod_vec_destroy($3.body);
+    free($1);
+  }
   | Type '{' ctor_aux ',' DOTDOT Expr '}' {
     $$ = opi_ast_ctor($1, $3.names.data, $3.body.data, $3.body.len, $6);
     cod_strvec_destroy(&$3.names);
     cod_vec_destroy($3.body);
     free($1);
   }
+  | '(' Type ')' { $$ = opi_ast_var($2); free($2); }
   | '(' Expr ')' { $$ = $2; }
   | '[' arg_aux ']' {
     opi_assert($2.iref < 0);
@@ -337,7 +346,7 @@ Form
         opi_ast_pattern_new_ident(retnam),
         opi_ast_pattern_new_ident(sttnam)
       };
-      OpiAstPattern *pat = opi_ast_pattern_new_unpack("Cons", pats, fields, 2);
+      OpiAstPattern *pat = opi_ast_pattern_new_unpack("Cons", pats, fields, 2, NULL);
       OpiAst *ref = $2.ptrvec->data[$2.iref];
       opi_assert(ref->tag == OPI_AST_VAR);
       OpiAst *body[] = {
@@ -409,7 +418,7 @@ Expr
     $$ = opi_ast_apply(opi_ast_var("is"), p, 2);
     $$->apply.loc = location(&@$);
   }
-  | Expr IS TYPE { $$ = opi_ast_isof($1, $3); free($3); }
+  | Expr IS Type { $$ = opi_ast_isof($1, $3); free($3); }
   | Expr EQ Expr {
     OpiAst *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("eq"), p, 2);
@@ -624,25 +633,50 @@ atomicPattern
   : SYMBOL { $$ = opi_ast_pattern_new_ident($1); free($1); }
   | '(' pattern ')' { $$ = $2; }
   | Type '{' '}' {
-    $$ = opi_ast_pattern_new_unpack($1, NULL, NULL, 0);
+    $$ = opi_ast_pattern_new_unpack($1, NULL, NULL, 0, NULL);
+    free($1);
+  }
+  | SYMBOL '@' Type '{' '}' {
+    $$ = opi_ast_pattern_new_unpack($3, NULL, NULL, 0, $1);
+    free($3);
     free($1);
   }
   | Type '{' patterns SYMBOL '}' {
     cod_strvec_push(&$3.fields, $4);
     cod_vec_push($3.patterns, opi_ast_pattern_new_ident($4));
     free($4);
-    $$ = opi_ast_pattern_new_unpack($1, $3.patterns.data, $3.fields.data, $3.fields.size);
+    $$ = opi_ast_pattern_new_unpack($1, $3.patterns.data, $3.fields.data, $3.fields.size, NULL);
     free($1);
     cod_strvec_destroy(&$3.fields);
     cod_vec_destroy($3.patterns);
+  }
+  | SYMBOL '@' Type '{' patterns SYMBOL '}' {
+    cod_strvec_push(&$5.fields, $6);
+    cod_vec_push($5.patterns, opi_ast_pattern_new_ident($6));
+    free($6);
+    $$ = opi_ast_pattern_new_unpack($3, $5.patterns.data, $5.fields.data, $5.fields.size, $1);
+    free($3);
+    cod_strvec_destroy(&$5.fields);
+    cod_vec_destroy($5.patterns);
+    free($1);
   }
   | Type '{' patterns SYMBOL '=' pattern '}' {
     cod_strvec_push(&$3.fields, $4);
     cod_vec_push($3.patterns, $6);
     free($4);
-    $$ = opi_ast_pattern_new_unpack($1, $3.patterns.data, $3.fields.data, $3.fields.size);
+    $$ = opi_ast_pattern_new_unpack($1, $3.patterns.data, $3.fields.data, $3.fields.size, NULL);
     cod_strvec_destroy(&$3.fields);
     cod_vec_destroy($3.patterns);
+    free($1);
+  }
+  | SYMBOL '@' Type '{' patterns SYMBOL '=' pattern '}' {
+    cod_strvec_push(&$5.fields, $6);
+    cod_vec_push($5.patterns, $8);
+    free($6);
+    $$ = opi_ast_pattern_new_unpack($3, $5.patterns.data, $5.fields.data, $5.fields.size, $1);
+    cod_strvec_destroy(&$5.fields);
+    cod_vec_destroy($5.patterns);
+    free($3);
     free($1);
   }
   | '[' list_pattern_aux ']' {
@@ -650,19 +684,25 @@ atomicPattern
     for (int i = $2.len - 1; i >= 0; --i) {
       char *fields[] = { "car", "cdr" };
       OpiAstPattern *pats[] = { $2.data[i], pat };
-      pat = opi_ast_pattern_new_unpack("Cons", pats, fields, 2);
+      pat = opi_ast_pattern_new_unpack("Cons", pats, fields, 2, NULL);
     }
     $$ = pat;
     cod_vec_destroy($2);
   }
-  | '[' ']' { $$ = opi_ast_pattern_new_unpack("Nil", NULL, NULL, 0); }
+  | '[' ']' { $$ = opi_ast_pattern_new_unpack("Nil", NULL, NULL, 0, NULL); }
 ;
 pattern
   : atomicPattern
   | pattern ':' pattern {
     char *fields[] = { "car", "cdr" };
     OpiAstPattern *pats[] = { $1, $3 };
-    $$ = opi_ast_pattern_new_unpack("Cons", pats, fields, 2);
+    $$ = opi_ast_pattern_new_unpack("Cons", pats, fields, 2, NULL);
+  }
+  | SYMBOL '@' pattern ':' pattern {
+    char *fields[] = { "car", "cdr" };
+    OpiAstPattern *pats[] = { $3, $5 };
+    $$ = opi_ast_pattern_new_unpack("Cons", pats, fields, 2, $1);
+    free($1);
   }
   | Type list_pattern_aux {
     char *fields[$2.len];
@@ -671,13 +711,28 @@ pattern
       sprintf(buf, "#%zu", i);
       fields[i] = strdup(buf);
     }
-    $$ = opi_ast_pattern_new_unpack($1, $2.data, fields, $2.len);
+    $$ = opi_ast_pattern_new_unpack($1, $2.data, fields, $2.len, NULL);
     for (size_t i = 0; i < $2.len; ++i)
       free(fields[i]);
     free($1);
     cod_vec_destroy($2);
   }
-  | Type { $$ = opi_ast_pattern_new_unpack($1, NULL, NULL, 0); free($1); }
+  | SYMBOL '@' Type list_pattern_aux {
+    char *fields[$4.len];
+    char buf[0x10];
+    for (size_t i = 0; i < $4.len; ++i) {
+      sprintf(buf, "#%zu", i);
+      fields[i] = strdup(buf);
+    }
+    $$ = opi_ast_pattern_new_unpack($3, $4.data, fields, $4.len, $1);
+    for (size_t i = 0; i < $4.len; ++i)
+      free(fields[i]);
+    free($3);
+    cod_vec_destroy($4);
+    free($1);
+  }
+  | Type { $$ = opi_ast_pattern_new_unpack($1, NULL, NULL, 0, NULL); free($1); }
+  | SYMBOL '@' Type { $$ = opi_ast_pattern_new_unpack($3, NULL, NULL, 0, $1); free($3); free($1); }
 ;
 
 list_pattern_aux
@@ -936,6 +991,11 @@ block_stmnt_only
 ;
 
 fields
+  : fields_aux
+  | fields_aux ','
+;
+
+fields_aux
   : {
     $$ = malloc(sizeof(struct cod_strvec));
     cod_strvec_init($$);
@@ -946,7 +1006,7 @@ fields
     cod_strvec_push($$, $1);
     free($1);
   }
-  | fields ',' SYMBOL {
+  | fields_aux ',' SYMBOL {
     $$ = $1;
     cod_strvec_push($$, $3);
     free($3);

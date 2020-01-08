@@ -371,7 +371,7 @@ opi_ast_pattern_new_ident(const char *ident)
 
 OpiAstPattern*
 opi_ast_pattern_new_unpack(const char *type, OpiAstPattern **subs, char **fields,
-    size_t n)
+    size_t n, char *alias)
 {
   OpiAstPattern *p = malloc(sizeof(OpiAstPattern));
   p->tag = OPI_PATTERN_UNPACK;
@@ -383,6 +383,7 @@ opi_ast_pattern_new_unpack(const char *type, OpiAstPattern **subs, char **fields
     p->unpack.fields[i] = strdup(fields[i]);
   }
   p->unpack.n = n;
+  p->unpack.alias = alias ? strdup(alias) : NULL;
   return p;
 }
 
@@ -403,6 +404,8 @@ opi_ast_pattern_delete(OpiAstPattern *pattern)
       }
       free(pattern->unpack.subs);
       free(pattern->unpack.fields);
+      if (pattern->unpack.alias)
+        free(pattern->unpack.alias);
       break;
   }
   free(pattern);
@@ -427,7 +430,7 @@ opi_ast_match_new_simple(const char *type, char **vars, char **fields, size_t n,
   OpiAstPattern *subs[n];
   for (size_t i = 0; i < n; ++i)
     subs[i] = opi_ast_pattern_new_ident(vars[i]);
-  OpiAstPattern *unpack = opi_ast_pattern_new_unpack(type, subs, fields, n);
+  OpiAstPattern *unpack = opi_ast_pattern_new_unpack(type, subs, fields, n, NULL);
   return opi_ast_match(unpack, expr, then, els);
 }
 

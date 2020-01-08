@@ -29,11 +29,13 @@ Clean up:
     - trigonometric functions ✓
     - rounding ✓
     - exponent
-    - misc: sqrt, cbrt
+    - misc
 11. More Seq-functions.
 12. FFI (at least C).
-13. Sub-pattern aliasing (i.e. `@`-operator in Rust).
+13. Sub-pattern aliasing (i.e. `@`-operator in Rust). (✓) (but must check for bugs)
 14. Typed exceptions.
     14.1. Types for builtin exceptions.
     14.2. Type dispatch in OR and WHEN -statements.
-
+15. Default values for fields.
+16. Default accessors for fields.
+17. Fix type name reference resolution (see resolution for variables). <<<<<<<<<
