@@ -471,7 +471,7 @@ opi_trait_new(char *const nam[], int n)
   // generics
   trait->generics = malloc(sizeof(opi_t) * n);
   for (int i = 0; i < n; ++i) {
-    opi_t g = opi_fn(NULL, generic, -2);
+    opi_t g = opi_fn_new(generic, -2);
     GenericData *data = malloc(sizeof(GenericData));
     data->trait = trait;
     data->moffs = i;
@@ -1376,10 +1376,9 @@ fn_default_delete_data(void *data)
 { }
 
 void
-opi_fn_finalize(opi_t cell, const char *name, opi_fn_handle_t f, int arity)
+opi_fn_finalize(opi_t cell, opi_fn_handle_t f, int arity)
 {
   OpiFn *fn = opi_as_ptr(cell);
-  fn->name = NULL; // WTF: need this line for better performance
   fn->handle = f;
   fn->data = NULL;
   fn->dtor = opi_fn_delete;
@@ -1387,10 +1386,10 @@ opi_fn_finalize(opi_t cell, const char *name, opi_fn_handle_t f, int arity)
 }
 
 opi_t
-opi_fn(const char *name, opi_t (*f)(void), int arity)
+opi_fn_new(opi_t (*f)(void), int arity)
 {
   opi_t fn = opi_fn_alloc();
-  opi_fn_finalize(fn, name, f, arity);
+  opi_fn_finalize(fn, f, arity);
   return (opi_t)fn;
 }
 
@@ -1481,7 +1480,7 @@ opi_apply_partial(opi_t f, int nargs)
       for (int i = 0; i < nargs; ++i)
         opi_inc_rc(data->p[i] = opi_pop());
 
-      opi_t curry_f = opi_fn(NULL, curry, arity - nargs);
+      opi_t curry_f = opi_fn_new(curry, arity - nargs);
       opi_fn_set_data(curry_f, data, curry_delete);
 
       return curry_f;

@@ -227,7 +227,7 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
           opi_bytecode_if(bc, test, &iff);
           // then
           if (ir->apply.loc) {
-            opi_t trace_fn = opi_fn("__trace", trace, 1);
+            opi_t trace_fn = opi_fn_new(trace, 1);
             opi_fn_set_data(trace_fn, opi_location_copy(ir->apply.loc), trace_delete);
             int trace_var = opi_bytecode_const(bc, trace_fn);
             opi_bytecode_ret(bc, opi_bytecode_apply_arr(bc, trace_var, 1, &ret));

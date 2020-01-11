@@ -443,7 +443,7 @@ compose(void)
   struct compose_data *data = malloc(sizeof(struct compose_data));
   opi_inc_rc(data->f = f);
   opi_inc_rc(data->g = g);
-  opi_t aux = opi_fn("composition", compose_aux, 1);
+  opi_t aux = opi_fn_new(compose_aux, 1);
   opi_fn_set_data(aux, data, compose_delete);
   return aux;
 }
@@ -526,7 +526,7 @@ vaarg(void)
   opi_inc_rc(data->f = f);
   data->nmin = ari;
 
-  opi_t f_va = opi_fn(NULL, vaarg_aux, -(ari + 1));
+  opi_t f_va = opi_fn_new(vaarg_aux, -(ari + 1));
   opi_fn_set_data(f_va, data, vaarg_delete);
   return f_va;
 }
@@ -739,46 +739,46 @@ OPI_DEF(power,
 void
 opi_builtins(OpiBuilder *bldr)
 {
-  opi_builder_def_const(bldr, "^", opi_fn(0, power, 2));
-  opi_builder_def_const(bldr, ".", opi_fn(".", compose, 2));
-  opi_builder_def_const(bldr, "++", opi_fn("++", concat, 2));
-  opi_builder_def_const(bldr, "car", opi_fn("car", car_, 1));
-  opi_builder_def_const(bldr, "cdr", opi_fn("cdr", cdr_, 1));
+  opi_builder_def_const(bldr, "^", opi_fn_new(power, 2));
+  opi_builder_def_const(bldr, ".", opi_fn_new(compose, 2));
+  opi_builder_def_const(bldr, "++", opi_fn_new(concat, 2));
+  opi_builder_def_const(bldr, "car", opi_fn_new(car_, 1));
+  opi_builder_def_const(bldr, "cdr", opi_fn_new(cdr_, 1));
 
-  opi_builder_def_const(bldr, "List", opi_fn("List", List, -1));
-  opi_builder_def_const(bldr, "Table", opi_fn(0, Table, 1));
-  opi_builder_def_const(bldr, "number", opi_fn("number", number, 1));
+  opi_builder_def_const(bldr, "List", opi_fn_new(List, -1));
+  opi_builder_def_const(bldr, "Table", opi_fn_new(Table, 1));
+  opi_builder_def_const(bldr, "number", opi_fn_new(number, 1));
 
-  opi_builder_def_const(bldr, "regex", opi_fn("regex", regex, 1));
+  opi_builder_def_const(bldr, "regex", opi_fn_new(regex, 1));
 
-  opi_builder_def_const(bldr, "#", opi_fn("#", table_ref, 2));
+  opi_builder_def_const(bldr, "#", opi_fn_new(table_ref, 2));
 
-  opi_builder_def_const(bldr, "pairs", opi_fn("pairs", pairs, 1));
-  opi_builder_def_const(bldr, "is", opi_fn("is", is_, 2));
-  opi_builder_def_const(bldr, "eq", opi_fn("eq", eq_, 2));
-  opi_builder_def_const(bldr, "equal", opi_fn("equal", equal_, 2));
-  opi_builder_def_const(bldr, "not", opi_fn("not", not_, 1));
-  opi_builder_def_const(bldr, "apply", opi_fn("apply", apply, 2));
-  opi_builder_def_const(bldr, "vaarg", opi_fn("vaarg", vaarg, 2));
+  opi_builder_def_const(bldr, "pairs", opi_fn_new(pairs, 1));
+  opi_builder_def_const(bldr, "is", opi_fn_new(is_, 2));
+  opi_builder_def_const(bldr, "eq", opi_fn_new(eq_, 2));
+  opi_builder_def_const(bldr, "equal", opi_fn_new(equal_, 2));
+  opi_builder_def_const(bldr, "not", opi_fn_new(not_, 1));
+  opi_builder_def_const(bldr, "apply", opi_fn_new(apply, 2));
+  opi_builder_def_const(bldr, "vaarg", opi_fn_new(vaarg, 2));
 
-  opi_builder_def_const(bldr, "newline", opi_fn("newline", newline_, -1));
-  opi_builder_def_const(bldr, "print", opi_fn("print", print, -1));
-  opi_builder_def_const(bldr, "printf", opi_fn("printf", printf_, -2));
-  opi_builder_def_const(bldr, "fprintf", opi_fn("fprintf", fprintf_, -3));
-  opi_builder_def_const(bldr, "format", opi_fn("format", format, -2));
+  opi_builder_def_const(bldr, "newline", opi_fn_new(newline_, -1));
+  opi_builder_def_const(bldr, "print", opi_fn_new(print, -1));
+  opi_builder_def_const(bldr, "printf", opi_fn_new(printf_, -2));
+  opi_builder_def_const(bldr, "fprintf", opi_fn_new(fprintf_, -3));
+  opi_builder_def_const(bldr, "format", opi_fn_new(format, -2));
 
-  opi_builder_def_const(bldr, "()", opi_fn("()", undefined_, 0));
-  opi_builder_def_const(bldr, "error", opi_fn("error", error_, 1));
-  opi_builder_def_const(bldr, "die", opi_fn("die", die, 1));
-  opi_builder_def_const(bldr, "id", opi_fn("id", id, 1));
+  opi_builder_def_const(bldr, "()", opi_fn_new(undefined_, 0));
+  opi_builder_def_const(bldr, "error", opi_fn_new(error_, 1));
+  opi_builder_def_const(bldr, "die", opi_fn_new(die, 1));
+  opi_builder_def_const(bldr, "id", opi_fn_new(id, 1));
 
-  opi_builder_def_const(bldr, "lazy", opi_fn("lazy", lazy, 1));
-  opi_builder_def_const(bldr, "force", opi_fn("force", force, 1));
+  opi_builder_def_const(bldr, "lazy", opi_fn_new(lazy, 1));
+  opi_builder_def_const(bldr, "force", opi_fn_new(force, 1));
 
-  opi_builder_def_const(bldr, "system", opi_fn("system", system_, 1));
-  opi_builder_def_const(bldr, "shell", opi_fn("shell", shell, 1));
+  opi_builder_def_const(bldr, "system", opi_fn_new(system_, 1));
+  opi_builder_def_const(bldr, "shell", opi_fn_new(shell, 1));
 
-  opi_builder_def_const(bldr, "exit", opi_fn("exit", exit_, 1));
+  opi_builder_def_const(bldr, "exit", opi_fn_new(exit_, 1));
 
-  opi_builder_def_const(bldr, "__builtin_sr", opi_fn("search_replace", search_replace, 4));
+  opi_builder_def_const(bldr, "__builtin_sr", opi_fn_new(search_replace, 4));
 }

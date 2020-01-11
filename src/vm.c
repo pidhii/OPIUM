@@ -220,7 +220,7 @@ opi_vm(OpiBytecode *bc)
           opi_inc_rc(lam->caps[i] = r[data->caps[i]]);
 
         opi_t fn = r[OPI_FINFN_REG_CELL(ip)];
-        opi_fn_finalize(fn, NULL, opi_lambda_fn, data->arity);
+        opi_fn_finalize(fn, opi_lambda_fn, data->arity);
         opi_fn_set_data(fn, lam, opi_lambda_delete);
 
         if ((lam->scp = scp))

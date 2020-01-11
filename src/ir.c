@@ -1038,7 +1038,7 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       opi_type_set_is_struct(type, TRUE);
 
       // create constructor
-      opi_t ctor = opi_fn(ast->strct.name, make_struct, ast->strct.nfields);
+      opi_t ctor = opi_fn_new(make_struct, ast->strct.nfields);
       opi_fn_set_data(ctor, type, NULL);
 
       // declare type
@@ -1108,7 +1108,7 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
         args[0] = opi_builder_build_ir(bldr, ast->ctor.src);
         for (int i = 0; i < ast->ctor.nflds; ++i)
           args[i + 1] = opi_builder_build_ir(bldr, fldarg[i].fld);
-        opi_t fn = opi_fn(0, copy_ctor, ast->ctor.nflds + 1);
+        opi_t fn = opi_fn_new(copy_ctor, ast->ctor.nflds + 1);
         opi_fn_set_data(fn, data, copy_ctor_delete);
         OpiIr *fn_ir = opi_ir_const(fn);
         return opi_ir_apply(fn_ir, args, ast->ctor.nflds + 1);
@@ -1183,7 +1183,7 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       data->trait = trait;
       data->f_nams = method_nams;
       data->nnams = method_cnt;
-      opi_t impl_fn = opi_fn(NULL, impl_default, -1);
+      opi_t impl_fn = opi_fn_new(impl_default, -1);
       opi_fn_set_data(impl_fn, data, impl_data_delete);
 
       // apply implementer
@@ -1221,7 +1221,7 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       data->type = type;
       data->f_nams = method_nams;
       data->nnams = nfs;
-      opi_t impl_fn = opi_fn(NULL, impl_for_type, -1);
+      opi_t impl_fn = opi_fn_new(impl_for_type, -1);
       opi_fn_set_data(impl_fn, data, impl_data_delete);
 
       // apply implementer
@@ -1256,7 +1256,7 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       OpiTrait *trait = opi_builder_find_trait(bldr, name);
       if (trait) {
         // TODO: reuse these functions, don't create a new one each time.
-        opi_t test_fn = opi_fn(NULL, test_trait, 1);
+        opi_t test_fn = opi_fn_new(test_trait, 1);
         opi_fn_set_data(test_fn, trait, NULL);
         OpiIr *expr = opi_builder_build_ir(bldr, ast->isof.expr);
         return opi_ir_apply(opi_ir_const(test_fn), &expr, 1);
@@ -1337,7 +1337,7 @@ opi_build(OpiBuilder *bldr, OpiAst *ast, int mode)
         OpiIr *pair = opi_ir_binop(OPI_OPC_CONS, nam_ir, var_ir);
         list = opi_ir_binop(OPI_OPC_CONS, pair, list);
       }
-      opi_t export_fn = opi_fn("__export", _export, 1);
+      opi_t export_fn = opi_fn_new(_export, 1);
       opi_fn_set_data(export_fn, bldr, NULL);
       OpiIr *export_ir = opi_ir_const(export_fn);
       OpiIr *call = opi_ir_apply(export_ir, &list, 1);

@@ -799,9 +799,8 @@ typedef opi_t (*opi_fn_handle_t)(void);
 
 struct OpiFn_s {
   OpiHeader header;
-  char *name;
-  opi_fn_handle_t handle;
   void *data;
+  opi_fn_handle_t handle;
   void (*dtor)(OpiFn *self);
   intptr_t arity;
 };
@@ -828,10 +827,10 @@ opi_fn_alloc()
 };
 
 void
-opi_fn_finalize(opi_t fn, const char *name, opi_fn_handle_t f, int arity);
+opi_fn_finalize(opi_t fn, opi_fn_handle_t f, int arity);
 
 opi_t
-opi_fn(const char *name, opi_fn_handle_t f, int arity);
+opi_fn_new(opi_fn_handle_t f, int arity);
 
 void
 opi_fn_set_data(opi_t cell, void *data, void (*dtor)(OpiFn *self));
