@@ -13,9 +13,6 @@
 #include <unistd.h>
 #include <limits.h>
 
-extern
-int opi_start_token;
-
 extern int
 yylex();
 
@@ -69,8 +66,9 @@ binds_push(struct binds *binds, const char *var, OpiAst *val)
   cod_ptrvec_push(&binds->vals, val, NULL);
 }
 
+typedef cod_vec(int) start_token_t;
 extern
-int opi_start_token;
+start_token_t opi_start_token;
 %}
 
 %union {
@@ -133,9 +131,9 @@ int opi_start_token;
 //
 // Tokens
 //
-%nonassoc DUMMYCOL
+%nonassoc DUMMYCOL DUMMYVAR
 
-%right '=' RARROW FN
+%right '=' RARROW LARROW FN
 
 %nonassoc STRUCT TRAIT IMPL FOR
 
@@ -203,7 +201,6 @@ int opi_start_token;
 
 %nonassoc '@'
 
-%right LARROW
 %right OR
 %left RPIPE
 %right '$'
@@ -228,10 +225,10 @@ entry
   : START_FILE block { @$; g_result = $2; }
   | START_REPL block_expr {
     g_result = $2;
-    opi_start_token = 0;
+    cod_vec_push(opi_start_token, 0);
   }
-  | START_REPL { g_result = NULL; opi_start_token = 0; }
-  | error { g_result = NULL; opi_start_token = 0; }
+  | START_REPL { g_result = NULL; cod_vec_push(opi_start_token, 0); }
+  | error { g_result = NULL; cod_vec_push(opi_start_token, 0); }
 ;
 
 ctor_aux
@@ -517,9 +514,18 @@ Expr
   | Expr OR Expr { $$ = opi_ast_eor($1, $3, " "); }
   | Expr OR SYMBOL RARROW Expr %prec THEN { $$ = opi_ast_eor($1, $5, $3); free($3); }
   | table
-  | Symbol LARROW Expr {
-    $$ = opi_ast_setref($1, $3);
-    free($1);
+  /*| Symbol LARROW Expr {*/
+    /*$$ = opi_ast_setref($1, $3);*/
+    /*free($1);*/
+  /*}*/
+  | LET pattern LARROW Expr IN Expr {
+    OpiAst *fn = opi_ast_fn_new_with_patterns(&$2, 1, $6);
+    if ($4->tag == OPI_AST_APPLY) {
+      opi_ast_append_arg($4, fn);
+      $$ = $4;
+    } else {
+      $$ = opi_ast_apply($4, &fn, 1);
+    }
   }
 ;
 
@@ -1282,7 +1288,7 @@ cond_table_aux
 ;
 %%
 
-int opi_start_token = -1;
+start_token_t opi_start_token;
 
 static const char*
 filename(FILE *fp)
@@ -1305,7 +1311,7 @@ OpiAst*
 opi_parse(FILE *in)
 {
   g_errorptr = NULL;
-  opi_start_token = START_FILE;
+  cod_vec_push(opi_start_token, START_FILE);
   const char *path = filename(in);
   if (path)
     strcpy(g_filename, path);
@@ -1323,7 +1329,7 @@ OpiAst*
 opi_parse_expr(OpiScanner *scanner, char **errorptr)
 {
   g_errorptr = errorptr;
-  opi_start_token = START_REPL;
+  cod_vec_push(opi_start_token, START_REPL);
   g_filename[0] = 0;
 
   yyparse(scanner);

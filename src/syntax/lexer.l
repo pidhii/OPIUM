@@ -22,7 +22,7 @@
 #include "parser.h"
 
 extern
-int opi_start_token;
+cod_vec(int) opi_start_token;
 
 static
 int g_begin_cnt = 0;
@@ -63,11 +63,14 @@ OP_CHAR "="|"+"|"-"|"*"|"/"|"%"|\.|">"|"<"|":"|"\\"|"|"|"&"|"$"|"!"|"@"
 %%
 
 %{
-  if (opi_start_token >= 0) {
-    int tok = opi_start_token;
-    opi_start_token = -1;
+  if (opi_start_token.len > 0) {
+    int tok = cod_vec_pop(opi_start_token);
     if (tok == START_REPL)
       yy_set_interactive(TRUE);
+    if (tok == DUMMYVAR) {
+      yylval->str = strdup("$dummyvar");
+      return SYMBOL;
+    }
     return tok;
   }
 %}
@@ -108,6 +111,15 @@ assert { return ASSERT; }
 trait { return TRAIT; }
 impl { return IMPL; }
 for { return FOR; }
+in[ \n\t]*"|>" {
+  cod_vec_push(opi_start_token, RPIPE);
+  cod_vec_push(opi_start_token, DUMMYVAR);
+  cod_vec_push(opi_start_token, RARROW);
+  cod_vec_push(opi_start_token, DUMMYVAR);
+  cod_vec_push(opi_start_token, FN);
+  return IN;
+}
+
 
 begin {
   g_begin_cnt += 1;
@@ -115,7 +127,7 @@ begin {
 }
 end {
   if (g_begin_cnt && --g_begin_cnt)
-    opi_start_token = ';';
+    cod_vec_push(opi_start_token, ';');
   return END;
 }
 
@@ -154,7 +166,7 @@ s[g]*[/|+] {
   memcpy(buf, start, len);
   buf[len] = 0;
   yylval->str = strdup(buf);
-  opi_start_token = 'r';
+  cod_vec_push(opi_start_token, 'r');
   return S;
 }
 
@@ -168,9 +180,9 @@ s[g]*[/|+] {
 <qq5>"|" { BEGIN(INITIAL); return 'q'; }
 <qq6>"+" { BEGIN(INITIAL); return 'q'; }
 
-<sr1>"/" {  BEGIN(qq4); opi_start_token = 'q'; return 'q'; }
-<sr2>"|" {  BEGIN(qq5); opi_start_token = 'q'; return 'q'; }
-<sr3>"+" {  BEGIN(qq6); opi_start_token = 'q'; return 'q'; }
+<sr1>"/" {  BEGIN(qq4); cod_vec_push(opi_start_token, 'q'); return 'q'; }
+<sr2>"|" {  BEGIN(qq5); cod_vec_push(opi_start_token, 'q'); return 'q'; }
+<sr3>"+" {  BEGIN(qq6); cod_vec_push(opi_start_token, 'q'); return 'q'; }
 
 <string,shell,qq1,qq2,qq3,qq4,qq5,qq6,sr1,sr2,sr3>\\\n
 <string,shell,qq1,qq2,qq3,qq4,qq5,qq6,sr1,sr2,sr3>"\\a" { yylval->c = '\a'; return CHAR; }
@@ -336,10 +348,12 @@ void
 opi_lexer_init(void)
 {
   cod_vec_init(g_braces);
+  cod_vec_init(opi_start_token);
 }
 
 void
 opi_lexer_cleanup(void)
 {
   cod_vec_destroy(g_braces);
+  cod_vec_destroy(opi_start_token);
 }
