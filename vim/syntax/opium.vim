@@ -62,9 +62,16 @@ syn keyword Function next
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Base:
-syn keyword Function sin cos tan asin acos atan atan2 sinh cosh tanh asinh acosh atanh
+syn keyword Function sin cos tan
+syn keyword Function asin acos atan atan2
+syn keyword Function sinh cosh tanh
+syn keyword Function asinh acosh atanh
 syn keyword Function floor ceil trunc round
 syn keyword Function sqrt cbrt
+syn keyword Function finite nan?
+syn keyword Function min max
+syn keyword Function hypot abs
+syn keyword Function log log10 log2
 syn keyword Function list rlist array table 
 syn keyword Function length
 syn keyword Function strlen substr strstr chop ltrim rtrim trim concat

@@ -1373,6 +1373,78 @@ OPI_DEF(cbrt_,
   opi_return(opi_num_new(cbrtl(OPI_NUM(x)->val)));
 )
 
+static
+OPI_DEF(finite_,
+  opi_arg(x, opi_num_type)
+  if (finitel(OPI_NUM(x)->val))
+    opi_return(x);
+  else
+    opi_return(opi_false);
+)
+
+static
+OPI_DEF(isnan_,
+  opi_arg(x, opi_num_type)
+  if (isnanl(OPI_NUM(x)->val))
+    opi_return(opi_true);
+  else
+    opi_return(opi_false);
+)
+
+static
+OPI_DEF(isinf_,
+  opi_arg(x, opi_num_type)
+  if (isinfl(OPI_NUM(x)->val))
+    opi_return(opi_true);
+  else
+    opi_return(opi_false);
+)
+
+static
+OPI_DEF(max_,
+  opi_arg(x, opi_num_type)
+  opi_arg(y, opi_num_type)
+  opi_return(opi_num_new(fmaxl(OPI_NUM(x)->val, OPI_NUM(y)->val)));
+)
+
+static
+OPI_DEF(min_,
+  opi_arg(x, opi_num_type)
+  opi_arg(y, opi_num_type)
+  opi_return(opi_num_new(fminl(OPI_NUM(x)->val, OPI_NUM(y)->val)));
+)
+
+static
+OPI_DEF(hypot_,
+  opi_arg(x, opi_num_type)
+  opi_arg(y, opi_num_type)
+  opi_return(opi_num_new(hypotl(OPI_NUM(x)->val, OPI_NUM(y)->val)));
+)
+
+static
+OPI_DEF(log_,
+  opi_arg(x, opi_num_type)
+  opi_return(opi_num_new(logl(OPI_NUM(x)->val)));
+)
+
+static
+OPI_DEF(log10_,
+  opi_arg(x, opi_num_type)
+  opi_return(opi_num_new(log10l(OPI_NUM(x)->val)));
+)
+
+static
+OPI_DEF(log2_,
+  opi_arg(x, opi_num_type)
+  opi_return(opi_num_new(log2l(OPI_NUM(x)->val)));
+)
+
+static
+OPI_DEF(abs_,
+  opi_arg(x, opi_num_type)
+  opi_return(opi_num_new(fabsl(OPI_NUM(x)->val)));
+)
+
 int
 opium_library(OpiBuilder *bldr)
 {
@@ -1463,6 +1535,15 @@ opium_library(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "round", opi_fn_new(round_, 1));
   opi_builder_def_const(bldr, "sqrt", opi_fn_new(sqrt_, 1));
   opi_builder_def_const(bldr, "cbrt", opi_fn_new(cbrt_, 1));
+  opi_builder_def_const(bldr, "finite", opi_fn_new(finite_, 1));
+  opi_builder_def_const(bldr, "nan?", opi_fn_new(isnan_, 1));
+  opi_builder_def_const(bldr, "max", opi_fn_new(max_, 2));
+  opi_builder_def_const(bldr, "min", opi_fn_new(min_, 2));
+  opi_builder_def_const(bldr, "hypot", opi_fn_new(hypot_, 2));
+  opi_builder_def_const(bldr, "log", opi_fn_new(log_, 1));
+  opi_builder_def_const(bldr, "log10", opi_fn_new(log10_, 1));
+  opi_builder_def_const(bldr, "log2", opi_fn_new(log2_, 1));
+  opi_builder_def_const(bldr, "abs", opi_fn_new(abs_, 1));
 
   return 0;
 }

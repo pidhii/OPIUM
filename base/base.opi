@@ -17,9 +17,11 @@ let (<) x y = x < y
 let (>) x y = x > y
 let (<=) x y = x <= y
 let (>=) x y = x >= y
+let ($) f x = f x
+let (|>) x f = f x
 
-let const x = \_ -> x
-let flip f = \x y -> f y x
+let const x _ = x
+let flip f x y = f y x
 let uncurry f (p1:p2) = f p1 p2
 
 let zero? x = x == 0
@@ -27,8 +29,7 @@ let positive? x = x > 0
 let negative? x = x < 0
 let even? x = x % 2 == 0
 let odd? x = x % 2 /= 0
-
-let trim = ltrim . rtrim
+let trim = rtrim . ltrim
 
 let reverse l = revappend l nil
 
