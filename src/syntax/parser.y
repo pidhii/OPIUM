@@ -225,10 +225,9 @@ entry
   : START_FILE block { @$; g_result = $2; }
   | START_REPL block_expr {
     g_result = $2;
-    cod_vec_push(opi_start_token, 0);
   }
-  | START_REPL { g_result = NULL; cod_vec_push(opi_start_token, 0); }
-  | error { g_result = NULL; cod_vec_push(opi_start_token, 0); }
+  | START_REPL { g_result = NULL; }
+  | error { g_result = NULL; }
 ;
 
 ctor_aux

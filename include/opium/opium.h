@@ -992,6 +992,7 @@ opi_buffer_cleanup(void);
 
 OpiBuffer*
 opi_buffer_new(void *ptr, size_t size, void (*free)(void* ptr,void* c), void *c);
+static void OPI_BUFFER_FREE(void *ptr, void *c) { free(ptr); }
 
 /* ==========================================================================
  * AST
