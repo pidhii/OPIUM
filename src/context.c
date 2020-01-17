@@ -17,15 +17,15 @@ opi_context_init(OpiContext *ctx)
 void
 opi_context_destroy(OpiContext *ctx)
 {
+  cod_vec_iter(ctx->bc, i, x, opi_insn_delete(x));
+  cod_vec_destroy(ctx->bc);
+
   // Note: MUST delete traits before types
   cod_vec_iter(ctx->traits, i, x, opi_trait_delete(x));
   cod_vec_destroy(ctx->traits);
 
   cod_vec_iter(ctx->types, i, x, opi_type_delete(x));
   cod_vec_destroy(ctx->types);
-
-  cod_vec_iter(ctx->bc, i, x, opi_insn_delete(x));
-  cod_vec_destroy(ctx->bc);
 
   cod_strvec_destroy(&ctx->dl_paths);
 
