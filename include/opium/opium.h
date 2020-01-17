@@ -258,6 +258,7 @@ opi_type_delete(opi_type_t ty);
 
 void
 opi_type_set_delete_cell(opi_type_t ty, void (*fn)(opi_type_t,opi_t));
+static void OPI_FREE_CELL(opi_type_t ty, opi_t x) { free(x); }
 
 void
 opi_type_set_data(opi_type_t ty, void *data, void (*fn)(opi_type_t));
