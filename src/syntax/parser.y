@@ -210,7 +210,7 @@ start_token_t opi_start_token;
 %nonassoc<str> ISOF
 %right ':' PLUSPLUS
 %left '+' '-'
-%left '*' '/' FMOD MOD
+%left '*' '/' '%'
 %right '^'
 %right '.'
 %nonassoc NOT
@@ -475,8 +475,7 @@ Expr
   | Expr '-' Expr { $$ = opi_ast_binop(OPI_OPC_SUB, $1, $3); }
   | Expr '*' Expr { $$ = opi_ast_binop(OPI_OPC_MUL, $1, $3); }
   | Expr '/' Expr { $$ = opi_ast_binop(OPI_OPC_DIV, $1, $3); }
-  | Expr FMOD Expr { $$ = opi_ast_binop(OPI_OPC_FMOD, $1, $3); }
-  | Expr MOD Expr { $$ = opi_ast_binop(OPI_OPC_MOD, $1, $3); }
+  | Expr '%' Expr { $$ = opi_ast_binop(OPI_OPC_FMOD, $1, $3); }
   | Expr '^' Expr {
     OpiAst *p[] = { $1, $3 };
     $$ = opi_ast_apply(opi_ast_var("^"), p, 2);

@@ -318,8 +318,6 @@ is[ \n\t]+not { return ISNOT; }
 "="|"+"|"-"|"*"|"/"|"%"|"&"|\.|"^" |
 "["|"]"|"("|")"|","|"|" { return yytext[0]; }
 "\\" { return FN; }
-mod { return MOD; }
-fmod { return FMOD; }
 "|>" { return RPIPE; }
 
 "'"[^ \t\n(){}\[\]'\";,:]+ { yylval->opi = opi_symbol(yytext+1); return CONST; }

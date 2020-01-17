@@ -4,8 +4,7 @@ let (+) x y = x + y
 let (-) x y = x - y
 let (*) x y = x * y
 let (/) x y = x / y
-let (mod) x y = x mod y
-let (fmod) x y = x fmod y
+let (%) x y = x % y
 let (:) x y = x : y
 let (is not) x y = x is not y
 let (not eq) x y = x not eq y
@@ -26,8 +25,8 @@ let uncurry f (p1:p2) = f p1 p2
 let zero? x = x == 0
 let positive? x = x > 0
 let negative? x = x < 0
-let even? x = x fmod 2 == 0
-let odd? x = x fmod 2 /= 0
+let even? x = x % 2 == 0
+let odd? x = x % 2 /= 0
 
 let trim = ltrim . rtrim
 

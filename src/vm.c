@@ -66,18 +66,6 @@ opi_vm(OpiBytecode *bc)
           r[OPI_BINOP_REG_OUT(ip)] = opi_num_new(fmodl(OPI_NUM(lhs)->val, OPI_NUM(rhs)->val));
         break;
       }
-      case OPI_OPC_MOD:
-      {
-        opi_t lhs = r[OPI_BINOP_REG_LHS(ip)];
-        opi_t rhs = r[OPI_BINOP_REG_RHS(ip)];
-        if (opi_unlikely(lhs->type != opi_num_type || rhs->type != opi_num_type))
-          r[OPI_BINOP_REG_OUT(ip)] = opi_undefined(opi_symbol("type-error"));
-        else {
-          intptr_t x = OPI_NUM(lhs)->val, y = OPI_NUM(rhs)->val;
-          r[OPI_BINOP_REG_OUT(ip)] = opi_num_new(x % y);
-        }
-        break;
-      }
 
 #define NUM_CMPOP(opc, op)                                                                                    \
       case opc:                                                                                               \
