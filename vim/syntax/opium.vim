@@ -102,7 +102,7 @@ syn keyword opiLazy lazy
 syn match opiOperator /[-+=*/%><&|.][-+=*/%><&|.!]*/
 syn match opiOperator /![-+=*/%><&|!.]\+/
 syn match opiOperator /:\|\$/
-syn keyword opiOperator is eq equal not mod fmod
+syn keyword opiOperator is eq equal not
 
 syn match opiDelimiter /[,;()]/
 

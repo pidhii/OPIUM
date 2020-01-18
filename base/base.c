@@ -1173,6 +1173,26 @@ Buffer_toStr(void)
   OPI_RETURN(opi_str_new_with_len(buf->ptr, buf->size));
 }
 
+static void
+strbuffer_delete(void *ptr, void *cap)
+{
+  opi_unref(ptr);
+}
+
+static opi_t
+Buffer_ofStr(void)
+{
+  OPI_BEGIN_FN()
+  OPI_ARG(x, opi_str_type)
+  opi_inc_rc(x);
+  opi_return(OPI(opi_buffer_new(
+      OPI_STR(x)->str,
+      OPI_STR(x)->len,
+      strbuffer_delete,
+      x
+  )));
+}
+
 static
 OPI_DEF(Buffer_malloc,
   opi_arg(size, opi_num_type)
@@ -1479,6 +1499,7 @@ opium_library(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "Buffer.calloc", opi_fn_new(Buffer_calloc, 2));
   opi_builder_def_const(bldr, "Buffer.size", opi_fn_new(Buffer_size, 1));
   opi_builder_def_const(bldr, "Buffer.toStr", opi_fn_new(Buffer_toStr, 1));
+  opi_builder_def_const(bldr, "Buffer.ofStr", opi_fn_new(Buffer_ofStr, 1));
   opi_builder_def_const(bldr, "Buffer.getS8", opi_fn_new(Buffer_getS8, 2));
   opi_builder_def_const(bldr, "Buffer.getU8", opi_fn_new(Buffer_getU8, 2));
   opi_builder_def_const(bldr, "Buffer.getS16", opi_fn_new(Buffer_getS16, 2));
