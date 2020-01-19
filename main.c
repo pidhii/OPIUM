@@ -170,6 +170,7 @@ main(int argc, char **argv, char **env)
   }
   opi_t env_ = opi_table(env_list, TRUE);
   opi_builder_def_const(&builder, "Sys.env", env_);
+  opi_drop(env_list);
 
   // Builtins.
   opi_builtins(&builder);

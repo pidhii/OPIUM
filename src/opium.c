@@ -534,7 +534,7 @@ opi_trait_impl(OpiTrait *trait, opi_type_t type, char *const nam[], opi_t f[],
   for (int i = 0; i < n; ++i) {
     offs[i] = opi_trait_get_method_offset(trait, nam[i]);
     if (!replace) {
-      OpiHashMapElt elt;
+      OpiHashMapElt *elt;
       if (opi_hash_map_find(&trait->impls[offs[i]], tyobj, hash, &elt))
         return OPI_ERR;
     }
@@ -542,9 +542,9 @@ opi_trait_impl(OpiTrait *trait, opi_type_t type, char *const nam[], opi_t f[],
 
   // apply supplied implementation
   for (int i = 0; i < n; ++i) {
-    OpiHashMapElt elt;
+    OpiHashMapElt *elt;
     opi_hash_map_find(&trait->impls[offs[i]], tyobj, hash, &elt);
-    opi_hash_map_insert(&trait->impls[offs[i]], tyobj, hash, f[i], &elt);
+    opi_hash_map_insert(&trait->impls[offs[i]], tyobj, hash, f[i], elt);
   }
   // apply default implementations
   for (int i = 0; i < trait->default_impl->n; ++i) {
@@ -559,10 +559,9 @@ opi_trait_impl(OpiTrait *trait, opi_type_t type, char *const nam[], opi_t f[],
     if (skip)
       continue;
 
-    OpiHashMapElt elt;
+    OpiHashMapElt *elt;
     opi_hash_map_find(&trait->impls[i], tyobj, hash, &elt);
-    opi_hash_map_insert(&trait->impls[i], tyobj, hash,
-        trait->default_impl->fs[i], &elt);
+    opi_hash_map_insert(&trait->impls[i], tyobj, hash, trait->default_impl->fs[i], elt);
   }
 
   return OPI_OK;
@@ -593,11 +592,11 @@ opi_t
 opi_trait_get_impl(OpiTrait *trait, opi_type_t type, int metoffs)
 {
   opi_t tyobj = &type->type_object;
-  OpiHashMapElt elt;
+  OpiHashMapElt *elt;
   size_t hash = (size_t)type;
 
   if (opi_hash_map_find_is(&trait->impls[metoffs], tyobj, hash, &elt)) {
-    return elt.val;
+    return elt->val;
 
   } else {
     int impl_id = opi_trait_find_cond_impl(trait, type);
@@ -775,7 +774,7 @@ opi_symbol_cleanup(void)
 opi_t
 opi_symbol(const char *str)
 {
-  OpiHashMapElt elt;
+  OpiHashMapElt *elt;
   uint64_t hash = opi_hash(str, strlen(str));
 
   struct symbol sym;
@@ -783,7 +782,7 @@ opi_symbol(const char *str)
   opi_init_cell(&sym, opi_symbol_type);
 
   if (opi_hash_map_find(&g_sym_map, (opi_t)&sym, hash, &elt)) {
-    return elt.val;
+    return elt->val;
   } else {
     // Create new symbol:
     struct symbol *sym = malloc(sizeof(struct symbol));
@@ -791,7 +790,7 @@ opi_symbol(const char *str)
     sym->hash = hash;
     opi_init_cell(sym, opi_symbol_type);
     // insert it into global hash-table
-    opi_hash_map_insert(&g_sym_map, (opi_t)sym, hash, (opi_t)sym, &elt);
+    opi_hash_map_insert(&g_sym_map, (opi_t)sym, hash, (opi_t)sym, elt);
     return (opi_t)sym;
   }
 }
@@ -1138,7 +1137,6 @@ opi_pair_cleanup(void)
 struct table {
   OpiHeader header;
   OpiHashMap *map;
-  opi_t list;
 };
 
 opi_type_t opi_table_type;
@@ -1147,7 +1145,6 @@ static void
 table_delete(opi_type_t ty, opi_t x)
 {
   OpiHashMap *table = opi_as(x, struct table).map;
-  opi_unref(opi_as(x, struct table).list);
   opi_hash_map_destroy(table);
   free(table);
   opi_h2w_free(x);
@@ -1186,23 +1183,22 @@ opi_table(opi_t l, int replace)
     }
 
     size_t hash = opi_hashof(key);
-    OpiHashMapElt elt;
+    OpiHashMapElt *elt;
     if (opi_hash_map_find(map, key, hash, &elt)) {
       if (replace) {
-        opi_hash_map_insert(map, key, hash, kv, &elt);
+        opi_hash_map_insert(map, key, hash, kv, elt);
       } else {
         opi_hash_map_destroy(map);
         free(map);
         return opi_undefined(opi_symbol("key-collision"));
       }
     } else {
-      opi_hash_map_insert(map, key, hash, kv, &elt);
+      opi_hash_map_insert(map, key, hash, kv, elt);
     }
   }
 
   struct table *tab = opi_h2w();
   tab->map = map;
-  opi_inc_rc(tab->list = l);
   opi_init_cell(tab, opi_table_type);
   return (opi_t)tab;
 }
@@ -1219,9 +1215,9 @@ opi_table_at(opi_t tab, opi_t key, opi_t *err)
   }
 
   size_t hash = opi_hashof(key);
-  OpiHashMapElt elt;
+  OpiHashMapElt *elt;
   if (opi_hash_map_find(t->map, key, hash, &elt)) {
-    return elt.val;
+    return elt->val;
   } else {
     if (err)
       *err = opi_undefined(opi_symbol("out-of-range"));
@@ -1232,13 +1228,22 @@ opi_table_at(opi_t tab, opi_t key, opi_t *err)
 opi_t
 opi_table_pairs(opi_t tab)
 {
-  return opi_as(tab, struct table).list;
+  struct table *t = (void*)tab;
+  opi_t l = opi_nil;
+  opi_t val;
+  size_t it = opi_hash_map_begin(t->map);
+  while (opi_hash_map_get(t->map, it, NULL, &val)) {
+    l = opi_cons(val, l);
+    it = opi_hash_map_next(t->map, it);
+  }
+  return l;
 }
 
 int
-opi_table_insert(opi_t tab, opi_t key, opi_t val, int replace, opi_t *err)
+opi_table_insert(opi_t tab, opi_t pair, int replace, opi_t *err)
 {
   struct table *t = opi_as_ptr(tab);
+  opi_t key = opi_car(pair);
 
   if (opi_unlikely(!opi_type_is_hashable(key->type))) {
     if (err)
@@ -1247,10 +1252,10 @@ opi_table_insert(opi_t tab, opi_t key, opi_t val, int replace, opi_t *err)
   }
 
   size_t hash = opi_hashof(key);
-  OpiHashMapElt elt;
+  OpiHashMapElt *elt;
   if (opi_hash_map_find(t->map, key, hash, &elt)) {
     if (replace) {
-      opi_hash_map_insert(t->map, key, hash, val, &elt);
+      opi_hash_map_insert(t->map, key, hash, pair, elt);
       return TRUE;
     } else {
       if (err)
@@ -1258,9 +1263,23 @@ opi_table_insert(opi_t tab, opi_t key, opi_t val, int replace, opi_t *err)
       return FALSE;
     }
   } else {
-    opi_hash_map_insert(t->map, key, hash, val, &elt);
+    opi_hash_map_insert(t->map, key, hash, pair, elt);
     return TRUE;
   }
+}
+
+opi_t
+opi_table_copy(opi_t tab)
+{
+  struct table *t = (void*)tab;
+  opi_t newtab = opi_table(opi_nil, 0);
+  opi_t val;
+  size_t it = opi_hash_map_begin(t->map);
+  while (opi_hash_map_get(t->map, it, NULL, &val)) {
+    opi_table_insert(newtab, val, FALSE, NULL);
+    it = opi_hash_map_next(t->map, it);
+  }
+  return newtab;
 }
 
 /******************************************************************************/

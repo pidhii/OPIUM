@@ -133,7 +133,7 @@ start_token_t opi_start_token;
 //
 %nonassoc DUMMYCOL DUMMYVAR
 
-%right '=' RARROW LARROW FN
+%right '=' LARROW FN
 
 %nonassoc STRUCT TRAIT IMPL FOR
 
@@ -154,6 +154,7 @@ start_token_t opi_start_token;
 %right LAZY ASSERT
 
 %left IF UNLESS WHEN
+%right RARROW
 %precedence THEN
 %precedence ELSE
 %type<ast> if unless when

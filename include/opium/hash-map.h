@@ -25,10 +25,10 @@ void
 opi_hash_map_destroy(OpiHashMap *map);
 
 int
-opi_hash_map_find(OpiHashMap *map, opi_t key, size_t hash, OpiHashMapElt* elt);
+opi_hash_map_find(OpiHashMap *map, opi_t key, size_t hash, OpiHashMapElt **elt);
 
 int
-opi_hash_map_find_is(OpiHashMap *map, opi_t key, size_t hash, OpiHashMapElt* elt);
+opi_hash_map_find_is(OpiHashMap *map, opi_t key, size_t hash, OpiHashMapElt **elt);
 
 void
 opi_hash_map_insert(OpiHashMap *map, opi_t key, size_t hash, opi_t val, OpiHashMapElt *elt);

@@ -770,7 +770,10 @@ opi_t
 opi_table_pairs(opi_t tab);
 
 int
-opi_table_insert(opi_t tab, opi_t key, opi_t val, int replace, opi_t *err);
+opi_table_insert(opi_t tab, opi_t pair, int replace, opi_t *err);
+
+opi_t
+opi_table_copy(opi_t tab);
 
 /* ==========================================================================
  * Port

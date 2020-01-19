@@ -1465,6 +1465,19 @@ OPI_DEF(abs_,
   opi_return(opi_num_new(fabsl(OPI_NUM(x)->val)));
 )
 
+static
+OPI_DEF(Table_insert,
+  opi_arg(tab, opi_table_type)
+  opi_arg(x, opi_pair_type)
+  opi_t err;
+  opi_t ret = tab->rc > 1 ? opi_table_copy(tab) : tab;
+  if (!opi_table_insert(ret, x, TRUE, &err)) {
+    opi_drop(ret);
+    opi_return(err);
+  }
+  opi_return(ret);
+)
+
 int
 opium_library(OpiBuilder *bldr)
 {
@@ -1494,6 +1507,8 @@ opium_library(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "Array.toRevList", opi_fn_new(Array_toList, 1));
   opi_builder_def_const(bldr, "Array.ofSeq", opi_fn_new(Array_ofSeq, 1));
   opi_builder_def_const(bldr, "Array.toSeq", opi_fn_new(Array_toSeq, 1));
+
+  opi_builder_def_const(bldr, "Table.insert", opi_fn_new(Table_insert, 2));
 
   opi_builder_def_const(bldr, "Buffer.malloc", opi_fn_new(Buffer_malloc, 1));
   opi_builder_def_const(bldr, "Buffer.calloc", opi_fn_new(Buffer_calloc, 2));

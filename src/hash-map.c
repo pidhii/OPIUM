@@ -64,20 +64,20 @@ find_is(OpiHashMapElt *data, size_t cap, opi_t key, size_t hash)
 }
 
 int
-opi_hash_map_find(OpiHashMap *map, opi_t key, size_t hash, OpiHashMapElt* elt)
+opi_hash_map_find(OpiHashMap *map, opi_t key, size_t hash, OpiHashMapElt **elt)
 {
   OpiHashMapElt *myelt = find(map->data, map->cap, key, hash);
   if (elt)
-    *elt = *myelt;
+    *elt = myelt;
   return myelt->key != NULL;
 }
 
 int
-opi_hash_map_find_is(OpiHashMap *map, opi_t key, size_t hash, OpiHashMapElt* elt)
+opi_hash_map_find_is(OpiHashMap *map, opi_t key, size_t hash, OpiHashMapElt **elt)
 {
   OpiHashMapElt *myelt = find_is(map->data, map->cap, key, hash);
   if (elt)
-    *elt = *myelt;
+    *elt = myelt;
   return myelt->key != NULL;
 }
 
@@ -107,10 +107,11 @@ opi_hash_map_insert(OpiHashMap *map, opi_t key, size_t hash, opi_t val, OpiHashM
   if (elt->key == NULL) {
     // Must insert new element => check load factor and rehash if needed.
     map->size += 1;
-    if ((map->size * 100) / map->cap > 70)
+    if ((map->size * 100) / map->cap > 70) {
       rehash(map, map->cap << 1);
-    // repeat search for new data-array
-    elt = find(map->data, map->cap, key, hash);
+      // repeat search for new data-array
+      elt = find(map->data, map->cap, key, hash);
+    }
 
   } else {
     // replace old value with new one
