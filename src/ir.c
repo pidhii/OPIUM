@@ -72,7 +72,7 @@ opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
   opi_builder_def_type(bldr, "Num"      , opi_num_type      ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Sym"      , opi_symbol_type   ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Nil"      , opi_nil_type      ); cod_vec_pop(ctx->types);
-  opi_builder_def_type(bldr, "Str"      , opi_str_type   ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "Str"      , opi_str_type      ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Bool"     , opi_boolean_type  ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Cons"     , opi_pair_type     ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Fn"       , opi_fn_type       ); cod_vec_pop(ctx->types);
@@ -82,6 +82,7 @@ opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
   opi_builder_def_type(bldr, "Array"    , opi_array_type    ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Table"    , opi_table_type    ); cod_vec_pop(ctx->types);
   opi_builder_def_type(bldr, "Buffer"   , opi_buffer_type   ); cod_vec_pop(ctx->types);
+  opi_builder_def_type(bldr, "TypeObject",opi_type_type     ); cod_vec_pop(ctx->types);
 
   opi_builder_def_trait(bldr, "Add", opi_trait_add); cod_vec_pop(ctx->traits);
   opi_builder_def_trait(bldr, "Sub", opi_trait_sub); cod_vec_pop(ctx->traits);
@@ -734,11 +735,9 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       }
 
       const char *varname = opi_builder_assoc(bldr, name0 ? name0 : ast->var);
+      if (name0) free(name0);
       if (!varname)
         return build_error();
-
-      if (name0)
-        free(name0);
 
       int var_idx = cod_strvec_rfind(&bldr->decls, varname);
       if (var_idx >= 0) {
@@ -1048,10 +1047,16 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
         return build_error();
       }
 
-      // declare constructor
-      opi_builder_push_decl(bldr, ast->strct.name);
-      OpiIr *ctor_ir = opi_ir_const(ctor);
-      return opi_ir_let(&ctor_ir, 1, NULL);
+      /*opi_builder_push_decl(bldr, ast->strct.name);*/
+      /*OpiIr *ctor_ir = opi_ir_const(ctor);*/
+      /*return opi_ir_let(&ctor_ir, 1, NULL);*/
+
+      // declare constructor and type-object
+      opi_builder_def_const(bldr, ast->strct.name, ctor);
+      char buf[strlen(ast->strct.name) + 1 + strlen("type") + 1];
+      sprintf(buf, "%s.type", ast->strct.name);
+      opi_builder_def_const(bldr, buf, opi_type_get_type_object(type));
+      return opi_ir_const(opi_nil);
     }
 
     case OPI_AST_CTOR:

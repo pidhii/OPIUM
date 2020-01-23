@@ -1467,9 +1467,11 @@ OPI_DEF(abs_,
 
 static
 OPI_DEF(Table_insert,
-  opi_arg(tab, opi_table_type)
   opi_arg(x, opi_pair_type)
+  opi_arg(tab, opi_table_type)
   opi_t err;
+  if (tab->rc != 1)
+    opi_warning("copy table\n");
   opi_t ret = tab->rc > 1 ? opi_table_copy(tab) : tab;
   if (!opi_table_insert(ret, x, TRUE, &err)) {
     opi_drop(ret);

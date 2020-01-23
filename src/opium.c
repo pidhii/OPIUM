@@ -93,10 +93,15 @@ opi_cleanup(void)
 }
 
 /******************************************************************************/
+struct OpiTypeObject_s {
+  OpiHeader header;
+  opi_type_t val;
+};
+
 struct OpiType_s {
   char name[OPI_TYPE_NAME_MAX + 1];
 
-  OpiHeader type_object; // used to map types in generics;
+  OpiTypeObject type_object;
 
   void (*delete_cell)(opi_type_t ty, opi_t cell);
 
@@ -140,26 +145,29 @@ static int
 default_equal(opi_type_t ty, opi_t x, opi_t y)
 { return ty->eq(ty, x, y); }
 
+static OpiType type_type = {
+  .name = "TypeObject",
+  .delete_cell = default_destroy_cell,
+  .data = NULL,
+  .delete_data = default_destroy_data,
+  .display = default_display,
+  .write = default_write,
+  .eq = default_eq,
+  .equal = default_equal,
+  .hash = NULL,
+  .fields = NULL,
+  .is_struct = FALSE,
+};
+opi_type_t opi_type_type = &type_type;
+
 static void
 type_init(OpiType *ty, const char *name)
 {
-  static OpiType type_type = {
-    .name = "TypeObject",
-    .delete_cell = default_destroy_cell,
-    .data = NULL,
-    .delete_data = default_destroy_data,
-    .display = default_display,
-    .write = default_write,
-    .eq = default_eq,
-    .equal = default_equal,
-    .hash = NULL,
-    .fields = NULL,
-    .is_struct = FALSE,
-  };
-
   opi_assert(strlen(name) <= OPI_TYPE_NAME_MAX);
   strcpy(ty->name, name);
-  opi_init_cell(&ty->type_object, &type_type);
+  ty->type_object.val = ty;
+  opi_init_cell(&ty->type_object, opi_type_type);
+  opi_inc_rc(OPI(&ty->type_object));
   ty->delete_cell = default_destroy_cell;
   ty->data = NULL;
   ty->delete_data = default_destroy_data;
@@ -307,6 +315,10 @@ opi_delete(opi_t x)
 size_t
 opi_hashof(opi_t x)
 { return x->type->hash(x->type, x); }
+
+opi_t
+opi_type_get_type_object(const opi_type_t type)
+{ return OPI(&type->type_object); }
 
 /******************************************************************************/
 typedef struct Impl_s {
@@ -527,7 +539,7 @@ opi_trait_impl(OpiTrait *trait, opi_type_t type, char *const nam[], opi_t f[],
   if (!impl_is_full_with(trait->default_impl, nam, n))
     return OPI_ERR;
 
-  opi_t tyobj = &type->type_object;
+  opi_t tyobj = opi_type_get_type_object(type);
   size_t hash = (size_t)type;
 
   int offs[n];
@@ -591,7 +603,7 @@ opi_trait_find_cond_impl(OpiTrait *trait, opi_type_t type)
 opi_t
 opi_trait_get_impl(OpiTrait *trait, opi_type_t type, int metoffs)
 {
-  opi_t tyobj = &type->type_object;
+  opi_t tyobj = opi_type_get_type_object(type);
   OpiHashMapElt *elt;
   size_t hash = (size_t)type;
 

@@ -250,6 +250,11 @@ opi_location_show(OpiLocation *loc, FILE *out);
  */
 #define OPI_TYPE_NAME_MAX 255
 
+OPI_EXTERN
+opi_type_t opi_type_type;
+
+typedef struct OpiTypeObject_s OpiTypeObject;
+
 opi_type_t
 opi_type_new(const char *name);
 
@@ -307,6 +312,9 @@ opi_type_set_is_struct(opi_type_t type, int is_struct);
 
 int
 opi_type_is_struct(const opi_type_t type);
+
+opi_t
+opi_type_get_type_object(const opi_type_t type);
 
 /* ==========================================================================
  * Trait
