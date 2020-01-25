@@ -265,6 +265,7 @@ generic_hash_handle(opi_type_t type, opi_t x)
     return ret;
   } else {
     size_t ret = OPI_NUM(hash)->val;
+    opi_drop(hash);
     opi_dec_rc(x);
     return ret;
   }

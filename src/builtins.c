@@ -736,6 +736,15 @@ OPI_DEF(power,
   return ret;
 )
 
+static opi_t
+addressof(void)
+{
+  opi_t x = opi_pop();
+  opi_t ret = opi_num_new((uintptr_t)x);
+  opi_drop(x);
+  return ret;
+}
+
 void
 opi_builtins(OpiBuilder *bldr)
 {
@@ -781,4 +790,6 @@ opi_builtins(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "exit", opi_fn_new(exit_, 1));
 
   opi_builder_def_const(bldr, "__builtin_sr", opi_fn_new(search_replace, 4));
+
+  opi_builder_def_const(bldr, "addressof", opi_fn_new(addressof, 1));
 }

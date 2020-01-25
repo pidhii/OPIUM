@@ -58,7 +58,7 @@ syn keyword Function force
 syn keyword Function system shell
 syn keyword Function loadfile
 syn keyword Function exit
-syn keyword Function next
+syn keyword Function addressof
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Base:
