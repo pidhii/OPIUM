@@ -182,7 +182,7 @@ start_token_t opi_start_token;
 
 %type<binds> binds recbinds
 %type<pattvec> param
-%type<args> arg arg_aux
+%type<args> arg arg_aux list_aux
 %type<ast> block block_stmnt block_stmnt_only block_expr
 %type<ptrvec> block_aux
 %type<ast> fn_aux vafn_aux anyfn_aux
@@ -191,7 +191,7 @@ start_token_t opi_start_token;
 %type<str> Symbol Type SymbolOrType
 %type<pattern> pattern atomicPattern
 %type<patterns> patterns
-%type<pattvec> list_pattern_aux
+%type<pattvec> list_pattern_aux coma_list_pattern_aux
 %type<strvec> fields fields_aux
 %type<ast> string shell qr sr
 %type<fmt> str_aux shell_aux qr_aux
@@ -273,14 +273,14 @@ Atom
   }
   | '(' Type ')' { $$ = opi_ast_var($2); free($2); }
   | '(' Expr ')' { $$ = $2; }
-  | '[' arg_aux ']' {
+  | '[' list_aux ']' {
     opi_assert($2.iref < 0);
     $$ = opi_ast_apply(opi_ast_var("List"), (OpiAst**)$2.ptrvec->data, $2.ptrvec->size);
     $$->apply.loc = location(&@$);
     cod_ptrvec_destroy($2.ptrvec, NULL);
     free($2.ptrvec);
   }
-  | '[' '|' arg_aux '|' ']' {
+  | '[' '|' list_aux '|' ']' {
     opi_assert($3.iref < 0);
     $$ = opi_ast_apply(opi_ast_var("Array"), (OpiAst**)$3.ptrvec->data, $3.ptrvec->size);
     $$->apply.loc = location(&@$);
@@ -684,7 +684,7 @@ atomicPattern
     free($3);
     free($1);
   }
-  | '[' list_pattern_aux ']' {
+  | '[' coma_list_pattern_aux ']' {
     OpiAstPattern *pat = opi_ast_pattern_new_ident("");
     for (int i = $2.len - 1; i >= 0; --i) {
       char *fields[] = { "car", "cdr" };
@@ -743,6 +743,11 @@ pattern
 list_pattern_aux
   : atomicPattern { cod_vec_init($$); cod_vec_push($$, $1); }
   | list_pattern_aux atomicPattern { $$ = $1; cod_vec_push($$, $2); }
+;
+
+coma_list_pattern_aux
+  : atomicPattern { cod_vec_init($$); cod_vec_push($$, $1); }
+  | coma_list_pattern_aux ',' atomicPattern { $$ = $1; cod_vec_push($$, $3); }
 ;
 
 patterns
@@ -817,6 +822,19 @@ arg_aux
     $$.iref = $$.ptrvec->size;
     cod_ptrvec_push($$.ptrvec, opi_ast_var($3), NULL);
     free($3);
+  }
+;
+
+list_aux
+  : Atom {
+    $$.ptrvec = malloc(sizeof(struct cod_ptrvec));
+    $$.iref = -1;
+    cod_ptrvec_init($$.ptrvec);
+    cod_ptrvec_push($$.ptrvec, $1, NULL);
+  }
+  | list_aux ',' Atom {
+    $$ = $1;
+    cod_ptrvec_push($$.ptrvec, $3, NULL);
   }
 ;
 
