@@ -88,6 +88,7 @@ opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
   opi_builder_def_trait(bldr, "Sub", opi_trait_sub); cod_vec_pop(ctx->traits);
   opi_builder_def_trait(bldr, "Mul", opi_trait_mul); cod_vec_pop(ctx->traits);
   opi_builder_def_trait(bldr, "Div", opi_trait_div); cod_vec_pop(ctx->traits);
+  opi_builder_def_trait(bldr, "Hash", opi_trait_hash); cod_vec_pop(ctx->traits);
 }
 
 void
@@ -1035,6 +1036,7 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       opi_type_set_delete_cell(type, opi_struct_delete);
       opi_type_set_write(type, write_struct);
       opi_type_set_is_struct(type, TRUE);
+      
 
       // create constructor
       opi_t ctor = opi_fn_new(make_struct, ast->strct.nfields);

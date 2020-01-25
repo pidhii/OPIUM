@@ -101,7 +101,7 @@ struct OpiTypeObject_s {
 struct OpiType_s {
   char name[OPI_TYPE_NAME_MAX + 1];
 
-  OpiTypeObject type_object;
+  OpiTypeObject *type_object;
 
   void (*delete_cell)(opi_type_t ty, opi_t cell);
 
@@ -119,6 +119,8 @@ struct OpiType_s {
   char **fields;
 
   int is_struct;
+
+  opi_t hash_impl;
 };
 
 static void
@@ -145,9 +147,13 @@ static int
 default_equal(opi_type_t ty, opi_t x, opi_t y)
 { return ty->eq(ty, x, y); }
 
+static void
+type_object_delete(opi_type_t type, opi_t x)
+{ free(x); }
+
 static OpiType type_type = {
   .name = "TypeObject",
-  .delete_cell = default_destroy_cell,
+  .delete_cell = type_object_delete,
   .data = NULL,
   .delete_data = default_destroy_data,
   .display = default_display,
@@ -157,6 +163,7 @@ static OpiType type_type = {
   .hash = NULL,
   .fields = NULL,
   .is_struct = FALSE,
+  .hash_impl = NULL,
 };
 opi_type_t opi_type_type = &type_type;
 
@@ -165,9 +172,10 @@ type_init(OpiType *ty, const char *name)
 {
   opi_assert(strlen(name) <= OPI_TYPE_NAME_MAX);
   strcpy(ty->name, name);
-  ty->type_object.val = ty;
-  opi_init_cell(&ty->type_object, opi_type_type);
-  opi_inc_rc(OPI(&ty->type_object));
+  ty->type_object = malloc(sizeof(OpiTypeObject));
+  ty->type_object->val = ty;
+  opi_init_cell(ty->type_object, opi_type_type);
+  opi_inc_rc(OPI(ty->type_object));
   ty->delete_cell = default_destroy_cell;
   ty->data = NULL;
   ty->delete_data = default_destroy_data;
@@ -179,6 +187,7 @@ type_init(OpiType *ty, const char *name)
   ty->fields = NULL;
   ty->nfields = 0;
   ty->is_struct = FALSE;
+  ty->hash_impl = NULL;
 }
 
 opi_type_t
@@ -201,6 +210,7 @@ opi_type_delete(opi_type_t ty)
     free(ty->fields);
   }
 
+  opi_unref(OPI(ty->type_object));
   free(ty);
 }
 
@@ -239,9 +249,42 @@ void
 opi_type_set_hash(opi_type_t ty, size_t (*fn)(opi_type_t,opi_t))
 { ty->hash = fn; }
 
+static size_t
+generic_hash_handle(opi_type_t type, opi_t x)
+{
+  opi_push(x);
+  opi_inc_rc(x); // DON'T DROP OBJECT!!
+  opi_t hash = opi_apply(type->hash_impl, 1);
+  if (hash->type != opi_num_type) {
+    // use hash of returned value
+    opi_assert(hash->type != opi_undefined_type);
+    opi_assert(opi_type_is_hashable(hash->type));
+    size_t ret = opi_hashof(hash);
+    opi_drop(hash);
+    opi_dec_rc(x);
+    return ret;
+  } else {
+    size_t ret = OPI_NUM(hash)->val;
+    opi_dec_rc(x);
+    return ret;
+  }
+}
+
 int
 opi_type_is_hashable(opi_type_t ty)
-{ return !!ty->hash; }
+{
+  if (ty->hash) {
+    return TRUE;
+  } else {
+    opi_t gen = opi_trait_get_impl(opi_trait_hash, ty, 0);
+    if (gen == NULL)
+      return FALSE;
+    // use generic handle
+    ty->hash_impl = gen;
+    opi_type_set_hash(ty, generic_hash_handle);
+    return TRUE;
+  }
+}
 
 void
 opi_type_set_fields(opi_type_t ty, size_t offs, char **fields, size_t n)
@@ -318,7 +361,7 @@ opi_hashof(opi_t x)
 
 opi_t
 opi_type_get_type_object(const opi_type_t type)
-{ return OPI(&type->type_object); }
+{ return OPI(type->type_object); }
 
 /******************************************************************************/
 typedef struct Impl_s {
@@ -629,14 +672,16 @@ opi_trait_get_generic(OpiTrait *trait, int metoffs)
   return trait->generics[metoffs];
 }
 
-OpiTrait
-*opi_trait_add, *opi_trait_sub, *opi_trait_mul, *opi_trait_div;
+OpiTrait *opi_trait_add, *opi_trait_sub, *opi_trait_mul, *opi_trait_div;
 
-opi_t
-opi_generic_add, opi_generic_radd,
-opi_generic_sub, opi_generic_rsub,
-opi_generic_mul, opi_generic_rmul,
-opi_generic_div, opi_generic_rdiv;
+opi_t opi_generic_add, opi_generic_radd,
+      opi_generic_sub, opi_generic_rsub,
+      opi_generic_mul, opi_generic_rmul,
+      opi_generic_div, opi_generic_rdiv;
+
+OpiTrait *opi_trait_hash;
+
+opi_t opi_generic_hash;
 
 
 void
@@ -657,6 +702,9 @@ opi_traits_init(void)
   opi_trait_div = opi_trait_new((char*[]){ "div", "rdiv" }, 2);
   opi_generic_div = opi_trait_get_generic(opi_trait_div, 0);
   opi_generic_rdiv = opi_trait_get_generic(opi_trait_div, 1);
+
+  opi_trait_hash = opi_trait_new((char*[]){ "hash" }, 1);
+  opi_generic_hash = opi_trait_get_generic(opi_trait_hash, 0);
 }
 
 void
@@ -666,6 +714,7 @@ opi_traits_cleanup(void)
   opi_trait_delete(opi_trait_sub);
   opi_trait_delete(opi_trait_mul);
   opi_trait_delete(opi_trait_div);
+  opi_trait_delete(opi_trait_hash);
 }
 
 /******************************************************************************/

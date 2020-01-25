@@ -409,6 +409,12 @@ opi_t opi_generic_add, opi_generic_radd,
       opi_generic_mul, opi_generic_rmul,
       opi_generic_div, opi_generic_rdiv;
 
+OPI_EXTERN
+OpiTrait *opi_trait_hash;
+
+OPI_EXTERN
+opi_t opi_generic_hash;
+
 void
 opi_traits_init(void);
 
