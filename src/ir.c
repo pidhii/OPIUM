@@ -485,6 +485,19 @@ opi_struct_delete(opi_type_t type, opi_t x)
   free(s);
 }
 
+static int
+opi_struct_equal(opi_type_t type, opi_t x, opi_t y)
+{
+  size_t nfields = opi_type_get_nfields(type);
+  opi_t *fx = ((struct opi_struct*)x)->data;
+  opi_t *fy = ((struct opi_struct*)y)->data;
+  for (size_t i = 0; i < nfields; ++i) {
+    if (!opi_equal(fx[i], fy[i]))
+      return FALSE;
+  }
+  return TRUE;
+}
+
 static opi_t
 make_struct(void)
 {
@@ -1034,6 +1047,7 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       size_t offset = offsetof(struct opi_struct, data);
       opi_type_set_fields(type, offset, ast->strct.fields, ast->strct.nfields);
       opi_type_set_delete_cell(type, opi_struct_delete);
+      opi_type_set_equal(type, opi_struct_equal);
       opi_type_set_write(type, write_struct);
       opi_type_set_is_struct(type, TRUE);
       
