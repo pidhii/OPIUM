@@ -136,6 +136,14 @@ opi_vm(OpiBytecode *bc)
         break;
       }
 
+      case OPI_OPC_APPLYI:
+      {
+        opi_t fn = r[OPI_APPLY_REG_FN(ip)];
+        size_t nargs = OPI_APPLY_ARG_NARGS(ip);
+        r[OPI_APPLY_REG_OUT(ip)] = opi_fn_apply(fn, nargs);
+        break;
+      }
+
       case OPI_OPC_APPLYTC:
       {
         opi_t fn = r[OPI_APPLY_REG_FN(ip)];

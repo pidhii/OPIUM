@@ -320,6 +320,17 @@ opi_insn_apply(int ret, int fn, size_t nargs, int tc)
 }
 
 OpiInsn*
+opi_insn_applyi(int ret, int fn, size_t nargs)
+{
+  OpiInsn *insn = malloc(sizeof(OpiInsn));
+  insn->opc = OPI_OPC_APPLYI;
+  OPI_APPLY_REG_OUT(insn) = ret;
+  OPI_APPLY_REG_FN(insn) = fn;
+  OPI_APPLY_ARG_NARGS(insn) = nargs;
+  return insn;
+}
+
+OpiInsn*
 opi_insn_ret(int val)
 {
   OpiInsn *insn = malloc(sizeof(OpiInsn));
@@ -612,6 +623,7 @@ opi_insn_is_using(OpiInsn *insn, int vid)
 
     case OPI_OPC_APPLY:
     case OPI_OPC_APPLYTC:
+    case OPI_OPC_APPLYI:
       return (int)OPI_APPLY_REG_FN(insn) == vid;
 
     case OPI_OPC_RET:
@@ -669,6 +681,7 @@ opi_insn_is_killing(OpiInsn *insn, int vid)
     case OPI_OPC_PARAM:
     case OPI_OPC_POP:
     case OPI_OPC_APPLY:
+    case OPI_OPC_APPLYI:
     case OPI_OPC_APPLYTC:
     case OPI_OPC_IF:
     case OPI_OPC_JMP:
@@ -751,6 +764,7 @@ opi_insn_is_creating(OpiInsn *insn, int vid)
 
     case OPI_OPC_APPLY:
     case OPI_OPC_APPLYTC:
+    case OPI_OPC_APPLYI:
       return (int)OPI_APPLY_REG_OUT(insn) == vid;
 
     case OPI_OPC_CONST:
@@ -841,6 +855,17 @@ bytecode_apply_arr(OpiBytecode *bc, int tc, int fn, size_t nargs, const int *arg
   return ret;
 }
 
+static int
+bytecode_applyi_arr(OpiBytecode *bc, int fn, size_t nargs, const int *args)
+{
+  for (int i = nargs - 1; i >= 0; --i)
+    opi_bytecode_push(bc, args[i]);
+
+  int ret = opi_bytecode_new_val(bc, OPI_VAL_LOCAL);
+  opi_bytecode_write(bc, opi_insn_applyi(ret, fn, nargs));
+  return ret;
+}
+
 int
 opi_bytecode_apply_arr(OpiBytecode *bc, int fn, size_t nargs, const int *args)
 { return bytecode_apply_arr(bc, FALSE, fn, nargs, args); }
@@ -848,6 +873,10 @@ opi_bytecode_apply_arr(OpiBytecode *bc, int fn, size_t nargs, const int *args)
 int
 opi_bytecode_apply_tailcall_arr(OpiBytecode *bc, int fn, size_t nargs, const int *args)
 { return bytecode_apply_arr(bc, TRUE, fn, nargs, args); }
+
+int
+opi_bytecode_applyi_arr(OpiBytecode *bc, int fn, size_t nargs, const int *args)
+{ return bytecode_applyi_arr(bc, fn, nargs, args); }
 
 int
 opi_bytecode_ldcap(OpiBytecode *bc, size_t idx)

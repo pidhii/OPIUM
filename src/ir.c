@@ -1050,7 +1050,6 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       opi_type_set_equal(type, opi_struct_equal);
       opi_type_set_write(type, write_struct);
       opi_type_set_is_struct(type, TRUE);
-      
 
       // create constructor
       opi_t ctor = opi_fn_new(make_struct, ast->strct.nfields);

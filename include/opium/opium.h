@@ -1489,6 +1489,7 @@ typedef enum OpiOpc_e {
 
   OPI_OPC_APPLY,
   OPI_OPC_APPLYTC,
+  OPI_OPC_APPLYI,
 #define OPI_APPLY_REG_OUT(insn) (insn)->reg[0]
 #define OPI_APPLY_REG_FN(insn) (insn)->reg[1]
 #define OPI_APPLY_ARG_NARGS(insn) (insn)->reg[2]
@@ -1651,6 +1652,9 @@ opi_insn_const(int ret, opi_t cell);
 
 OpiInsn*
 opi_insn_apply(int ret, int fn, size_t nargs, int tc);
+
+OpiInsn*
+opi_insn_applyi(int ret, int fn, size_t nargs);
 
 OpiInsn*
 opi_insn_ret(int val);
@@ -1826,6 +1830,9 @@ opi_bytecode_apply_arr(OpiBytecode *bc, int fn, size_t nargs, const int *args);
 
 int
 opi_bytecode_apply_tailcall_arr(OpiBytecode *bc, int fn, size_t nargs, const int *args);
+
+int
+opi_bytecode_applyi_arr(OpiBytecode *bc, int fn, size_t nargs, const int *args);
 
 void
 opi_bytecode_ret(OpiBytecode *bc, int val);

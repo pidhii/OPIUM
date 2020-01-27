@@ -193,6 +193,27 @@ emit_match_onelevel_with_then(OpiIr *then, OpiIr *els, int expr,
   return phi;
 }
 
+static void
+emit_error_test(OpiBytecode *bc, int ret, OpiLocation *loc)
+{
+  // if
+  int test = opi_bytecode_testty(bc, ret, opi_undefined_type);
+  OpiIf iff;
+  opi_bytecode_if(bc, test, &iff);
+  // then
+  if (loc) {
+    opi_t trace_fn = opi_fn_new(trace, 1);
+    opi_fn_set_data(trace_fn, opi_location_copy(loc), trace_delete);
+    int trace_var = opi_bytecode_const(bc, trace_fn);
+    opi_bytecode_ret(bc, opi_bytecode_apply_arr(bc, trace_var, 1, &ret));
+  } else {
+    opi_bytecode_ret(bc, ret);
+  }
+  // else
+  opi_bytecode_if_else(bc, &iff);
+  opi_bytecode_if_end(bc, &iff);
+}
+
 static int
 emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
 {
@@ -209,35 +230,36 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
 
     case OPI_IR_APPLY:
     {
+      /* Evaluate arguments and function */
       int args[ir->apply.nargs];
       for (size_t i = 0; i < ir->apply.nargs; ++i)
         args[i] = emit(ir->apply.args[i], bc, stack, FALSE);
       int fn = emit(ir->apply.fn, bc, stack, FALSE);
 
+      /* Try optimizations for constant functions */
+      if (bc->vinfo[fn].c) {
+        opi_t fn_val = bc->vinfo[fn].c;
+        if (opi_unlikely(fn_val->type != opi_fn_type)) {
+          opi_error("[ir:emit:apply] not a function\n");
+          abort();
+        }
+        /* Try instant call */
+        if (opi_test_arity(opi_fn_get_arity(fn_val), ir->apply.nargs)) {
+          int ret = opi_bytecode_applyi_arr(bc, fn, ir->apply.nargs, args);
+          if (ir->apply.eflag)
+            emit_error_test(bc, ret, ir->apply.loc);
+          return ret;
+        }
+      }
+
+      /* Dynamic dispatch */
       if (tc && opi_bytecode_value_is_global(bc, fn)) {
+        /* Tail Call */
         return opi_bytecode_apply_tailcall_arr(bc, fn, ir->apply.nargs, args);
       } else {
-
         int ret = opi_bytecode_apply_arr(bc, fn, ir->apply.nargs, args);
-        if (ir->apply.eflag) {
-          // Implicit error-test:
-          // if
-          int test = opi_bytecode_testty(bc, ret, opi_undefined_type);
-          OpiIf iff;
-          opi_bytecode_if(bc, test, &iff);
-          // then
-          if (ir->apply.loc) {
-            opi_t trace_fn = opi_fn_new(trace, 1);
-            opi_fn_set_data(trace_fn, opi_location_copy(ir->apply.loc), trace_delete);
-            int trace_var = opi_bytecode_const(bc, trace_fn);
-            opi_bytecode_ret(bc, opi_bytecode_apply_arr(bc, trace_var, 1, &ret));
-          } else {
-            opi_bytecode_ret(bc, ret);
-          }
-          // else
-          opi_bytecode_if_else(bc, &iff);
-          opi_bytecode_if_end(bc, &iff);
-        }
+        if (ir->apply.eflag)
+          emit_error_test(bc, ret, ir->apply.loc);
         return ret;
       }
     }
