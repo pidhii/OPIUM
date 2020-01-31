@@ -499,6 +499,7 @@ Expr
       $$ = $1;
     } else {
       $$ = opi_ast_apply($1, &$3, 1);
+      $$->apply.loc = location(&@$);
     }
   }
   | Expr RPIPE Expr {
@@ -508,15 +509,15 @@ Expr
     } else {
       $$ = opi_ast_apply($3, &$1, 1);
     }
+    if ($$->apply.loc)
+      opi_location_delete($$->apply.loc);
+    $$->apply.loc = location(&@$);
   }
   | Type '$' Expr { $$ = opi_ast_apply(opi_ast_var($1), &$3, 1); free($1); }
   | Expr OR Expr { $$ = opi_ast_eor($1, $3, " "); }
   | Expr OR SYMBOL RARROW Expr %prec THEN { $$ = opi_ast_eor($1, $5, $3); free($3); }
   | table
-  /*| Symbol LARROW Expr {*/
-    /*$$ = opi_ast_setref($1, $3);*/
-    /*free($1);*/
-  /*}*/
+  | Symbol LARROW Expr { $$ = opi_ast_setref($1, $3); free($1); }
   | LET pattern LARROW Expr IN Expr {
     OpiAst *fn = opi_ast_fn_new_with_patterns(&$2, 1, $6);
     if ($4->tag == OPI_AST_APPLY) {

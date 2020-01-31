@@ -153,10 +153,17 @@ opi_ast_delete(OpiAst *node)
   free(node);
 }
 
+static OpiAst*
+ast_new(void)
+{
+  OpiAst *ast = malloc(sizeof(OpiAst));
+  return ast;
+}
+
 OpiAst*
 opi_ast_const(opi_t x)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_CONST;
   opi_inc_rc(node->cnst = x);
   return node;
@@ -165,7 +172,7 @@ opi_ast_const(opi_t x)
 OpiAst*
 opi_ast_var(const char *name)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_VAR;
   node->var = strdup(name);
   return node;
@@ -174,7 +181,7 @@ opi_ast_var(const char *name)
 OpiAst*
 opi_ast_use(const char *old, const char *new)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_USE;
   node->use.old = strdup(old);
   node->use.nw = strdup(new);
@@ -184,7 +191,7 @@ opi_ast_use(const char *old, const char *new)
 OpiAst*
 opi_ast_apply(OpiAst *fn, OpiAst **args, size_t nargs)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_APPLY;
   node->apply.fn = fn;
   node->apply.args = malloc(sizeof(OpiAst*) * nargs);
@@ -198,15 +205,14 @@ opi_ast_apply(OpiAst *fn, OpiAst **args, size_t nargs)
 void
 opi_ast_append_arg(OpiAst *node, OpiAst *arg)
 {
-  node->apply.args =
-    realloc(node->apply.args, sizeof(OpiAst*) * ++node->apply.nargs);
+  node->apply.args = realloc(node->apply.args, sizeof(OpiAst*) * ++node->apply.nargs);
   node->apply.args[node->apply.nargs - 1] = arg;
 }
 
 OpiAst*
 opi_ast_fn(char **args, size_t nargs, OpiAst *body)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_FN;
   node->fn.args = malloc(sizeof(char*) * nargs);
   for (size_t i = 0; i < nargs; ++i)
@@ -263,7 +269,7 @@ opi_ast_fn_new_with_patterns(OpiAstPattern **args, size_t nargs, OpiAst *body)
 OpiAst*
 opi_ast_let(char **vars, OpiAst **vals, size_t n, OpiAst *body)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_LET;
   node->let.vars = malloc(sizeof(char*) * n);
   for (size_t i = 0; i < n; ++i)
@@ -278,7 +284,7 @@ opi_ast_let(char **vars, OpiAst **vals, size_t n, OpiAst *body)
 OpiAst*
 opi_ast_if(OpiAst *test, OpiAst *then, OpiAst *els)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_IF;
   node->iff.test = test;
   node->iff.then = then;
@@ -289,7 +295,7 @@ opi_ast_if(OpiAst *test, OpiAst *then, OpiAst *els)
 OpiAst*
 opi_ast_fix(char **vars, OpiAst **lams, size_t n, OpiAst *body)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_FIX;
   node->let.vars = malloc(sizeof(char*) * n);
   for (size_t i = 0; i < n; ++i)
@@ -307,7 +313,7 @@ opi_ast_fix(char **vars, OpiAst **lams, size_t n, OpiAst *body)
 OpiAst*
 opi_ast_block(OpiAst **exprs, size_t n)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_BLOCK;
   node->block.exprs = malloc(sizeof(OpiAst*) *  n);
   memcpy(node->block.exprs, exprs, sizeof(OpiAst*) * n);
@@ -354,7 +360,7 @@ opi_ast_block_append(OpiAst *block, OpiAst *node)
 OpiAst*
 opi_ast_load(const char *path)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_LOAD;
   node->load = strdup(path);
   return node;
@@ -414,7 +420,7 @@ opi_ast_pattern_delete(OpiAstPattern *pattern)
 OpiAst*
 opi_ast_match(OpiAstPattern *pattern, OpiAst *expr, OpiAst *then, OpiAst *els)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_MATCH;
   node->match.pattern = pattern;
   node->match.expr = expr;
@@ -437,7 +443,7 @@ opi_ast_match_new_simple(const char *type, char **vars, char **fields, size_t n,
 OpiAst*
 opi_ast_struct(const char *typename, char** fields, size_t nfields)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_STRUCT;
   node->strct.name = strdup(typename);
   node->strct.fields = malloc(sizeof(char*) * nfields);
@@ -450,7 +456,7 @@ opi_ast_struct(const char *typename, char** fields, size_t nfields)
 OpiAst*
 opi_ast_trait(const char *name, char *const f_nams[], OpiAst *fs[], int n)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_TRAIT;
   node->trait.name = strdup(name);
   node->trait.f_nams = malloc(sizeof(char*) * n);
@@ -468,7 +474,7 @@ OpiAst*
 opi_ast_impl(const char *trait, const char *target, char *const f_nams[],
     OpiAst *fs[], int nfs)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_IMPL;
   node->impl.trait = strdup(trait);
   node->impl.target = strdup(target);
@@ -497,7 +503,7 @@ opi_ast_or(OpiAst *x, OpiAst *y)
 OpiAst*
 opi_ast_return(OpiAst *val)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_RETURN;
   node->ret = val;
   return node;
@@ -543,7 +549,7 @@ opi_ast_when(OpiAst *test_expr,
 OpiAst*
 opi_ast_binop(int opc, OpiAst *lhs, OpiAst *rhs)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_BINOP;
   node->binop.opc = opc;
   node->binop.lhs = lhs;
@@ -555,7 +561,7 @@ opi_ast_binop(int opc, OpiAst *lhs, OpiAst *rhs)
 OpiAst*
 opi_ast_isof(OpiAst *expr, const char *of)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_ISOF;
   node->isof.expr = expr;
   node->isof.of = strdup(of);
@@ -566,7 +572,7 @@ OpiAst*
 opi_ast_ctor(const char *name, char* const fldnams[], OpiAst *flds[], int nflds,
     OpiAst *src)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_CTOR;
   node->ctor.name = strdup(name);
   node->ctor.fldnams = malloc(sizeof(char*) * nflds);
@@ -583,7 +589,7 @@ opi_ast_ctor(const char *name, char* const fldnams[], OpiAst *flds[], int nflds,
 OpiAst*
 opi_ast_setref(const char *var, OpiAst *val)
 {
-  OpiAst *node = malloc(sizeof(OpiAst));
+  OpiAst *node = ast_new();
   node->tag = OPI_AST_SETREF;
   node->setref.var = strdup(var);
   node->setref.val = val;
