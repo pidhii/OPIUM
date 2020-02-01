@@ -1,4 +1,5 @@
 #include "opium/opium.h"
+#include "opium/lambda.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -832,7 +833,34 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
         opi_builder_pop_decl(&fn_bldr);
 
       opi_builder_destroy(&fn_bldr);
-      return opi_ir_fn(caps, ncaps, ast->fn.nargs, body);
+
+      if (ncaps > 0) {
+        // runtime lambda constructor
+        return opi_ir_fn(caps, ncaps, ast->fn.nargs, body);
+
+      } else /* ncaps == 0 */ {
+        // instant lambda constructor (i.e. create it NOW)
+
+        // emit bytecode
+        opi_debug("emit instant fn\n");
+        OpiBytecode *bc = opi_emit_free_fn_body(body, ast->fn.nargs);
+        opi_ir_delete(body);
+
+        // create lambda
+        OpiLambda *lam = opi_lambda_allocate(0);
+        lam->bc = bc;
+        lam->ncaps = 0;
+        lam->scp = NULL;
+        opi_t fn = opi_fn_new(opi_lambda_fn, ast->fn.nargs);
+        void delete(OpiFn *fn) {
+          OpiLambda* lam = fn->data;
+          opi_bytecode_delete(lam->bc);
+          opi_lambda_delete(fn);
+        }
+        opi_fn_set_data(fn, lam, delete);
+        opi_context_drain_bytecode(bldr->ctx, bc);
+        return opi_ir_const(fn);
+      }
     }
 
     case OPI_AST_LET:

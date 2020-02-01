@@ -38,6 +38,34 @@ stack_pop(struct stack *stack, size_t n)
 static int
 emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc);
 
+OpiBytecode*
+opi_emit_free_fn_body(OpiIr *ir, int nargs)
+{
+  // create body
+  OpiBytecode *body = opi_bytecode();
+
+  // create separate stack
+  struct stack body_stack;
+  stack_init(&body_stack);
+
+  // declare arguments
+  for (int i = nargs - 1; i >= 0; --i) {
+    int val = opi_bytecode_param(body, i + 1);
+    stack_push(&body_stack, val);
+  }
+  // remove arguments from the stack
+  if (nargs > 0)
+    opi_bytecode_pop(body, nargs);
+
+  int ret = emit(ir, body, &body_stack, TRUE);
+  opi_bytecode_ret(body, ret);
+  stack_destroy(&body_stack);
+
+  opi_bytecode_finalize(body);
+
+  return body;
+}
+
 static int
 emit_fn(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int cell)
 {
@@ -63,7 +91,7 @@ emit_fn(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int cell)
   }
 
   // declare arguments
-  size_t nargs = ir->fn.nargs;
+  int nargs = ir->fn.nargs;
   for (int i = nargs - 1; i >= 0; --i) {
     int val = opi_bytecode_param(body, i + 1);
     stack_push(&body_stack, val);
@@ -313,8 +341,9 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
         }
 
         opi_bytecode_begscp(bc, ir->let.n);
-        for (size_t i = 0; i < ir->let.n; ++i)
+        for (size_t i = 0; i < ir->let.n; ++i) {
           emit_fn(ir->let.vals[i], bc, stack, vals[i]);
+        }
         opi_bytecode_endscp(bc, vals, ir->let.n);
       }
 

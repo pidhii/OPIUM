@@ -1436,6 +1436,9 @@ opi_ir_delete(OpiIr *node);
 void
 opi_ir_emit(OpiIr *ir, OpiBytecode *bc);
 
+OpiBytecode*
+opi_emit_free_fn_body(OpiIr *ir, int nargs);
+
 OpiIr*
 opi_ir_const(opi_t x);
 
