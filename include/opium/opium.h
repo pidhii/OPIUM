@@ -1694,9 +1694,6 @@ int
 opi_insn_is_killing(OpiInsn *insn, int vid);
 
 int
-opi_insn_is_creating(OpiInsn *insn, int vid);
-
-int
 opi_insn_is_end(OpiInsn *insn);
 
 OpiInsn*
@@ -1807,6 +1804,7 @@ typedef enum OpiValType_e {
 typedef struct OpiValInfo_s {
   OpiValType type;
   opi_t c; // constant value
+  OpiInsn *creatat;
 } OpiValInfo;
 
 struct OpiBytecode_s {
@@ -1865,9 +1863,6 @@ opi_bytecode_prepend(OpiBytecode *bc, OpiInsn *insn);
 
 void
 opi_bytecode_write(OpiBytecode *bc, OpiInsn *insn);
-
-int
-opi_bytecode_while(OpiBytecode *bc, int (*test)(OpiInsn *insn, void *data), void *data);
 
 OpiInsn*
 opi_bytecode_find_creating(OpiBytecode *bc, int vid);

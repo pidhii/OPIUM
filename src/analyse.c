@@ -3,52 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-int
-opi_bytecode_while(OpiBytecode *bc, int (*test)(OpiInsn *insn, void *data), void *data)
-{
-  for (OpiInsn *ip = bc->point; ip; ip = ip->next) {
-    if (!test(ip, data))
-      return TRUE;
-
-    if (ip->opc == OPI_OPC_IF) {
-      bc->point = ip->next;
-      int then_ret = opi_bytecode_while(bc, test, data);
-
-      bc->point = ((OpiInsn*)OPI_IF_ARG_ELSE(ip))->next;
-      int else_ret = opi_bytecode_while(bc, test, data);
-
-      return then_ret || else_ret;
-    }
-
-    if (ip->opc == OPI_OPC_JMP) {
-      ip = OPI_JMP_ARG_TO(ip);
-      continue;
-    }
-
-    if (opi_insn_is_end(ip))
-      break;
-  }
-
-  test(NULL, data);
-  return FALSE;
-}
-
-OpiInsn*
-opi_bytecode_find_creating(OpiBytecode *bc, int vid)
-{
-  OpiInsn *ret = NULL;
-  int test(OpiInsn *insn, void *data) {
-    if (insn && opi_insn_is_creating(insn, vid)) {
-      ret = insn;
-      return FALSE;
-    }
-    return TRUE;
-  }
-  bc->point = bc->head;
-  opi_bytecode_while(bc, test, NULL);
-  return ret;
-}
-
 struct trace { OpiInsn *start, *end; };
 
 static OpiInsn*
@@ -175,7 +129,7 @@ kill_value_aux(OpiBytecode *bc, OpiInsn *begin, OpiInsn *end, int vid)
 static void
 kill_value_local(OpiBytecode *bc, int vid)
 {
-  OpiInsn *start = opi_bytecode_find_creating(bc, vid);
+  OpiInsn *start = bc->vinfo[vid].creatat;
   opi_assert(start);
 
   if (kill_value_aux(bc, start, bc->tail, vid)) {
@@ -190,7 +144,7 @@ kill_value_local(OpiBytecode *bc, int vid)
 static void
 kill_value_phi(OpiBytecode *bc, int vid)
 {
-  OpiInsn *start = opi_bytecode_find_creating(bc, vid);
+  OpiInsn *start = bc->vinfo[vid].creatat;
   opi_assert(start);
   if (!kill_value_aux(bc, start, bc->tail, vid)) {
     opi_error("failed to kill %%%d\n", vid);

@@ -275,21 +275,27 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
         /* Try instant call */
         if (opi_test_arity(opi_fn_get_arity(fn_val), ir->apply.nargs)) {
           if (opi_is_lambda(fn_val)) {
-            /* Inline application. */
-            opi_debug("can inline\n");
-            //int nargs = ir->apply.nargs;
-            //for (int i = nargs - 1; i >= 0; --i)
-              //stack_push(stack, args[i]);
-            //OpiLambda *lam = OPI_FN(fn_val)->data;
-            // ...
-          }
-          //else {
+            static int id = 0;
+            /* Inline. */
+            opi_debug("inlining lambda (%d)\n", id++);
+            int nargs = ir->apply.nargs;
+            size_t s0 = stack->size;
+            for (int i = nargs - 1; i >= 0; --i)
+              stack_push(stack, args[i]);
+            OpiLambda *lam = OPI_FN(fn_val)->data;
+            opi_assert(lam->ncaps == 0);
+            int ret = emit(lam->ir, bc, stack, tc);
+            stack_pop(stack, nargs);
+            opi_assert(stack->size == s0);
+            opi_debug("done inlining (%d)\n", --id);
+            return ret;
+          } else {
             /* Resolve arity staticly. */
             int ret = opi_bytecode_applyi_arr(bc, fn, ir->apply.nargs, args);
             if (ir->apply.eflag)
               emit_error_test(bc, ret, ir->apply.loc);
             return ret;
-          //}
+          }
         }
       }
 
