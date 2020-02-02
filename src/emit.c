@@ -1,4 +1,5 @@
 #include "opium/opium.h"
+#include "opium/lambda.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -273,10 +274,22 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
         }
         /* Try instant call */
         if (opi_test_arity(opi_fn_get_arity(fn_val), ir->apply.nargs)) {
-          int ret = opi_bytecode_applyi_arr(bc, fn, ir->apply.nargs, args);
-          if (ir->apply.eflag)
-            emit_error_test(bc, ret, ir->apply.loc);
-          return ret;
+          if (opi_is_lambda(fn_val)) {
+            /* Inline application. */
+            opi_debug("can inline\n");
+            //int nargs = ir->apply.nargs;
+            //for (int i = nargs - 1; i >= 0; --i)
+              //stack_push(stack, args[i]);
+            //OpiLambda *lam = OPI_FN(fn_val)->data;
+            // ...
+          }
+          //else {
+            /* Resolve arity staticly. */
+            int ret = opi_bytecode_applyi_arr(bc, fn, ir->apply.nargs, args);
+            if (ir->apply.eflag)
+              emit_error_test(bc, ret, ir->apply.loc);
+            return ret;
+          //}
         }
       }
 
@@ -322,13 +335,7 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
         vals[i] = emit(ir->let.vals[i], bc, stack, FALSE);
       for (size_t i = 0; i < ir->let.n; ++i)
         stack_push(stack, vals[i]);
-      if (ir->let.body) {
-        int ret = emit(ir->let.body, bc, stack, tc);
-        stack_pop(stack, ir->let.n);
-        return ret;
-      } else {
-        return opi_bytecode_const(bc, opi_nil);
-      }
+      return opi_bytecode_const(bc, opi_nil);
     }
 
     case OPI_IR_FIX:
@@ -347,13 +354,7 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
         opi_bytecode_endscp(bc, vals, ir->let.n);
       }
 
-      if (ir->let.body) {
-        int ret = emit(ir->let.body, bc, stack, tc);
-        stack_pop(stack, ir->let.n);
-        return ret;
-      } else {
-        return opi_bytecode_const(bc, opi_nil);
-      }
+      return opi_bytecode_const(bc, opi_nil);
     }
 
     case OPI_IR_IF:

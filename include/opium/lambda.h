@@ -44,7 +44,7 @@ opi_rec_scope_set(OpiRecScope *scp, size_t iref, opi_t val,
 void
 opi_scope_dropout(OpiRecScope *scp);
 
-typedef struct OpiLambda_s {
+typedef struct {
   OpiBytecode *bc;
   OpiRecScope *scp;
   size_t ncaps;

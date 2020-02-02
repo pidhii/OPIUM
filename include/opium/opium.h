@@ -1072,7 +1072,7 @@ struct OpiAst_s {
     char *var;
     struct { OpiAst *fn, **args; size_t nargs; char eflag; OpiLocation *loc; } apply;
     struct { char **args; size_t nargs; OpiAst *body; } fn;
-    struct { char **vars; OpiAst **vals; size_t n; OpiAst *body; } let;
+    struct { char **vars; OpiAst **vals; size_t n; } let;
     struct { OpiAst *test, *then, *els; } iff;
     struct { OpiAst **exprs; size_t n; int drop; char *ns; } block;
     char *load;
@@ -1265,21 +1265,31 @@ opi_alist_push(OpiAlist *a, const char *var, const char *map);
 void
 opi_alist_pop(OpiAlist *a, size_t n);
 
+typedef struct {
+  char *name;
+  opi_t c_val;
+} OpiDecl;
+
+static inline void
+opi_decl_destroy(OpiDecl d)
+{
+  free(d.name);
+  if (d.c_val)
+    opi_unref(d.c_val);
+}
+
 struct OpiBuilder_s {
   OpiBuilder *parent;
 
   OpiContext *ctx;
 
   int frame_offset;
-  struct cod_strvec decls;
+  cod_vec(OpiDecl) decls;
   OpiAlist *alist;
 
   struct cod_strvec *srcdirs;
   struct cod_strvec *loaded;
   struct cod_strvec *load_state;
-
-  struct cod_strvec *const_names;
-  struct cod_ptrvec *const_vals;
 
   struct cod_strvec *type_names;
   struct cod_ptrvec *types;
@@ -1322,7 +1332,7 @@ opi_builder_assoc(OpiBuilder *bldr, const char *var);
 const char*
 opi_builder_try_assoc(OpiBuilder *bldr, const char *var);
 
-int
+OpiDecl*
 opi_builder_find_deep(OpiBuilder *bldr, const char *var);
 
 typedef struct OpiScope_s {
@@ -1406,7 +1416,7 @@ struct OpiIr_s {
     size_t var;
     struct { OpiIr *fn, **args; size_t nargs; char eflag; OpiLocation *loc; } apply;
     struct { OpiIr **caps; size_t ncaps, nargs; OpiIr *body; } fn;
-    struct { OpiIr **vals; size_t n; OpiIr *body; } let;
+    struct { OpiIr **vals; size_t n; } let;
     struct { OpiIr *test, *then, *els; } iff;
     struct { OpiIr **exprs; size_t n; int drop; } block;
     struct { OpiIrPattern *pattern; OpiIr *expr, *then, *els; } match;
@@ -1431,7 +1441,49 @@ int
 opi_load(OpiBuilder *bldr, const char *path);
 
 void
-opi_ir_delete(OpiIr *node);
+_opi_ir_delete(OpiIr *node);
+
+static inline void
+opi_ir_ref(OpiIr *ir)
+{
+  if (ir)
+    ir->rc += 1;
+}
+
+static inline void
+opi_ir_ref_arr(OpiIr **arr, size_t n)
+{
+  for (size_t i = 0; i < n; ++i)
+    opi_ir_ref(arr[i]);
+}
+
+static inline void
+opi_ir_drop(OpiIr *ir)
+{
+  if (ir && ir->rc == 0)
+    _opi_ir_delete(ir);
+}
+
+static inline void
+opi_ir_drop_arr(OpiIr **arr, size_t n)
+{
+  for (size_t i = 0; i < n; ++i)
+    opi_ir_drop(arr[i]);
+}
+
+static inline void
+opi_ir_unref(OpiIr *ir)
+{
+  if (ir && --ir->rc == 0)
+    _opi_ir_delete(ir);
+}
+
+static inline void
+opi_ir_unref_arr(OpiIr **arr, size_t n)
+{
+  for (size_t i = 0; i < n; ++i)
+    opi_ir_unref(arr[i]);
+}
 
 void
 opi_ir_emit(OpiIr *ir, OpiBytecode *bc);
@@ -1452,13 +1504,13 @@ OpiIr*
 opi_ir_fn(OpiIr **caps, size_t ncaps, size_t nargs, OpiIr *body);
 
 OpiIr*
-opi_ir_let(OpiIr **vals, size_t n, OpiIr *body);
+opi_ir_let(OpiIr **vals, size_t n);
 
 OpiIr*
 opi_ir_if(OpiIr *test, OpiIr *then, OpiIr *els);
 
 OpiIr*
-opi_ir_fix(OpiIr **vals, size_t n, OpiIr *body);
+opi_ir_fix(OpiIr **vals, size_t n);
 
 OpiIr*
 opi_ir_block(OpiIr **exprs, size_t n);

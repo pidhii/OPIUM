@@ -56,8 +56,6 @@ opi_ast_delete(OpiAst *node)
       }
       free(node->let.vars);
       free(node->let.vals);
-      if (node->let.body)
-        opi_ast_delete(node->let.body);
       break;
 
     case OPI_AST_IF:
@@ -277,8 +275,11 @@ opi_ast_let(char **vars, OpiAst **vals, size_t n, OpiAst *body)
   node->let.vals = malloc(sizeof(OpiAst*) * n);
   memcpy(node->let.vals, vals, sizeof(OpiAst*) * n);
   node->let.n = n;
-  node->let.body = body;
-  return node;
+
+  if (body)
+    return opi_ast_block((OpiAst*[]) { node, body }, 2);
+  else
+    return node;
 }
 
 OpiAst*
@@ -306,8 +307,10 @@ opi_ast_fix(char **vars, OpiAst **lams, size_t n, OpiAst *body)
     node->let.vals[i] = lams[i];
   }
   node->let.n = n;
-  node->let.body = body;
-  return node;
+  if (body)
+    return opi_ast_block((OpiAst*[]) { node, body }, 2);
+  else
+    return node;
 }
 
 OpiAst*
