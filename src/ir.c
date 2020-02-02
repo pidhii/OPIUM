@@ -836,11 +836,12 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
         /* Instant lambda constructor (i.e. create it NOW). */
         // emit bytecode
         OpiBytecode *bc = opi_emit_free_fn_body(body, ast->fn.nargs);
-        opi_ir_drop(body);
 
         // create lambda
         OpiLambda *lam = opi_lambda_allocate(0);
         lam->bc = bc;
+        lam->ir = body;
+        opi_ir_ref(body);
         lam->ncaps = 0;
         lam->scp = NULL;
         opi_t fn = opi_fn_new(opi_lambda_fn, ast->fn.nargs);

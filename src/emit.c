@@ -108,7 +108,7 @@ emit_fn(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int cell)
   opi_bytecode_finalize(body);
 
   int fn = cell < 0 ? opi_bytecode_alcfn(bc, OPI_VAL_LOCAL) : cell;
-  opi_bytecode_finfn(bc, fn, ir->fn.nargs, body, caps, ncaps);
+  opi_bytecode_finfn(bc, fn, ir->fn.nargs, body, ir->fn.body, caps, ncaps);
   return fn;
 }
 

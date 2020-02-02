@@ -90,6 +90,7 @@ opi_insn_delete1(OpiInsn *insn)
 
     case OPI_OPC_FINFN:
       opi_bytecode_delete(OPI_FINFN_ARG_DATA(insn)->bc);
+      opi_ir_unref(OPI_FINFN_ARG_DATA(insn)->ir);
       free(OPI_FINFN_ARG_DATA(insn));
 
     default:
@@ -423,7 +424,7 @@ opi_insn_alcfn(int out)
 }
 
 OpiInsn*
-opi_insn_finfn(int cell, int arity, OpiBytecode *bc, int *cap, size_t ncap)
+opi_insn_finfn(int cell, int arity, OpiBytecode *bc, OpiIr *ir, int *cap, size_t ncap)
 {
   OpiInsn *insn = malloc(sizeof(OpiInsn));
   insn->opc = OPI_OPC_FINFN;
@@ -432,6 +433,8 @@ opi_insn_finfn(int cell, int arity, OpiBytecode *bc, int *cap, size_t ncap)
     malloc(sizeof(OpiFnInsnData) + sizeof(int) * ncap);
   memcpy(data->caps, cap, sizeof(int) * ncap);
   data->bc = bc;
+  data->ir = ir;
+  opi_ir_ref(ir);
   data->ncaps = ncap;
   data->arity = arity;
   insn->ptr[1] = data;
@@ -895,9 +898,9 @@ opi_bytecode_param(OpiBytecode *bc, size_t offs)
 }
 
 void
-opi_bytecode_finfn(OpiBytecode *bc,
-    int cell, int arity, OpiBytecode *body, int *cap, size_t ncap)
-{ opi_bytecode_write(bc, opi_insn_finfn(cell, arity, body, cap, ncap)); }
+opi_bytecode_finfn(OpiBytecode *bc, int cell, int arity, OpiBytecode *body,
+    OpiIr *ir, int *cap, size_t ncap)
+{ opi_bytecode_write(bc, opi_insn_finfn(cell, arity, body, ir, cap, ncap)); }
 
 void
 opi_bytecode_ret(OpiBytecode *bc, int val)

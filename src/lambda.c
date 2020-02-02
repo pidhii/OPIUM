@@ -15,9 +15,10 @@ extern inline void
 opi_lam_free(OpiFn *fn)
 {
   OpiLambda *lam = fn->data;
-  if (lam->ncaps < 2)
+  opi_ir_unref(lam->ir);
+  if (lam->ncaps < 1)
     opi_h2w_free(lam);
-  else if (lam->ncaps < 6)
+  else if (lam->ncaps < 5)
     opi_h6w_free(lam);
   else
     free(lam);

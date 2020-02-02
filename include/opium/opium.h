@@ -1752,6 +1752,7 @@ opi_insn_unref(int cell);
 
 typedef struct OpiFnInsnData_s {
   OpiBytecode *bc;
+  OpiIr *ir;
   int arity;
   int ncaps;
   int caps[];
@@ -1761,7 +1762,7 @@ OpiInsn*
 opi_insn_alcfn(int out);
 
 OpiInsn*
-opi_insn_finfn(int cell, int arity, OpiBytecode *bc, int *cap, size_t ncap);
+opi_insn_finfn(int cell, int arity, OpiBytecode *bc, OpiIr *ir, int *cap, size_t ncap);
 
 OpiInsn*
 opi_insn_begscp(size_t n);
@@ -1908,7 +1909,8 @@ int
 opi_bytecode_alcfn(OpiBytecode *bc, OpiValType valtype);
 
 void
-opi_bytecode_finfn(OpiBytecode *bc, int cell, int arity, OpiBytecode *body, int *cap, size_t ncap);
+opi_bytecode_finfn(OpiBytecode *bc, int cell, int arity, OpiBytecode *body,
+    OpiIr *ir, int *cap, size_t ncap);
 
 int
 opi_bytecode_test(OpiBytecode *bc, int in);

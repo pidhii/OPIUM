@@ -211,6 +211,8 @@ opi_vm(OpiBytecode *bc)
         size_t ncaps = data->ncaps;
         OpiLambda *lam = opi_lambda_allocate(ncaps);
         lam->bc = data->bc;
+        lam->ir = data->ir;
+        opi_ir_ref(lam->ir);
         lam->ncaps = ncaps;
         for (size_t i = 0; i < ncaps; ++i)
           opi_inc_rc(lam->caps[i] = r[data->caps[i]]);

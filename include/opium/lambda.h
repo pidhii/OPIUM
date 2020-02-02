@@ -46,6 +46,7 @@ opi_scope_dropout(OpiRecScope *scp);
 
 typedef struct {
   OpiBytecode *bc;
+  OpiIr *ir;
   OpiRecScope *scp;
   size_t ncaps;
   opi_t caps[];
@@ -54,9 +55,9 @@ typedef struct {
 static inline OpiLambda*
 opi_lambda_allocate(size_t ncaps)
 {
-  if (ncaps < 2)
+  if (ncaps < 1)
     return opi_h2w();
-  if (ncaps < 6)
+  if (ncaps < 5)
     return opi_h6w();
   return malloc(sizeof(OpiLambda) + sizeof(opi_t) * ncaps);
 }
