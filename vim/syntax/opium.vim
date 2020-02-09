@@ -76,7 +76,7 @@ syn keyword Function list rlist array table
 syn keyword Function length
 syn keyword Function strlen substr strstr chop ltrim rtrim trim concat
 syn keyword Function open popen
-syn keyword Function read readline readlines
+syn keyword Function read readline readlines rewind getpos setpos
 syn keyword Function flip const uncurry
 syn keyword Function range
 syn keyword Function revappend reverse

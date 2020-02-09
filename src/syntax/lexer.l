@@ -185,6 +185,7 @@ s[g]*[/|+] {
 <sr3>"+" {  BEGIN(qq6); cod_vec_push(opi_start_token, 'q'); return 'q'; }
 
 <string,shell,qq1,qq2,qq3,qq4,qq5,qq6,sr1,sr2,sr3>\\\n
+<string,shell,qq1,qq2,qq3,qq4,qq5,qq6,sr1,sr2,sr3>"\\0" { yylval->c = '\0'; return CHAR; }
 <string,shell,qq1,qq2,qq3,qq4,qq5,qq6,sr1,sr2,sr3>"\\a" { yylval->c = '\a'; return CHAR; }
 <string,shell,qq1,qq2,qq3,qq4,qq5,qq6,sr1,sr2,sr3>"\\b" { yylval->c = '\b'; return CHAR; }
 <string,shell,qq1,qq2,qq3,qq4,qq5,qq6,sr1,sr2,sr3>"\\e" { yylval->c = '\x1b'; return CHAR; }

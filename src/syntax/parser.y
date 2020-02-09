@@ -157,7 +157,7 @@ start_token_t opi_start_token;
 %right RARROW
 %precedence THEN
 %precedence ELSE
-%type<ast> if unless when
+%type<ast> if unless when if_let unless_let
 %token LOAD
 %token DCOL
 %token MODULE
@@ -366,7 +366,9 @@ Form
   }
 ;
 
-Stmnt: if | unless | when | use
+Stmnt
+  : if | if_let | unless | unless_let
+  | when | use
   | LET REC recbinds IN Expr {
     $$ = opi_ast_fix($3->vars.data, (OpiAst**)$3->vals.data, $3->vars.size, $5);
     binds_delete($3);
@@ -379,8 +381,6 @@ Stmnt: if | unless | when | use
     OpiAst *body[] = { opi_ast_match($2, $4, NULL, NULL), $6 };
     $$ = opi_ast_block(body, 2);
   }
-  | IF LET pattern '=' Expr THEN Expr ELSE Expr { $$ = opi_ast_match($3, $5, $7, $9); }
-  | UNLESS LET pattern '=' Expr THEN Expr ELSE Expr { $$ = opi_ast_match($3, $5, $9, $7); }
   | RETURN Expr {
     $$ = opi_ast_return($2);
   }
@@ -538,12 +538,30 @@ if
   }
 ;
 
+if_let
+  : IF LET pattern '=' Expr THEN Expr {
+    $$ = opi_ast_match($3, $5, $7, opi_ast_const(opi_nil));
+  }
+  | IF LET pattern '=' Expr THEN Expr ELSE Expr {
+    $$ = opi_ast_match($3, $5, $7, $9);
+  }
+;
+
 unless
   : UNLESS Expr THEN Expr {
     $$ = opi_ast_if($2, opi_ast_const(opi_nil), $4);
   }
   | UNLESS Expr THEN Expr ELSE Expr {
     $$ = opi_ast_if($2, $6, $4);
+  }
+;
+
+unless_let
+  : UNLESS LET pattern '=' Expr THEN Expr {
+    $$ = opi_ast_match($3, $5, opi_ast_const(opi_nil), $7);
+  }
+  | UNLESS LET pattern '=' Expr THEN Expr ELSE Expr {
+    $$ = opi_ast_match($3, $5, $9, $7);
   }
 ;
 

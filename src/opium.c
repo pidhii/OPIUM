@@ -951,7 +951,27 @@ opi_type_t opi_str_type;
 
 static void
 str_write(opi_type_t ty, opi_t x, FILE *out)
-{ fprintf(out, "\"%s\"", opi_as(x, OpiStr).str); }
+{
+  fputc('"', out);
+  int len = OPI_STR(x)->len;
+  for (int i = 0; i < len; ++i) {
+    int c = OPI_STR(x)->str[i];
+    switch (c) {
+      case '"': fputs("\\\"", out); break;;
+      case '\0': fputs("\\0", out); break;
+      case '\a': fputs("\\a", out); break;
+      case '\b': fputs("\\b", out); break;
+      case '\x1b': fputs("\\e", out); break;
+      case '\f': fputs("\\f", out); break;
+      case '\n': fputs("\\n", out); break;
+      case '\r': fputs("\\r", out); break;
+      case '\t': fputs("\\t", out); break;
+      case '\v': fputs("\\v", out); break;
+      default: fputc(c, out);
+    }
+  }
+  fputc('"', out);
+}
 
 static void
 str_display(opi_type_t ty, opi_t x, FILE *out)
@@ -1667,7 +1687,7 @@ array_write(opi_type_t type, opi_t x, FILE *out)
   fputs("[|", out);
   for (size_t i = 0; i < n; ++i) {
     if (i != 0)
-      fputs(" ", out);
+      fputs(", ", out);
     opi_write(a[i], out);
   }
   fputs("|]", out);
@@ -1681,7 +1701,7 @@ array_display(opi_type_t type, opi_t x, FILE *out)
   fputs("[|", out);
   for (size_t i = 0; i < n; ++i) {
     if (i != 0)
-      fputs(" ", out);
+      fputs(", ", out);
     opi_display(a[i], out);
   }
   fputs("|]", out);

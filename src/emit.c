@@ -277,7 +277,6 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
           if (opi_is_lambda(fn_val)) {
             static int id = 0;
             /* Inline. */
-            opi_debug("inlining lambda (%d)\n", id++);
             int nargs = ir->apply.nargs;
             size_t s0 = stack->size;
             for (int i = nargs - 1; i >= 0; --i)
@@ -287,7 +286,6 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
             int ret = emit(lam->ir, bc, stack, tc);
             stack_pop(stack, nargs);
             opi_assert(stack->size == s0);
-            opi_debug("done inlining (%d)\n", --id);
             return ret;
           } else {
             /* Resolve arity staticly. */

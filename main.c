@@ -213,7 +213,6 @@ main(int argc, char **argv, char **env)
 
     int nhist = 0;
     while (TRUE) {
-
       while (TRUE) {
         // read line
         char prompt[0x40];
@@ -300,8 +299,9 @@ main(int argc, char **argv, char **env)
         }
         opi_error = 0;
       } else if (ret != opi_nil) {
-        opi_display(ret, stdout);
+        opi_write(ret, stdout);
         putc('\n', stdout);
+        fflush(stdout);
       }
       opi_drop(ret);
       opi_context_drain_bytecode(&ctx, bc);

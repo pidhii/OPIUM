@@ -110,29 +110,22 @@ let join sep l =
 --------------------------------------------------------------------------------
 -- I/O
 --
-module File =
-  let dup file ..mode = __base_file_dup file (car mode or "r")
-end
-
 let open path ..mode = __base_open path (car mode or "r")
 let popen cmd ..mode = __base_popen cmd (car mode or "r")
+
+let rewind = __base_rewind
+let getpos = __base_getpos
+let setpos = __base_setpos
 
 let write x = printf "%w" x
 let display x = printf "%d" x
 
 let read = __base_read
 let readline ..x = __base_readline (car x or stdin)
-let readlines file =
-  assert file is File;
-  unfold (fn s ->
-    let file =
-      if let [file] = s then
-        File.dup file -- duplicate file stream to own cursor
-      else s
-    in
+let readlines =
+  array . unfold \file ->
     let line = readline file in
     if line then line : file else nil
-  ) [file] -- to indicate first iteration
 
 impl ToSeq for File =
   let toSeq = readlines

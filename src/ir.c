@@ -276,7 +276,7 @@ opi_builder_load_dl(OpiBuilder *bldr, void *dl)
 {
   int (*build)(OpiBuilder*) = dlsym(dl, "opium_library");
   if (!build) {
-    opi_error(dlerror());
+    opi_error("failed to resolve library entry point (%s)\n", dlerror());
     opi_error = 1;
     return OPI_ERR;
   }
@@ -705,6 +705,88 @@ opi_builder_find_deep(OpiBuilder *bldr, const char *var)
     return NULL;
 }
 
+static int
+resolve_load_path(OpiBuilder *bldr, const char *load, char *path)
+{
+  if (!opi_builder_find_path(bldr, load, path)) {
+    opi_error("no such file: \"%s\"\n", load);
+    opi_error("source directories:\n");
+    for (size_t i = 0; i < bldr->srcdirs->size; ++i)
+      opi_error("  %2.zu. %s\n", i + 1, bldr->srcdirs->data[i]);
+    return -1;
+  }
+  return 0;
+}
+
+static int
+verify_load(OpiBuilder *bldr, const char *path)
+{
+  for (size_t i = 0; i < bldr->loaded->size; ++i) {
+    if (strcmp(bldr->loaded->data[i], path) == 0) {
+      // file already visited, test for cyclic dependence
+      if (strcmp(bldr->load_state->data[i], "loading") == 0) {
+        opi_error("cyclic dependence detected while loading \"%s\"\n", path);
+        return -1;
+      }
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+static int
+load_dl(OpiBuilder *bldr, const char *path)
+{
+  void *dl = opi_context_find_dl(bldr->ctx, path);
+  int is_old = dl != NULL;
+
+  if (!is_old) {
+    dl = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+    if (!dl) {
+      opi_error("%s\n", dlerror());
+      return -1;
+    }
+  }
+
+  if (opi_builder_load_dl(bldr, dl) == OPI_ERR)
+    return -1;
+
+  if (!is_old)
+    opi_context_add_dl(bldr->ctx, path, dl);
+
+  return 0;
+}
+
+static OpiIr*
+load_script(OpiBuilder *bldr, const char *path)
+{
+  // mark file before building contents
+  size_t id = bldr->loaded->size;
+  cod_strvec_push(bldr->loaded, path);
+  cod_strvec_push(bldr->load_state, "loading");
+
+  // load file
+  FILE *in = fopen(path, "r");
+  opi_assert(in);
+  OpiAst *subast = opi_parse(in);
+  fclose(in);
+  if (subast == NULL)
+    return NULL;
+
+  opi_assert(subast->tag == OPI_AST_BLOCK);
+  opi_ast_block_set_drop(subast, FALSE);
+  OpiIr *ir = opi_builder_build_ir(bldr, subast);
+  opi_assert(ir->tag == OPI_IR_BLOCK);
+  opi_assert(ir->block.drop == FALSE);
+  opi_ast_delete(subast);
+
+  // mark file as loaded
+  free(bldr->load_state->data[id]);
+  bldr->load_state->data[id] = strdup("ready");
+
+  return ir;
+}
+
 OpiIr*
 opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
 {
@@ -920,101 +1002,45 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
 
     case OPI_AST_LOAD:
     {
-      size_t file_id;
-
       // find absolute path
       char path[PATH_MAX];
-      if (!opi_builder_find_path(bldr, ast->load, path)) {
-        opi_error("no such file: \"%s\"\n", ast->load);
-        opi_error("source directories:\n");
-        for (size_t i = 0; i < bldr->srcdirs->size; ++i)
-          opi_error("  %2.zu. %s\n", i + 1, bldr->srcdirs->data[i]);
+      if (resolve_load_path(bldr, ast->load, path) < 0)
         return build_error();
-      }
 
       // check if already loaded
-      int found = FALSE;
-      for (size_t i = 0; i < bldr->loaded->size; ++i) {
-        if (strcmp(bldr->loaded->data[i], path) == 0) {
-          // file already visited, test for cyclic dependence
-          if (strcmp(bldr->load_state->data[i], "loading") == 0) {
-            opi_error("cyclic dependence detected while loading \"%s\"\n", path);
-            return build_error();
-          }
-
-          found = TRUE;
-          break;
-        }
-      }
+      int found = verify_load(bldr, path);
+      if (found < 0)
+        return build_error();
 
       if (!found) {
-        /*opi_debug("load \"%s\"\n", path);*/
-
         char cwd[PATH_MAX];
         getcwd(cwd, PATH_MAX);
 
         char tmp[PATH_MAX];
         strcpy(tmp, path);
-        char *dir = dirname(tmp);
-        /*opi_debug("chdir %s\n", dir);*/
-        opi_assert(chdir(dir) == 0);
-
-        OpiIr *ret;
+        opi_assert(chdir(dirname(tmp)) == 0);
 
         if (opi_is_dl(path)) {
-          void *dl = opi_context_find_dl(bldr->ctx, path);
-          if (!dl) {
-            dl = dlopen(path, RTLD_NOW | RTLD_LOCAL);
-            if (!dl) {
-              opi_error("%s\n", dlerror());
-              opi_assert(chdir(cwd) == 0);
-              return build_error();
-            }
-            opi_context_add_dl(bldr->ctx, path, dl);
-          }
-
-          if (opi_builder_load_dl(bldr, dl) == OPI_ERR) {
-            opi_assert(chdir(cwd) == 0);
+          // Load dynamic library.
+          int err = load_dl(bldr, path);
+          opi_assert(chdir(cwd) == 0);
+          if (err < 0)
             return build_error();
-          }
-
-          ret = opi_ir_const(opi_nil);
+          else
+            return opi_ir_const(opi_nil);
 
         } else {
-          // mark file before building contents
-          size_t id = bldr->loaded->size;
-          cod_strvec_push(bldr->loaded, path);
-          cod_strvec_push(bldr->load_state, "loading");
-
-          // load file
-          FILE *in = fopen(path, "r");
-          opi_assert(in);
-          OpiAst *subast = opi_parse(in);
-          fclose(in);
-          if (subast == NULL) {
-            opi_assert(chdir(cwd) == 0);
+          // Load script.
+          OpiIr *ret = load_script(bldr, path);
+          opi_assert(chdir(cwd) == 0);
+          if (ret == NULL)
             return build_error();
-          }
-
-          opi_assert(subast->tag == OPI_AST_BLOCK);
-          opi_ast_block_set_drop(subast, FALSE);
-          OpiIr *ir = opi_builder_build_ir(bldr, subast);
-          opi_assert(ir->tag == OPI_IR_BLOCK);
-          opi_assert(ir->block.drop == FALSE);
-          opi_ast_delete(subast);
-
-          // mark file as loaded
-          free(bldr->load_state->data[id]);
-          bldr->load_state->data[id] = strdup("ready");
-
-          ret = ir;
+          else
+            return ret;
         }
 
-        /*opi_debug("chdir %s\n", cwd);*/
-        opi_assert(chdir(cwd) == 0);
-        return ret;
-
       } else {
+        // Already loaded by current builder.
         return opi_ir_const(opi_nil);
       }
     }
@@ -1330,6 +1356,7 @@ OpiBytecode*
 opi_build(OpiBuilder *bldr, OpiAst *ast, int mode)
 {
   opi_error = 0;
+  int ndec0 = bldr->decls.len;
   OpiIr *ir = opi_builder_build_ir(bldr, ast);
   if (opi_error) {
     opi_ir_drop(ir);
@@ -1350,12 +1377,12 @@ opi_build(OpiBuilder *bldr, OpiAst *ast, int mode)
 
     case OPI_BUILD_EXPORT:
     {
-      size_t ndecls = bldr->decls.len;
+      size_t ndecls = bldr->decls.len - ndec0;
       if (ndecls == 0)
         break;
 
       OpiIr *list = opi_ir_const(opi_nil);
-      for (size_t i = 0; i < ndecls; ++i) {
+      for (size_t i = ndec0; i < bldr->decls.len; ++i) {
         OpiAst *var_ast = opi_ast_var(bldr->decls.data[i].name);
         OpiIr *var_ir = opi_builder_build_ir(bldr, var_ast);
         opi_ast_delete(var_ast);
@@ -1371,7 +1398,7 @@ opi_build(OpiBuilder *bldr, OpiAst *ast, int mode)
       OpiIr *block[] = { ir, call };
       ir = opi_ir_block(block, 2);
 
-      while (bldr->decls.len)
+      while (ndecls--)
         opi_decl_destroy(cod_vec_pop(bldr->decls));
       break;
     }

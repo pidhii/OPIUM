@@ -328,24 +328,6 @@ popen_(void)
 }
 
 static opi_t
-File_dup_(void)
-{
-  OPI_BEGIN_FN()
-  OPI_ARG(f_old, opi_file_type)
-  OPI_ARG(mod, opi_str_type)
-
-  int fd = fileno(opi_file_get_value(f_old));
-  if (fd < 0)
-    OPI_RETURN(opi_undefined(opi_str_new(strerror(errno))));
-
-  FILE *f_new = fdopen(dup(fd), OPI_STR(mod)->str);
-  if (f_new == NULL)
-    OPI_RETURN(opi_undefined(opi_str_new(strerror(errno))));
-
-  OPI_RETURN(opi_file(f_new, fclose));
-}
-
-static opi_t
 concat(void)
 {
   opi_t l = opi_pop();
@@ -466,6 +448,47 @@ read_(void)
     OPI_THROW("arity-error");
   }
 }
+
+static
+OPI_DEF(base_rewind,
+  opi_arg(file, opi_file_type)
+  rewind(opi_file_get_value(file));
+)
+
+typedef struct {
+  OpiHeader header;
+  fpos_t pos;
+} FPos;
+#define FPOS(x) ((FPos*)(x))
+
+static
+opi_type_t fpos_type;
+
+static opi_t
+fpos_new(const fpos_t *pos)
+{
+  FPos *fpos = malloc(sizeof(FPos));
+  fpos->pos = *pos;
+  opi_init_cell(fpos, fpos_type);
+  return OPI(fpos);
+}
+
+static
+OPI_DEF(base_getpos,
+  opi_arg(file, opi_file_type)
+  fpos_t pos;
+  if (fgetpos(opi_file_get_value(file), &pos) < 0)
+    opi_return(opi_undefined(opi_str_new(strerror(errno))));
+  opi_return(fpos_new(&pos));
+)
+
+static
+OPI_DEF(base_setpos,
+  opi_arg(file, opi_file_type)
+  opi_arg(fpos, fpos_type)
+  if (fsetpos(opi_file_get_value(file), &FPOS(fpos)->pos) < 0)
+    opi_return(opi_undefined(opi_str_new(strerror(errno))));
+)
 
 static opi_t
 match(void)
@@ -1552,7 +1575,13 @@ opium_library(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "__base_popen", opi_fn_new(popen_, 2));
   opi_builder_def_const(bldr, "__base_read", opi_fn_new(read_, -2));
   opi_builder_def_const(bldr, "__base_readline", opi_fn_new(readline, 1));
-  opi_builder_def_const(bldr, "__base_file_dup", opi_fn_new(File_dup_, 2));
+  opi_builder_def_const(bldr, "__base_rewind", opi_fn_new(base_rewind, 1));
+
+  fpos_type = opi_type_new("FPos");
+  opi_type_set_delete_cell(fpos_type, OPI_FREE_CELL);
+  opi_builder_def_type(bldr, "FPos", fpos_type);
+  opi_builder_def_const(bldr, "__base_getpos", opi_fn_new(base_getpos, 1));
+  opi_builder_def_const(bldr, "__base_setpos", opi_fn_new(base_setpos, 2));
 
   opi_builder_def_const(bldr, "sin", opi_fn_new(sin_, 1));
   opi_builder_def_const(bldr, "cos", opi_fn_new(cos_, 1));

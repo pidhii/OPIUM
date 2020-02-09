@@ -2043,7 +2043,7 @@ opi_drop_args(int nargs)
   opi_sp -= nargs;
 }
 
-#define OPI_DEF(name, body) \
+#define OPI_DEF(name, body...) \
   opi_t                     \
   name(void)                \
   {                         \
