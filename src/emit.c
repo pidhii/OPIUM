@@ -75,8 +75,10 @@ emit_fn(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int cell)
   // get captures
   size_t ncaps = ir->fn.ncaps;
   int caps[ncaps];
-  for (size_t i = 0; i < ncaps; ++i)
-    caps[i] = emit(ir->fn.caps[i], bc, stack, FALSE);
+  for (size_t i = 0; i < ncaps; ++i) {
+    int vid = stack->vals[stack->size - ir->fn.caps[i]->var];
+    caps[i] = vid;
+  }
 
   // create body
   OpiBytecode *body = opi_bytecode();
@@ -88,6 +90,7 @@ emit_fn(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int cell)
   // declare captures
   for (size_t i = 0; i < ncaps; ++i) {
     int val = opi_bytecode_ldcap(body, i);
+    body->vinfo[val].is_var = bc->vinfo[caps[i]].is_var;
     stack_push(&body_stack, val);
   }
 
@@ -251,11 +254,17 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
       return opi_bytecode_const(bc, ir->cnst);
 
     case OPI_IR_VAR:
+    {
       if (stack->size < ir->var) {
         opi_error("[ir:emit:var] try reference %zu/%zu\n", ir->var, stack->size);
         abort();
       }
-      return stack->vals[stack->size - ir->var];
+      int vid = stack->vals[stack->size - ir->var];
+      if (bc->vinfo[vid].is_var)
+        return opi_bytecode_deref(bc, vid);
+      else
+        return vid;
+    }
 
     case OPI_IR_APPLY:
     {
@@ -335,8 +344,10 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
     case OPI_IR_LET:
     {
       int vals[ir->let.n];
-      for (size_t i = 0; i < ir->let.n; ++i)
+      for (size_t i = 0; i < ir->let.n; ++i) {
         vals[i] = emit(ir->let.vals[i], bc, stack, FALSE);
+        bc->vinfo[vals[i]].is_var = ir->let.is_vars;
+      }
       for (size_t i = 0; i < ir->let.n; ++i)
         stack_push(stack, vals[i]);
       return opi_bytecode_const(bc, opi_nil);
@@ -467,17 +478,18 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
       return opi_bytecode_const(bc, opi_nil);
     }
 
-    case OPI_IR_SETREF:
+    case OPI_IR_SETVAR:
     {
-      if ((int)stack->size < ir->setref.var) {
-        opi_error("[ir:emit:setref] try reference %zu/%zu\n",
-            (size_t)ir->setref.var, stack->size);
+      if ((int)stack->size < ir->setvar.var) {
+        opi_error("[ir:emit:setvar] try reference %zu/%zu\n",
+            (size_t)ir->setvar.var, stack->size);
         abort();
       }
-      int val = emit(ir->setref.val, bc, stack, FALSE);
-      int vid = stack->vals[stack->size - ir->setref.var];
+      int vid = stack->vals[stack->size - ir->setvar.var];
+      assert(bc->vinfo[vid].is_var);
+      int val = emit(ir->setvar.val, bc, stack, FALSE);
       opi_bytecode_setvar(bc, vid, val);
-      return opi_bytecode_const(bc, opi_nil);
+      return val;
     }
   }
 

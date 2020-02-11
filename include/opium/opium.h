@@ -123,6 +123,9 @@ typedef struct OpiArray_s OpiArray;
 typedef struct OpiBuffer_s OpiBuffer;
 #define OPI_BUFFER(x) ((OpiBuffer*)(x))
 
+typedef struct OpiVar_s OpiVar;
+#define OPI_VAR(x) ((OpiVar*)(x))
+
 /*
  * Argument-stack pointer.
  *
@@ -1013,6 +1016,41 @@ opi_buffer_new(void *ptr, size_t size, void (*free)(void* ptr,void* c), void *c)
 static void OPI_BUFFER_FREE(void *ptr, void *c) { free(ptr); }
 
 /* ==========================================================================
+ * Mutable Variable
+ */
+struct OpiVar_s {
+  OpiHeader header;
+  opi_t val;
+};
+
+OPI_EXTERN
+opi_type_t opi_var_type;
+
+void
+opi_var_init(void);
+
+void
+opi_var_cleanup(void);
+
+static inline opi_t
+opi_var_new(opi_t x)
+{
+  OpiVar *var = opi_h2w();
+  var->val = x;
+  opi_inc_rc(x);
+  opi_init_cell(var, opi_var_type);
+  return OPI(var);
+}
+
+static inline void
+opi_var_set(opi_t var, opi_t x)
+{
+  opi_inc_rc(x);
+  opi_unref(OPI_VAR(var)->val);
+  OPI_VAR(var)->val = x;
+}
+
+/* ==========================================================================
  * AST
  */
 typedef enum OpiAstTag_e {
@@ -1034,7 +1072,7 @@ typedef enum OpiAstTag_e {
   OPI_AST_IMPL,
   OPI_AST_ISOF,
   OPI_AST_CTOR,
-  OPI_AST_SETREF,
+  OPI_AST_SETVAR,
 } OpiAstTag;
 
 typedef enum OpiPatternTag_e {
@@ -1072,7 +1110,7 @@ struct OpiAst_s {
     char *var;
     struct { OpiAst *fn, **args; size_t nargs; char eflag; OpiLocation *loc; } apply;
     struct { char **args; size_t nargs; OpiAst *body; } fn;
-    struct { char **vars; OpiAst **vals; size_t n; } let;
+    struct { char **vars; OpiAst **vals; size_t n; int is_vars; } let;
     struct { OpiAst *test, *then, *els; } iff;
     struct { OpiAst **exprs; size_t n; int drop; char *ns; } block;
     char *load;
@@ -1085,7 +1123,7 @@ struct OpiAst_s {
     struct { int opc; OpiAst *lhs, *rhs; } binop;
     struct { OpiAst *expr; char *of; } isof;
     struct { char *name, **fldnams; OpiAst *src, **flds; int nflds; } ctor;
-    struct { char *var; OpiAst *val; } setref;
+    struct { char *var; OpiAst *val; } setvar;
   };
 };
 
@@ -1136,6 +1174,9 @@ opi_ast_fn_new_with_patterns(OpiAstPattern **args, size_t nargs, OpiAst *body);
 
 OpiAst*
 opi_ast_let(char **vars, OpiAst **vals, size_t n, OpiAst *body);
+
+OpiAst*
+opi_ast_let_var(char **vars, OpiAst **vals, size_t n, OpiAst *body);
 
 OpiAst*
 opi_ast_if(OpiAst *test, OpiAst *then, OpiAst *els);
@@ -1206,7 +1247,7 @@ opi_ast_ctor(const char *name, char* const fldnams[], OpiAst *flds[], int nflds,
     OpiAst *src);
 
 OpiAst*
-opi_ast_setref(const char *var, OpiAst *val);
+opi_ast_setvar(const char *var, OpiAst *val);
 
 /* ==========================================================================
  * Context
@@ -1280,8 +1321,9 @@ opi_decl_destroy(OpiDecl d)
 
 struct OpiBuilder_s {
   OpiBuilder *parent;
-
   OpiContext *ctx;
+
+  opi_t var_ctor;
 
   int frame_offset;
   cod_vec(OpiDecl) decls;
@@ -1384,7 +1426,7 @@ typedef enum OpiIrTag_e {
   OPI_IR_MATCH,
   OPI_IR_RETURN,
   OPI_IR_BINOP,
-  OPI_IR_SETREF,
+  OPI_IR_SETVAR,
 } OpiIrTag;
 
 typedef struct OpiIrPattern_s OpiIrPattern;
@@ -1416,13 +1458,13 @@ struct OpiIr_s {
     size_t var;
     struct { OpiIr *fn, **args; size_t nargs; char eflag; OpiLocation *loc; } apply;
     struct { OpiIr **caps; size_t ncaps, nargs; OpiIr *body; } fn;
-    struct { OpiIr **vals; size_t n; } let;
+    struct { OpiIr **vals; size_t n; int is_vars; } let;
     struct { OpiIr *test, *then, *els; } iff;
     struct { OpiIr **exprs; size_t n; int drop; } block;
     struct { OpiIrPattern *pattern; OpiIr *expr, *then, *els; } match;
     OpiIr *ret;
     struct { int opc; OpiIr *lhs, *rhs; } binop;
-    struct { int var; OpiIr *val; } setref;
+    struct { int var; OpiIr *val; } setvar;
   };
 };
 
@@ -1529,7 +1571,7 @@ OpiIr*
 opi_ir_binop(int opc, OpiIr *lhs, OpiIr *rhs);
 
 OpiIr*
-opi_ir_setref(int var, OpiIr *val);
+opi_ir_setvar(int var, OpiIr *val);
 
 /* ==========================================================================
  * Bytecode
@@ -1642,6 +1684,9 @@ typedef enum OpiOpc_e {
 #define OPI_SETVAR_REG_REF(insn) (insn)->reg[0]
 #define OPI_SETVAR_REG_VAL(insn) (insn)->reg[1]
 
+  OPI_OPC_DEREF,
+#define OPI_DEREF_REG_OUT(insn) (insn)->reg[0]
+#define OPI_DEREF_REG_VAR(insn) (insn)->reg[1]
 } OpiOpc;
 
 typedef struct OpiFlatInsn_s {
@@ -1791,6 +1836,9 @@ opi_insn_and(int out, int lhs, int rhs);
 OpiInsn*
 opi_insn_setvar(int var, int val);
 
+OpiInsn*
+opi_insn_deref(int out, int var);
+
 typedef enum OpiValType_e {
   // Value is "born" in local scope with RC petentionaly set to zero at the
   // beginning.
@@ -1805,6 +1853,7 @@ typedef struct OpiValInfo_s {
   OpiValType type;
   opi_t c; // constant value
   OpiInsn *creatat;
+  int is_var;
 } OpiValInfo;
 
 struct OpiBytecode_s {
@@ -1967,6 +2016,9 @@ opi_bytecode_and(OpiBytecode *bc, int lhs, int rhs);
 
 void
 opi_bytecode_setvar(OpiBytecode *bc, int ref, int val);
+
+int
+opi_bytecode_deref(OpiBytecode *bc, int var);
 
 /* ==========================================================================
  * VM and evaluation

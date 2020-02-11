@@ -44,11 +44,18 @@ opi_alist_pop(OpiAlist *a, size_t n)
   }
 }
 
+static opi_t
+make_var(void)
+{ return opi_var_new(opi_pop()); }
+
 void
 opi_builder_init(OpiBuilder *bldr, OpiContext *ctx)
 {
   bldr->parent = NULL;
   bldr->ctx = ctx;
+
+  bldr->var_ctor = opi_fn_new(make_var, 1);
+  opi_inc_rc(bldr->var_ctor);
 
   cod_vec_init(bldr->decls);
   bldr->frame_offset = 0;
@@ -94,6 +101,8 @@ opi_builder_init_derived(OpiBuilder *bldr, OpiBuilder *parent)
 {
   bldr->parent = parent;
   bldr->ctx = parent->ctx;
+  bldr->var_ctor = parent->var_ctor;
+  opi_inc_rc(bldr->var_ctor);
 
   cod_vec_init(bldr->decls);
   bldr->frame_offset = 0;
@@ -115,6 +124,8 @@ opi_builder_init_derived(OpiBuilder *bldr, OpiBuilder *parent)
 void
 opi_builder_destroy(OpiBuilder *bldr)
 {
+  opi_unref(bldr->var_ctor);
+
   cod_vec_iter(bldr->decls, i, d,
       free(d.name);
       if (d.c_val)
@@ -834,9 +845,9 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
           return opi_ir_const(d->c_val);
         else
           offs = opi_builder_find_offs(bldr, var_idx);
-
       } else if ((d = opi_builder_find_deep(bldr, varname))) {
         if (d->c_val) {
+          // # Constant
           return opi_ir_const(d->c_val);
         } else {
           // # Add to captures:
@@ -945,20 +956,31 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       // evaluate values
       for (size_t i = 0; i < ast->let.n; ++i)
         vals[i] = opi_builder_build_ir(bldr, ast->let.vals[i]);
-      // declare variables
-      OpiIr *dynvals[ast->let.n];
-      int ndynvals = 0;
-      for (size_t i = 0; i < ast->let.n; ++i) {
-        if (vals[i]->tag == OPI_IR_CONST) {
-          opi_builder_def_const(bldr, ast->let.vars[i], vals[i]->cnst);
-          opi_ir_drop(vals[i]);
-        } else {
-          opi_builder_push_decl(bldr, ast->let.vars[i]);
-          dynvals[ndynvals++] = vals[i];
-        }
-      }
 
-      return opi_ir_let(dynvals, ndynvals);
+      // declare variables
+      if (!ast->let.is_vars) {
+        OpiIr *dynvals[ast->let.n];
+        int ndynvals = 0;
+        for (size_t i = 0; i < ast->let.n; ++i) {
+          if (vals[i]->tag == OPI_IR_CONST) {
+            opi_builder_def_const(bldr, ast->let.vars[i], vals[i]->cnst);
+            opi_ir_drop(vals[i]);
+          } else {
+            opi_builder_push_decl(bldr, ast->let.vars[i]);
+            dynvals[ndynvals++] = vals[i];
+          }
+        }
+        return opi_ir_let(dynvals, ndynvals);
+
+      } else {
+        for (size_t i = 0; i < ast->let.n; ++i)
+          vals[i] = opi_ir_apply(opi_ir_const(bldr->var_ctor), &vals[i], 1);
+        for (size_t i = 0; i < ast->let.n; ++i)
+          opi_builder_push_decl(bldr, ast->let.vars[i]);
+        OpiIr *ir = opi_ir_let(vals, ast->let.n);
+        ir->let.is_vars = TRUE;
+        return ir;
+      }
     }
 
     case OPI_AST_FIX:
@@ -1320,17 +1342,17 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
       return build_error();
     }
 
-    case OPI_AST_SETREF:
+    case OPI_AST_SETVAR:
     {
       // get offset of the variable
-      OpiAst *astvar = opi_ast_var(ast->setref.var);
+      OpiAst *astvar = opi_ast_var(ast->setvar.var);
       OpiIr *irvar = opi_builder_build_ir(bldr, astvar);
       opi_assert(irvar->tag == OPI_IR_VAR);
       int offs = irvar->var;
       opi_ast_delete(astvar);
       opi_ir_drop(irvar);
 
-      return opi_ir_setref(offs, opi_builder_build_ir(bldr, ast->setref.val));
+      return opi_ir_setvar(offs, opi_builder_build_ir(bldr, ast->setvar.val));
     }
   }
 
@@ -1497,8 +1519,8 @@ _opi_ir_delete(OpiIr *node)
       opi_ir_unref(node->binop.rhs);
       break;
 
-    case OPI_IR_SETREF:
-      opi_ir_unref(node->setref.val);
+    case OPI_IR_SETVAR:
+      opi_ir_unref(node->setvar.val);
       break;
   }
 
@@ -1570,6 +1592,7 @@ opi_ir_let(OpiIr **vals, size_t n)
   node->let.vals = malloc(sizeof(OpiIr*) * n);
   memcpy(node->let.vals, vals, sizeof(OpiIr*) * n);
   node->let.n = n;
+  node->let.is_vars = FALSE;
   opi_ir_ref_arr(vals, n);
   return node;
 }
@@ -1689,12 +1712,12 @@ opi_ir_binop(int opc, OpiIr *lhs, OpiIr *rhs)
 }
 
 OpiIr*
-opi_ir_setref(int var, OpiIr *val)
+opi_ir_setvar(int var, OpiIr *val)
 {
   OpiIr *node = ir_new();
-  node->tag = OPI_IR_SETREF;
-  node->setref.var = var;
-  node->setref.val = val;
+  node->tag = OPI_IR_SETVAR;
+  node->setvar.var = var;
+  node->setvar.val = val;
   opi_ir_ref(val);
   return node;
 }

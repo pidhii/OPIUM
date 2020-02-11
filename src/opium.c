@@ -60,6 +60,7 @@ opi_init(int flags)
   opi_array_init();
   opi_seq_init();
   opi_buffer_init();
+  opi_var_init();
 
   opi_traits_init();
 }
@@ -84,6 +85,7 @@ opi_cleanup(void)
   opi_array_cleanup();
   opi_seq_cleanup();
   opi_buffer_cleanup();
+  opi_var_cleanup();
 
   opi_lexer_cleanup();
   opi_allocators_cleanup();
@@ -1811,6 +1813,29 @@ opi_buffer_new(void *ptr, size_t size, void (*free)(void* ptr,void* c), void *c)
   buf->c = c;
   opi_init_cell(buf, opi_buffer_type);
   return buf;
+}
+
+/******************************************************************************/
+opi_type_t opi_var_type;
+
+static void
+delete_var(opi_type_t type, opi_t x)
+{
+  opi_unref(OPI_VAR(x)->val);
+  opi_h2w_free(x);
+}
+
+void
+opi_var_init(void)
+{
+  opi_var_type = opi_type_new("variable");
+  opi_type_set_delete_cell(opi_var_type, delete_var);
+}
+
+void
+opi_var_cleanup(void)
+{
+  opi_type_delete(opi_var_type);
 }
 
 /******************************************************************************/

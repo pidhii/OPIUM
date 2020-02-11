@@ -92,7 +92,7 @@ syn keyword Function zero? positive? negative? even? odd?
 syn keyword Function match split join
 
 
-syn keyword opiKeyword let rec and or in return
+syn keyword opiKeyword let rec mut and or in return
 syn region opiBegin matchgroup=opiKeyword start=/\<begin\>/ end=/\<end\>/ contains=TOP
 syn keyword opiAssert assert
 

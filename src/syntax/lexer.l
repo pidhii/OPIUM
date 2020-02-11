@@ -90,6 +90,7 @@ nan |
 [0-9]+(\.[0-9]+)?([eE][-+]?[0-9]+)? { yylval->num = strtold(yytext, NULL); return NUMBER; }
 
 let { return LET; }
+mut { return MUT; }
 rec { return REC; }
 if { return IF; }
 unless { return UNLESS; }

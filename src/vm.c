@@ -95,11 +95,13 @@ opi_vm(OpiBytecode *bc)
 
       case OPI_OPC_SETVAR:
       {
-        opi_t *ref = &r[OPI_SETVAR_REG_REF(ip)];
-        opi_t val = r[OPI_SETVAR_REG_VAL(ip)];
-        opi_inc_rc(val);
-        opi_unref(*ref);
-        *ref = val;
+        opi_var_set(r[OPI_SETVAR_REG_REF(ip)], r[OPI_SETVAR_REG_VAL(ip)]);;
+        break;
+      }
+
+      case OPI_OPC_DEREF:
+      {
+        r[OPI_DEREF_REG_OUT(ip)] = OPI_VAR(r[OPI_DEREF_REG_VAR(ip)])->val;
         break;
       }
 

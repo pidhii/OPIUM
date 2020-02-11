@@ -142,9 +142,9 @@ opi_ast_delete(OpiAst *node)
         opi_ast_delete(node->ctor.src);
       break;
 
-    case OPI_AST_SETREF:
-      free(node->setref.var);
-      opi_ast_delete(node->setref.val);
+    case OPI_AST_SETVAR:
+      free(node->setvar.var);
+      opi_ast_delete(node->setvar.val);
       break;
   }
 
@@ -275,7 +275,25 @@ opi_ast_let(char **vars, OpiAst **vals, size_t n, OpiAst *body)
   node->let.vals = malloc(sizeof(OpiAst*) * n);
   memcpy(node->let.vals, vals, sizeof(OpiAst*) * n);
   node->let.n = n;
+  node->let.is_vars = FALSE;
+  if (body)
+    return opi_ast_block((OpiAst*[]) { node, body }, 2);
+  else
+    return node;
+}
 
+OpiAst*
+opi_ast_let_var(char **vars, OpiAst **vals, size_t n, OpiAst *body)
+{
+  OpiAst *node = ast_new();
+  node->tag = OPI_AST_LET;
+  node->let.vars = malloc(sizeof(char*) * n);
+  for (size_t i = 0; i < n; ++i)
+    node->let.vars[i] = strdup(vars[i]);
+  node->let.vals = malloc(sizeof(OpiAst*) * n);
+  memcpy(node->let.vals, vals, sizeof(OpiAst*) * n);
+  node->let.n = n;
+  node->let.is_vars = TRUE;
   if (body)
     return opi_ast_block((OpiAst*[]) { node, body }, 2);
   else
@@ -590,11 +608,11 @@ opi_ast_ctor(const char *name, char* const fldnams[], OpiAst *flds[], int nflds,
 }
 
 OpiAst*
-opi_ast_setref(const char *var, OpiAst *val)
+opi_ast_setvar(const char *var, OpiAst *val)
 {
   OpiAst *node = ast_new();
-  node->tag = OPI_AST_SETREF;
-  node->setref.var = strdup(var);
-  node->setref.val = val;
+  node->tag = OPI_AST_SETVAR;
+  node->setvar.var = strdup(var);
+  node->setvar.val = val;
   return node;
 }

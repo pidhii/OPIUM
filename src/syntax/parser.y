@@ -82,7 +82,6 @@ start_token_t opi_start_token;
   struct cod_ptrvec *ptrvec;
   struct {
     struct cod_ptrvec *ptrvec;
-    int iref;
   } args;
 
   OpiAstPattern *pattern;
@@ -143,7 +142,7 @@ start_token_t opi_start_token;
 %token<opi> CONST
 %token<str> S
 
-%nonassoc LET REC IN AND
+%nonassoc LET REC MUT IN AND
 %type<ast> use
 %nonassoc BEG END
 
@@ -202,6 +201,7 @@ start_token_t opi_start_token;
 
 %nonassoc '@'
 
+%nonassoc SETVAR
 %right OR
 %left RPIPE
 %right '$'
@@ -274,14 +274,12 @@ Atom
   | '(' Type ')' { $$ = opi_ast_var($2); free($2); }
   | '(' Expr ')' { $$ = $2; }
   | '[' list_aux ']' {
-    opi_assert($2.iref < 0);
     $$ = opi_ast_apply(opi_ast_var("List"), (OpiAst**)$2.ptrvec->data, $2.ptrvec->size);
     $$->apply.loc = location(&@$);
     cod_ptrvec_destroy($2.ptrvec, NULL);
     free($2.ptrvec);
   }
   | '[' '|' list_aux '|' ']' {
-    opi_assert($3.iref < 0);
     $$ = opi_ast_apply(opi_ast_var("Array"), (OpiAst**)$3.ptrvec->data, $3.ptrvec->size);
     $$->apply.loc = location(&@$);
     cod_ptrvec_destroy($3.ptrvec, NULL);
@@ -335,29 +333,10 @@ Form
   | Atom arg {
     $$ = opi_ast_apply($1, (OpiAst**)$2.ptrvec->data, $2.ptrvec->size);
     $$->apply.loc = location(&@$);
-    if ($2.iref >= 0) {
-      char retnam[] = "$ ret";
-      char sttnam[] = "$ stt";
-      char *fields[] = { "car", "cdr" };
-      OpiAstPattern *pats[] = {
-        opi_ast_pattern_new_ident(retnam),
-        opi_ast_pattern_new_ident(sttnam)
-      };
-      OpiAstPattern *pat = opi_ast_pattern_new_unpack("Cons", pats, fields, 2, NULL);
-      OpiAst *ref = $2.ptrvec->data[$2.iref];
-      opi_assert(ref->tag == OPI_AST_VAR);
-      OpiAst *body[] = {
-        opi_ast_match(pat, $$, NULL, NULL),
-        opi_ast_setref(ref->var, opi_ast_var(sttnam)),
-        opi_ast_var("$ ret"),
-      };
-      $$ = opi_ast_block(body, 3);
-    }
     cod_ptrvec_destroy($2.ptrvec, NULL);
     free($2.ptrvec);
   }
   | Type arg {
-    opi_assert($2.iref < 0);
     $$ = opi_ast_apply(opi_ast_var($1), (OpiAst**)$2.ptrvec->data, $2.ptrvec->size);
     $$->apply.loc = location(&@$);
     cod_ptrvec_destroy($2.ptrvec, NULL);
@@ -372,6 +351,10 @@ Stmnt
   | LET REC recbinds IN Expr {
     $$ = opi_ast_fix($3->vars.data, (OpiAst**)$3->vals.data, $3->vars.size, $5);
     binds_delete($3);
+  }
+  | LET MUT SYMBOL '=' Expr IN Expr {
+    $$ = opi_ast_let_var(&$3, &$5, 1, $7);
+    free($3);
   }
   | LET binds IN Expr {
     $$ = opi_ast_let($2->vars.data, (OpiAst**)$2->vals.data, $2->vars.size, $4);
@@ -517,16 +500,16 @@ Expr
   | Expr OR Expr { $$ = opi_ast_eor($1, $3, " "); }
   | Expr OR SYMBOL RARROW Expr %prec THEN { $$ = opi_ast_eor($1, $5, $3); free($3); }
   | table
-  | Symbol LARROW Expr { $$ = opi_ast_setref($1, $3); free($1); }
-  | LET pattern LARROW Expr IN Expr {
-    OpiAst *fn = opi_ast_fn_new_with_patterns(&$2, 1, $6);
-    if ($4->tag == OPI_AST_APPLY) {
-      opi_ast_append_arg($4, fn);
-      $$ = $4;
-    } else {
-      $$ = opi_ast_apply($4, &fn, 1);
-    }
-  }
+  | Symbol LARROW Expr %prec SETVAR { $$ = opi_ast_setvar($1, $3); free($1); }
+  /*| LET pattern LARROW Expr IN Expr {*/
+    /*OpiAst *fn = opi_ast_fn_new_with_patterns(&$2, 1, $6);*/
+    /*if ($4->tag == OPI_AST_APPLY) {*/
+      /*opi_ast_append_arg($4, fn);*/
+      /*$$ = $4;*/
+    /*} else {*/
+      /*$$ = opi_ast_apply($4, &fn, 1);*/
+    /*}*/
+  /*}*/
 ;
 
 if
@@ -804,13 +787,11 @@ param
 arg
   : '(' ')' {
     $$.ptrvec = malloc(sizeof(struct cod_ptrvec));
-    $$.iref = -1;
     cod_ptrvec_init($$.ptrvec);
   }
   | arg_aux
   | FN anyfn_aux {
     $$.ptrvec = malloc(sizeof(struct cod_ptrvec));
-    $$.iref = -1;
     cod_ptrvec_init($$.ptrvec);
     cod_ptrvec_push($$.ptrvec, $2, NULL);
   }
@@ -820,34 +801,18 @@ arg
 arg_aux
   : Atom {
     $$.ptrvec = malloc(sizeof(struct cod_ptrvec));
-    $$.iref = -1;
     cod_ptrvec_init($$.ptrvec);
     cod_ptrvec_push($$.ptrvec, $1, NULL);
-  }
-  | '&' Symbol {
-    $$.ptrvec = malloc(sizeof(struct cod_ptrvec));
-    $$.iref = 0;
-    cod_ptrvec_init($$.ptrvec);
-    cod_ptrvec_push($$.ptrvec, opi_ast_var($2), NULL);
-    free($2);
   }
   | arg_aux Atom {
     $$ = $1;
     cod_ptrvec_push($$.ptrvec, $2, NULL);
-  }
-  | arg_aux '&' Symbol {
-    $$ = $1;
-    opi_assert($$.iref < 0);
-    $$.iref = $$.ptrvec->size;
-    cod_ptrvec_push($$.ptrvec, opi_ast_var($3), NULL);
-    free($3);
   }
 ;
 
 list_aux
   : Atom {
     $$.ptrvec = malloc(sizeof(struct cod_ptrvec));
-    $$.iref = -1;
     cod_ptrvec_init($$.ptrvec);
     cod_ptrvec_push($$.ptrvec, $1, NULL);
   }
@@ -903,6 +868,10 @@ block_stmnt_only
   : LET REC recbinds {
     $$ = opi_ast_fix($3->vars.data, (OpiAst**)$3->vals.data, $3->vars.size, NULL);
     binds_delete($3);
+  }
+  | LET MUT SYMBOL '=' Expr {
+    $$ = opi_ast_let_var(&$3, &$5, 1, NULL);
+    free($3);
   }
   | LET binds {
     $$ = opi_ast_let($2->vars.data, (OpiAst**)$2->vals.data, $2->vars.size, NULL);
@@ -1058,14 +1027,14 @@ fields_aux
 anyfn_aux: fn_aux | vafn_aux;
 
 fn_aux
-  : param RARROW Expr {
+  : param RARROW Expr %prec FN {
     $$ = opi_ast_fn_new_with_patterns($1.data, $1.len, $3);
     cod_vec_destroy($1);
   }
 ;
 
 vafn_aux
-  : DOTDOT SYMBOL RARROW Expr {
+  : DOTDOT SYMBOL RARROW Expr %prec FN {
     char *p[] = { $2 };
     OpiAst *fn = opi_ast_fn(p, 1, $4);
     OpiAst *param[] = { opi_ast_const(opi_num_new(0)), fn };
@@ -1073,7 +1042,7 @@ vafn_aux
     $$->apply.loc = location(&@$);
     free($2);
   }
-  | param DOTDOT SYMBOL RARROW Expr {
+  | param DOTDOT SYMBOL RARROW Expr %prec FN {
     cod_vec_push($1, opi_ast_pattern_new_ident($3));
     OpiAst *fn = opi_ast_fn_new_with_patterns($1.data, $1.len, $5);
     OpiAst *param[] = { opi_ast_const(opi_num_new($1.len - 1)), fn };
