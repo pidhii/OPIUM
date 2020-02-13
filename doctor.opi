@@ -58,7 +58,7 @@ let install () =
   `test -f %{installScript}` or die "missing install-script";
 
   -- load installer
-  let installEnv = [installPath packageRoot] in
+  let installEnv = [installPath, packageRoot] in
   let config = loadfile installScript installEnv in
   print "package %{config#name}";
 
