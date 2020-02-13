@@ -821,6 +821,19 @@ Array_toSeq(void)
 }
 
 static opi_t
+Array_legnth(void)
+{
+  opi_t x = opi_pop();
+  if (opi_unlikely(x->type != opi_array_type)) {
+    opi_drop(x);
+    return opi_undefined(opi_symbol("type-error"));
+  }
+  opi_t ret = opi_num_new(OPI_ARRAY(x)->len);
+  opi_drop(x);
+  return ret;
+}
+
+static opi_t
 Seq_iter(void)
 {
   OPI_BEGIN_FN()
@@ -1524,6 +1537,7 @@ opium_library(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "List.ofRevSeq", opi_fn_new(List_ofRevSeq, 1));
 
   opi_builder_def_const(bldr, "Array", opi_fn_new(Array, -1));
+  opi_builder_def_const(bldr, "Array.length", opi_fn_new(Array_length, 1));
   opi_builder_def_const(bldr, "Array.empty", opi_fn_new(Array_empty, 1));
   opi_builder_def_const(bldr, "Array.init", opi_fn_new(Array_init, 2));
   opi_builder_def_const(bldr, "Array.get", opi_fn_new(Array_get, 2));
