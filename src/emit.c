@@ -148,8 +148,16 @@ emit_match_with_leak(int val, OpiIrPattern *pattern, OpiBytecode *bc, struct sta
     case OPI_PATTERN_UNPACK:
     {
       // test type
-      int test = opi_bytecode_testty(bc, val, pattern->unpack.type);
-      opi_bytecode_guard(bc, test);
+      if (bc->vinfo[val].vtype) {
+        if (bc->vinfo[val].vtype != pattern->unpack.type) {
+          opi_error("type won't match\n");
+          abort();
+        }
+        opi_debug("optimized out a guard\n");
+      } else {
+        int test = opi_bytecode_testty(bc, val, pattern->unpack.type);
+        opi_bytecode_guard(bc, test);
+      }
 
       // emit sub-patterns on the field
       for (size_t i = 0; i < pattern->unpack.n; ++i) {
@@ -170,10 +178,15 @@ emit_match_with_then(int expr, OpiIrPattern *pattern, OpiBytecode *bc,
     struct stack *stack, iffs_t *iffs)
 {
   // start if-statement
-  OpiIf iff;
-  int test = opi_bytecode_testty(bc, expr, pattern->unpack.type);
-  opi_bytecode_if(bc, test, &iff);
-  cod_vec_push(*iffs, iff);
+  if (bc->vinfo[expr].vtype == pattern->unpack.type) {
+      opi_debug("optimizaed out a type check (in match)\n");
+  } else {
+    OpiIf iff;
+    int test = opi_bytecode_testty(bc, expr, pattern->unpack.type);
+    opi_bytecode_if(bc, test, &iff);
+    cod_vec_push(*iffs, iff);
+    opi_bytecode_set_vtype(bc, expr, pattern->unpack.type);
+  }
 
   // evaluate sub-patterns
   for (int i = 0; i < (int)pattern->unpack.n; ++i) {
@@ -194,35 +207,80 @@ static int
 emit_match_onelevel_with_then(OpiIr *then, OpiIr *els, int expr,
     OpiIrPattern *pattern, OpiBytecode *bc, struct stack *stack, int tc)
 {
-  // IF
-  OpiIf iff;
-  int test = opi_bytecode_testty(bc, expr, pattern->unpack.type);
-  // PHI
-  int phi = opi_bytecode_phi(bc);
-  // THEN
-  opi_bytecode_if(bc, test, &iff);
-  // load fields
-  int vals[pattern->unpack.n];
-  for (size_t i = 0; i < pattern->unpack.n; ++i)
-    vals[i] = opi_bytecode_ldfld(bc, expr, pattern->unpack.offs[i]);
-  // declare values
-  for (size_t i = 0; i < pattern->unpack.n; ++i)
-    stack_push(stack, vals[i]);
-  if (pattern->unpack.alias)
-    stack_push(stack, expr);
-  int then_ret = emit(then, bc, stack, tc);
-  stack_pop(stack, pattern->unpack.n);
-  if (pattern->unpack.alias)
-    stack_pop(stack, 1);
-  opi_bytecode_dup(bc, phi, then_ret);
-  // ELSE
-  opi_bytecode_if_else(bc, &iff);
-  int else_ret = emit(els, bc, stack, tc);
-  opi_bytecode_dup(bc, phi, else_ret);
-  // END IF
-  opi_bytecode_if_end(bc, &iff);
+  int ulstart = bc->ulist.len;
 
-  return phi;
+  if (bc->vinfo[expr].vtype) {
+    /*
+     * Resolve branch now.
+     */
+    if (bc->vinfo[expr].vtype == pattern->unpack.type) {
+      opi_debug("optimize one-level match (then-branch)\n");
+
+      int vals[pattern->unpack.n];
+      for (size_t i = 0; i < pattern->unpack.n; ++i)
+        vals[i] = opi_bytecode_ldfld(bc, expr, pattern->unpack.offs[i]);
+
+      // declare values and alias
+      for (size_t i = 0; i < pattern->unpack.n; ++i)
+        stack_push(stack, vals[i]);
+      if (pattern->unpack.alias)
+        stack_push(stack, expr);
+
+      int ret = emit(then, bc, stack, tc);
+
+      // pop values and alias
+      stack_pop(stack, pattern->unpack.n);
+      if (pattern->unpack.alias)
+        stack_pop(stack, 1);
+
+      return ret;
+
+    } else {
+      opi_debug("optimize one-level match (else-branch)\n");
+      return emit(els, bc, stack, tc);
+    }
+
+  } else {
+    /*
+     * Resolve branch in runtime.
+     */
+    int ulstart = bc->ulist.len;
+
+    // IF
+    OpiIf iff;
+    int test = opi_bytecode_testty(bc, expr, pattern->unpack.type);
+    int phi = opi_bytecode_phi(bc);
+    // THEN
+    opi_bytecode_if(bc, test, &iff);
+
+    // load fields
+    int vals[pattern->unpack.n];
+    for (size_t i = 0; i < pattern->unpack.n; ++i)
+      vals[i] = opi_bytecode_ldfld(bc, expr, pattern->unpack.offs[i]);
+    // declare values
+    for (size_t i = 0; i < pattern->unpack.n; ++i)
+      stack_push(stack, vals[i]);
+    if (pattern->unpack.alias)
+      stack_push(stack, expr);
+    opi_bytecode_set_vtype(bc, expr, pattern->unpack.type);
+    int then_ret = emit(then, bc, stack, tc);
+    opi_bytecode_restore_vtypes(bc, ulstart);
+
+    stack_pop(stack, pattern->unpack.n);
+    if (pattern->unpack.alias)
+      stack_pop(stack, 1);
+    opi_bytecode_dup(bc, phi, then_ret);
+    // ELSE
+    opi_bytecode_if_else(bc, &iff);
+    int else_ret = emit(els, bc, stack, tc);
+    opi_bytecode_dup(bc, phi, else_ret);
+    // END IF
+    opi_bytecode_if_end(bc, &iff);
+
+    if (bc->vinfo[then_ret].vtype == bc->vinfo[else_ret].vtype)
+      bc->vinfo[phi].vtype = bc->vinfo[then_ret].vtype;
+    return phi;
+  }
 }
 
 static void
@@ -251,7 +309,11 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
 {
   switch (ir->tag) {
     case OPI_IR_CONST:
-      return opi_bytecode_const(bc, ir->cnst);
+    {
+      int ret = opi_bytecode_const(bc, ir->cnst);
+      bc->vinfo[ret].vtype = ir->cnst->type;
+      return ret;
+    }
 
     case OPI_IR_VAR:
     {
@@ -281,7 +343,6 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
           opi_error("[ir:emit:apply] not a function\n");
           abort();
         }
-        /* Try instant call */
         if (opi_test_arity(opi_fn_get_arity(fn_val), ir->apply.nargs)) {
           if (opi_is_lambda(fn_val)) {
             static int id = 0;
@@ -295,12 +356,14 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
             int ret = emit(lam->ir, bc, stack, tc);
             stack_pop(stack, nargs);
             opi_assert(stack->size == s0);
+            bc->vinfo[ret].vtype = ir->vtype;
             return ret;
           } else {
-            /* Resolve arity staticly. */
+            /* Resolve arity statically. */
             int ret = opi_bytecode_applyi_arr(bc, fn, ir->apply.nargs, args);
             if (ir->apply.eflag)
               emit_error_test(bc, ret, ir->apply.loc);
+            bc->vinfo[ret].vtype = ir->vtype;
             return ret;
           }
         }
@@ -312,7 +375,8 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
         return opi_bytecode_apply_tailcall_arr(bc, fn, ir->apply.nargs, args);
       } else {
         int ret = opi_bytecode_apply_arr(bc, fn, ir->apply.nargs, args);
-        if (ir->apply.eflag)
+        bc->vinfo[ret].vtype = ir->vtype;
+        if (ir->vtype == NULL && ir->apply.eflag)
           emit_error_test(bc, ret, ir->apply.loc);
         return ret;
       }
@@ -323,7 +387,47 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
       int lhs = emit(ir->binop.lhs, bc, stack, FALSE);
       int rhs = emit(ir->binop.rhs, bc, stack, FALSE);
       int ret = opi_bytecode_binop(bc, ir->binop.opc, lhs, rhs);
-      if (ir->binop.opc != OPI_OPC_CONS) {
+      opi_type_t vtype = NULL;
+      int do_error_test;
+
+      switch (ir->binop.opc) {
+        case OPI_OPC_CONS:
+          vtype = opi_pair_type;
+          do_error_test = FALSE;
+          break;
+
+        case OPI_OPC_ADD ... OPI_OPC_FMOD:
+          if (bc->vinfo[lhs].vtype == opi_num_type &&
+              bc->vinfo[rhs].vtype == opi_num_type)
+          {
+            opi_debug("optimized binop\n");
+            vtype = opi_num_type;
+            do_error_test = FALSE;
+          } else {
+            vtype = NULL;
+            do_error_test = TRUE;
+          }
+        break;
+
+        case OPI_OPC_NUMEQ ... OPI_OPC_GE:
+        if (bc->vinfo[lhs].vtype == opi_num_type &&
+            bc->vinfo[rhs].vtype == opi_num_type)
+        {
+          opi_debug("optimized binop\n");
+          vtype = opi_boolean_type;
+          do_error_test = FALSE;
+        } else {
+          vtype = NULL;
+          do_error_test = TRUE;
+        }
+        break;
+
+        default:
+          opi_error("undefined binary operator\n");
+          abort();
+      }
+
+      if (do_error_test) {
         // Implicit error-test:
         // if
         int test = opi_bytecode_testty(bc, ret, opi_undefined_type);
@@ -335,6 +439,8 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
         opi_bytecode_if_else(bc, &iff);
         opi_bytecode_if_end(bc, &iff);
       }
+
+      bc->vinfo[ret].vtype = vtype;
       return ret;
     }
 
@@ -390,17 +496,21 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
       // END IF
       opi_bytecode_if_end(bc, &iff);
 
+      if (bc->vinfo[then_ret].vtype == bc->vinfo[else_ret].vtype)
+        bc->vinfo[phi].vtype = bc->vinfo[then_ret].vtype;
       return phi;
     }
 
     case OPI_IR_BLOCK:
       if (ir->block.n) {
         size_t start = stack->size;
+        int ulstart = bc->ulist.len;
         for (size_t i = 0; i + 1 < ir->block.n; ++i)
           emit(ir->block.exprs[i], bc, stack, FALSE);
         int ret = emit(ir->block.exprs[ir->block.n - 1], bc, stack, tc);
         if (ir->block.drop)
           stack_pop(stack, stack->size - start);
+        opi_bytecode_restore_vtypes(bc, ulstart);
         return ret;
       } else {
         return opi_bytecode_const(bc, opi_nil);
@@ -441,6 +551,7 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
 
         // general case with nested unpacks
         int stack_start = stack->size;
+        int ulstart = bc->ulist.len;
         int var = opi_bytecode_var(bc);
         opi_bytecode_set(bc, var, 1);
         int phi = opi_bytecode_phi(bc);
@@ -453,6 +564,7 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
         int then_ret = emit(ir->match.then, bc, stack, tc);
         opi_bytecode_dup(bc, phi, then_ret);
         stack_pop(stack, stack->size - stack_start);
+        opi_bytecode_restore_vtypes(bc, ulstart);
         // close if-statements
         for (int i = iffs.len - 1; i >= 0; --i) {
           OpiIf *iff = iffs.data + i;
@@ -467,6 +579,9 @@ emit(OpiIr *ir, OpiBytecode *bc, struct stack *stack, int tc)
         opi_bytecode_dup(bc, phi, else_ret);
         opi_bytecode_if_else(bc, &iff);
         opi_bytecode_if_end(bc, &iff);
+
+        if (bc->vinfo[then_ret].vtype == bc->vinfo[else_ret].vtype)
+          bc->vinfo[phi].vtype = bc->vinfo[then_ret].vtype;
         return phi;
       }
     }

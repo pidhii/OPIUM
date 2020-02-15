@@ -1186,7 +1186,9 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
         opi_t fn = opi_fn_new(copy_ctor, ast->ctor.nflds + 1);
         opi_fn_set_data(fn, data, copy_ctor_delete);
         OpiIr *fn_ir = opi_ir_const(fn);
-        return opi_ir_apply(fn_ir, args, ast->ctor.nflds + 1);
+        OpiIr *ret = opi_ir_apply(fn_ir, args, ast->ctor.nflds + 1);
+        ret->vtype = type; // remember the type for future optimizations
+        return ret;
 
       } else {
         // test if number of fields in constructor matches number of fields
@@ -1210,7 +1212,9 @@ opi_builder_build_ir(OpiBuilder *bldr, OpiAst *ast)
         OpiAst *tmp = opi_ast_var(ast->ctor.name);
         OpiIr *ctor = opi_builder_build_ir(bldr, tmp);
         opi_ast_delete(tmp);
-        return opi_ir_apply(ctor, args, nflds);
+        OpiIr *ret = opi_ir_apply(ctor, args, nflds);
+        ret->vtype = type; // remember the type for future optimizations
+        return ret;
       }
     }
 
@@ -1532,6 +1536,7 @@ ir_new(void)
 {
   OpiIr *node = malloc(sizeof(OpiIr));
   node->rc = 0;
+  node->vtype = NULL;
   return node;
 }
 

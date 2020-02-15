@@ -14,6 +14,8 @@ opi_bytecode()
   bc->nvals = 0;
   bc->vinfo = malloc(sizeof(OpiValInfo) * bc->vinfo_cap);
 
+  cod_vec_init(bc->ulist);
+
   bc->head = malloc(sizeof(OpiInsn));
   bc->head->opc = OPI_OPC_NOP;
   bc->tail = malloc(sizeof(OpiInsn));
@@ -36,7 +38,26 @@ opi_bytecode_delete(OpiBytecode *bc)
   free(bc->vinfo);
   if (bc->tape)
     free(bc->tape);
+  cod_vec_destroy(bc->ulist);
   free(bc);
+}
+
+void
+opi_bytecode_set_vtype(OpiBytecode *bc, int vid, opi_type_t type)
+{
+  opi_assert(bc->vinfo[vid].vtype == NULL);
+  bc->vinfo[vid].vtype = type;
+  cod_vec_push(bc->ulist, vid);
+}
+
+void
+opi_bytecode_restore_vtypes(OpiBytecode *bc, int start)
+{
+  while ((int)bc->ulist.len != start) {
+    int vid = cod_vec_pop(bc->ulist);
+    opi_assert(bc->vinfo[vid].vtype != NULL);
+    bc->vinfo[vid].vtype = NULL;
+  }
 }
 
 OpiInsn*
@@ -62,6 +83,7 @@ opi_bytecode_new_val(OpiBytecode *bc, OpiValType vtype)
   bc->vinfo[bc->nvals].c = NULL;
   bc->vinfo[bc->nvals].creatat = NULL;
   bc->vinfo[bc->nvals].is_var = FALSE;
+  bc->vinfo[bc->nvals].vtype = NULL;
 
   return bc->nvals++;
 }

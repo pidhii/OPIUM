@@ -1466,6 +1466,8 @@ struct OpiIr_s {
     struct { int opc; OpiIr *lhs, *rhs; } binop;
     struct { int var; OpiIr *val; } setvar;
   };
+  opi_type_t vtype; // used by APPLY to propagate the type of the
+                    // value when it is known at build-stage.
 };
 
 OpiIr*
@@ -1572,6 +1574,7 @@ opi_ir_binop(int opc, OpiIr *lhs, OpiIr *rhs);
 
 OpiIr*
 opi_ir_setvar(int var, OpiIr *val);
+
 
 /* ==========================================================================
  * Bytecode
@@ -1852,14 +1855,16 @@ typedef enum OpiValType_e {
 typedef struct OpiValInfo_s {
   OpiValType type;
   opi_t c; // constant value
-  OpiInsn *creatat;
-  int is_var;
+  OpiInsn *creatat; // isntruction created the value
+  int is_var; // weather the value is a mutable variable
+  opi_type_t vtype;
 } OpiValInfo;
 
 struct OpiBytecode_s {
   size_t nvals;
-  OpiValInfo *vinfo;
   size_t vinfo_cap;
+  OpiValInfo *vinfo;
+  cod_vec(int) ulist; // list of values whose type was updated
   OpiInsn *head;
   OpiInsn *tail;
   OpiInsn *point;
@@ -1903,6 +1908,12 @@ opi_bytecode_value_is_local(OpiBytecode *bc, int vid)
 static inline int
 opi_bytecode_value_is_global(OpiBytecode *bc, int vid)
 { return bc->vinfo[vid].type == OPI_VAL_GLOBAL; }
+
+void
+opi_bytecode_set_vtype(OpiBytecode *bc, int vid, opi_type_t type);
+
+void
+opi_bytecode_restore_vtypes(OpiBytecode *bc, int start);
 
 void
 opi_bytecode_append(OpiBytecode *bc, OpiInsn *insn);
