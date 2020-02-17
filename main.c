@@ -94,7 +94,7 @@ main(int argc, char **argv, char **env)
     { 0, 0, 0, 0 }
   };
   int opt;
-  while ((opt = getopt_long(argc, argv, "hI:", opts, NULL)) > 0) {
+  while ((opt = getopt_long(argc, argv, "+hI:", opts, NULL)) > 0) {
     switch (opt) {
       case 'h':
         help_and_exit(argv[0], EXIT_SUCCESS);
@@ -118,7 +118,7 @@ main(int argc, char **argv, char **env)
 
   FILE *in = stdin;
   char path[PATH_MAX] = ".";
-  if (optind < argc && strcmp(argv[optind-1], "--") != 0) {
+  if (optind < argc /*&& strcmp(argv[optind-1], "--") != 0*/) {
     if (!(in = fopen(argv[optind], "r"))) {
       opi_error("failed to open file \"%s\" (%s)\n", argv[optind],
           strerror(errno));
