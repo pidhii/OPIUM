@@ -139,3 +139,16 @@ install (
   PROGRAMS ${CMAKE_SOURCE_DIR}/doctor.opi
   DESTINATION bin
   RENAME doctor)
+
+################################################################################
+#                                pkg-config
+#
+if (CMAKE_INSTALL_PREFIX)
+  # build from template
+  set (OPIUM_PREFIX "${CMAKE_INSTALL_PREFIX}")
+  configure_file (${CMAKE_SOURCE_DIR}/opium.pc ${CMAKE_BINARY_DIR}/opium.pc @ONLY)
+  install (
+    FILES ${CMAKE_BINARY_DIR}/opium.pc
+    DESTINATION lib/pkgconfig)
+endif (CMAKE_INSTALL_PREFIX)
+
