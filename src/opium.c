@@ -1632,14 +1632,19 @@ seq_delete(opi_type_t type, opi_t x)
 {
   OpiSeq *seq = opi_as_ptr(x);
   seq->cfg.dtor(seq->iter);
-  free(seq);
+  opi_unref(seq->cache);
+  opi_h6w_free(seq);
 }
+
+opi_t opi_seq_stop;
 
 void
 opi_seq_init(void)
 {
   opi_seq_type = opi_type_new("Seq");
   opi_type_set_delete_cell(opi_seq_type, seq_delete);
+  opi_assert(sizeof(OpiSeq) == sizeof(OpiH6w));
+  opi_seq_stop = opi_cons(opi_nil, opi_nil);
 }
 
 void
@@ -1648,22 +1653,35 @@ opi_seq_cleanup(void)
   opi_type_delete(opi_seq_type);
 }
 
+extern inline opi_t
+opi_seq_new_with_array(OpiIter *iter, OpiSeqCfg cfg, opi_t arr, size_t cnt, int end)
+{
+  opi_assert(cfg.next && cfg.dtor && cfg.copy);
+  /*OpiSeq *seq = malloc(sizeof(OpiSeq));*/
+  OpiSeq *seq = opi_h6w();
+  seq->iter = iter;
+  seq->cfg = cfg;
+  seq->cache = arr;
+  opi_inc_rc(arr);
+  seq->cnt = cnt;
+  seq->is_free = FALSE;
+  seq->is_end = end;
+  opi_init_cell(seq, opi_seq_type);
+  return OPI(seq);
+}
+
 opi_t
 opi_seq_new(OpiIter *iter, OpiSeqCfg cfg)
 {
-  opi_assert(cfg.next && cfg.dtor && cfg.copy);
-  OpiSeq *seq = malloc(sizeof(OpiSeq));
-  seq->iter = iter;
-  seq->cfg = cfg;
-  opi_init_cell(seq, opi_seq_type);
-  return (opi_t)seq;
+  return opi_seq_new_with_array(iter, cfg, opi_array_new_empty(0x40), 0, FALSE);
 }
 
 opi_t
 opi_seq_copy(opi_t x)
 {
   OpiSeq *seq = opi_as_ptr(x);
-  return opi_seq_new(seq->cfg.copy(seq->iter), seq->cfg);
+  OpiIter *iter = seq->cfg.copy(seq->iter);
+  return opi_seq_new_with_array(iter, seq->cfg, seq->cache, seq->cnt, seq->is_end);
 }
 
 /******************************************************************************/
@@ -1754,7 +1772,8 @@ opi_array_push(opi_t a, opi_t x)
     arr->cap <<= 1;
     arr->data = realloc(arr->data, sizeof(opi_t) * arr->cap);
   }
-  opi_inc_rc(arr->data[arr->len++] = x);
+  arr->data[arr->len++] = x;
+  opi_inc_rc(x);
 }
 
 opi_t

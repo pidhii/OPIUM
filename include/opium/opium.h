@@ -92,7 +92,6 @@ typedef struct OpiIr_s OpiIr;
 typedef struct OpiInsn_s OpiInsn;
 typedef struct OpiFlatInsn_s OpiFlatInsn;
 typedef struct OpiSeq_s OpiSeq;
-typedef struct OpiIter_s OpiIter;
 typedef struct OpiBytecode_s OpiBytecode;
 
 typedef struct OpiHeader_s OpiHeader;
@@ -957,16 +956,21 @@ opi_array_push_with_copy(opi_t a, opi_t x);
 OPI_EXTERN opi_type_t
 opi_seq_type;
 
+typedef struct OpiIter_s OpiIter;
+
 typedef struct OpiSeqCfg_s {
-  opi_t (*next)(OpiIter *iter);
-  OpiIter* (*copy)(OpiIter *iter);
-  void (*dtor)(OpiIter *iter);
+  opi_t    (* next )(OpiIter *iter);
+  OpiIter* (* copy )(OpiIter *iter);
+  void     (* dtor )(OpiIter *iter);
 } OpiSeqCfg;
 
 struct OpiSeq_s {
   OpiHeader header;
   OpiIter *restrict iter;
   OpiSeqCfg cfg;
+  opi_t cache; // array with cache
+  uint32_t cnt;
+  uint16_t is_free, is_end;
 };
 
 void
@@ -979,12 +983,61 @@ static OpiSeqCfg
 opi_seq_cfg_undefined = { .next = NULL, .copy = NULL, .dtor = NULL };
 
 opi_t
+opi_seq_new_with_array(OpiIter *iter, OpiSeqCfg cfg, opi_t arr, size_t cnt, int end);
+
+opi_t
 opi_seq_new(OpiIter *iter, OpiSeqCfg cfg);
 
+OPI_EXTERN
+opi_t opi_seq_stop;
+
+// TODO: think more
 static inline opi_t
 opi_seq_next(opi_t x)
 {
   OpiSeq *seq = (OpiSeq*)x;
+
+  if (seq->cnt < OPI_ARRAY(seq->cache)->len) {
+    /*
+     * Get element from cache.
+     */
+    opi_t elt = OPI_ARRAY(seq->cache)->data[seq->cnt++];
+    if (opi_unlikely(elt == opi_seq_stop)) {
+      seq->cnt--;
+      return NULL;
+    }
+    return elt;
+
+  } else {
+    /*
+     * Evaluate handle.
+     */
+    if (opi_unlikely(seq->is_end))
+      return NULL;
+
+    opi_t elt = seq->cfg.next(seq->iter);
+    if (opi_unlikely(elt == NULL)) {
+      seq->is_end = TRUE;
+      opi_array_push(seq->cache, opi_seq_stop);
+      return NULL;
+    }
+    seq->cnt++;
+
+    // If there are no other references to the cache-array then no need to
+    // to store elements to cache.
+    int is_free = seq->is_free;
+    if (!is_free) {
+      is_free = seq->cache->rc == 1;
+      if (!is_free)
+        opi_array_push(seq->cache, elt);
+      else
+        seq->is_free = TRUE;
+    } else {
+      assert(seq->cache->rc == 1);
+    }
+    return elt;
+  }
+
   return seq->cfg.next(seq->iter);
 }
 
