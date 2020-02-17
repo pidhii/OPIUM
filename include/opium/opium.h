@@ -964,13 +964,45 @@ typedef struct OpiSeqCfg_s {
   void     (* dtor )(OpiIter *iter);
 } OpiSeqCfg;
 
+typedef struct OpiSeqCache_s {
+  size_t rc;
+  opi_t arr;
+  uint32_t end_cnt;
+} OpiSeqCache;
+
+static inline OpiSeqCache*
+opi_seq_cache_new(opi_t arr, int end_cnt)
+{
+  OpiSeqCache *cache = opi_h2w();
+  cache->arr = arr;
+  opi_inc_rc(arr);
+  cache->end_cnt = (uint32_t)end_cnt;
+  cache->rc = 0;
+  return cache;
+}
+
+static inline void
+opi_seq_cache_ref(OpiSeqCache *cache)
+{
+  cache->rc += 1;
+}
+
+static inline void
+opi_seq_cache_unref(OpiSeqCache *cache)
+{
+  if (--cache->rc == 0) {
+    opi_unref(cache->arr);
+    opi_h2w_free(cache);
+  }
+}
+
 struct OpiSeq_s {
   OpiHeader header;
   OpiIter *restrict iter;
   OpiSeqCfg cfg;
-  opi_t cache; // array with cache
+  OpiSeqCache *cache;
   uint32_t cnt;
-  uint16_t is_free, is_end;
+  int32_t is_free;
 };
 
 void
@@ -983,13 +1015,10 @@ static OpiSeqCfg
 opi_seq_cfg_undefined = { .next = NULL, .copy = NULL, .dtor = NULL };
 
 opi_t
-opi_seq_new_with_array(OpiIter *iter, OpiSeqCfg cfg, opi_t arr, size_t cnt, int end);
+opi_seq_new_with_cache(OpiIter *iter, OpiSeqCfg cfg, OpiSeqCache *cache, int cnt);
 
 opi_t
 opi_seq_new(OpiIter *iter, OpiSeqCfg cfg);
-
-OPI_EXTERN
-opi_t opi_seq_stop;
 
 // TODO: think more
 static inline opi_t
@@ -997,28 +1026,24 @@ opi_seq_next(opi_t x)
 {
   OpiSeq *seq = (OpiSeq*)x;
 
-  if (seq->cnt < OPI_ARRAY(seq->cache)->len) {
+  if (opi_unlikely(seq->cnt == seq->cache->end_cnt))
+    return NULL;
+
+  opi_t arr = seq->cache->arr;
+  if (seq->cnt < OPI_ARRAY(arr)->len) {
     /*
      * Get element from cache.
      */
-    opi_t elt = OPI_ARRAY(seq->cache)->data[seq->cnt++];
-    if (opi_unlikely(elt == opi_seq_stop)) {
-      seq->cnt--;
-      return NULL;
-    }
+    opi_t elt = OPI_ARRAY(arr)->data[seq->cnt++];
     return elt;
 
   } else {
     /*
      * Evaluate handle.
      */
-    if (opi_unlikely(seq->is_end))
-      return NULL;
-
     opi_t elt = seq->cfg.next(seq->iter);
     if (opi_unlikely(elt == NULL)) {
-      seq->is_end = TRUE;
-      opi_array_push(seq->cache, opi_seq_stop);
+      seq->cache->end_cnt = seq->cnt;
       return NULL;
     }
     seq->cnt++;
@@ -1029,7 +1054,7 @@ opi_seq_next(opi_t x)
     if (!is_free) {
       is_free = seq->cache->rc == 1;
       if (!is_free)
-        opi_array_push(seq->cache, elt);
+        opi_array_push(arr, elt);
       else
         seq->is_free = TRUE;
     } else {
