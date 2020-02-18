@@ -1680,6 +1680,29 @@ opi_seq_copy(opi_t x)
   return opi_seq_new_with_cache(iter, seq->cfg, seq->cache, seq->cnt);
 }
 
+opi_t
+opi_seq_force(opi_t s, int must_cache)
+{
+  OpiSeq *seq = (void*)s;
+
+  if (must_cache)
+    opi_seq_cache_inc_rc(seq->cache);
+
+  // evaluate untill finished
+  while (TRUE) {
+    opi_t x = opi_seq_next(s);
+    if (opi_unlikely(x == NULL))
+      break;
+    if (opi_unlikely(x->type == opi_undefined_type))
+      return x;
+  }
+
+  if (must_cache)
+    opi_seq_cache_dec_rc(seq->cache);
+
+  return NULL;
+}
+
 /******************************************************************************/
 opi_type_t
 opi_array_type;

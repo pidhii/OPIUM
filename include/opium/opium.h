@@ -91,7 +91,6 @@ typedef struct OpiBuilder_s OpiBuilder;
 typedef struct OpiIr_s OpiIr;
 typedef struct OpiInsn_s OpiInsn;
 typedef struct OpiFlatInsn_s OpiFlatInsn;
-typedef struct OpiSeq_s OpiSeq;
 typedef struct OpiBytecode_s OpiBytecode;
 
 typedef struct OpiHeader_s OpiHeader;
@@ -125,6 +124,8 @@ typedef struct OpiBuffer_s OpiBuffer;
 typedef struct OpiVar_s OpiVar;
 #define OPI_VAR(x) ((OpiVar*)(x))
 
+typedef struct OpiSeq_s OpiSeq;
+#define OPI_SEQ(x) ((OpiSeq*)(x))
 /*
  * Argument-stack pointer.
  *
@@ -983,9 +984,12 @@ opi_seq_cache_new(opi_t arr, int end_cnt)
 
 static inline void
 opi_seq_cache_ref(OpiSeqCache *cache)
-{
-  cache->rc += 1;
-}
+{ cache->rc += 1; }
+#define opi_seq_cache_inc_rc opi_seq_cache_ref
+
+static inline void
+opi_seq_cache_dec_rc(OpiSeqCache *cache)
+{ cache->rc -= 1; }
 
 static inline void
 opi_seq_cache_unref(OpiSeqCache *cache)
@@ -1068,6 +1072,19 @@ opi_seq_next(opi_t x)
 
 opi_t
 opi_seq_copy(opi_t x);
+
+/*
+ * Evaluate full sequence.
+ *
+ * Return NULL to indicate succesfull evaluation; otherwize, return object
+ * of opi_undefined_type.
+ *
+ * Note: elements are not guaranteed to be cached, unless the sequenced is
+ * referenced elsewhere.
+ */
+opi_t
+opi_seq_force(opi_t s, int must_cache);
+
 
 /* ==========================================================================
  * Buffer

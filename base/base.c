@@ -70,7 +70,7 @@ loadfile(void)
 }
 
 static opi_t
-length(void)
+List_length(void)
 {
   opi_t x = opi_pop();
   opi_t ret = opi_num_new(opi_length(x));
@@ -662,15 +662,12 @@ Array_length(void)
 static opi_t
 Array_get(void)
 {
+  opi_t nth = opi_pop();
+  opi_inc_rc(nth);
   opi_t arr = opi_pop();
   opi_inc_rc(arr);
 
-  opi_t nth = opi_pop();
-  opi_inc_rc(nth);
-
-  if (opi_unlikely(arr->type != opi_array_type ||
-                   nth->type != opi_num_type))
-  {
+  if (opi_unlikely(arr->type != opi_array_type || nth->type != opi_num_type)) {
     opi_unref(arr);
     opi_unref(nth);
     return opi_undefined(opi_symbol("type-error"));
@@ -756,27 +753,19 @@ Array_ofSeq(void)
   OPI_BEGIN_FN()
   OPI_ARG(seq, opi_seq_type)
 
-  cod_vec(opi_t) buf;
-  cod_vec_init(buf);
-
   opi_t x;
   opi_t s = opi_seq_copy(seq);
-  opi_unref(seq);
-  while ((x = opi_seq_next(s))) {
 
-    if (opi_unlikely(x->type == opi_undefined_type)) {
-      cod_vec_iter(buf, i, x, opi_unref(x));
-      cod_vec_destroy(buf);
-      opi_drop(s);
-      return x;
-    }
-
-    cod_vec_push(buf, x);
-    opi_inc_rc(x);
+  opi_t err;
+  if ((err = opi_seq_force(s, TRUE))) {
+    opi_drop(s);
+    opi_return(err);
   }
+
+  opi_t arr = OPI_SEQ(s)->cache->arr;
   opi_drop(s);
 
-  return opi_array_drain(buf.data, buf.len, buf.cap);
+  opi_return(arr);
 }
 
 static opi_t
@@ -810,14 +799,16 @@ Array_toSeq(void)
 
   OPI_BEGIN_FN()
   OPI_ARG(arr, opi_array_type)
+
   ArrayIter *iter = malloc(sizeof(ArrayIter));
   iter->arr = arr;
   iter->i = 0;
-  return opi_seq_new((OpiIter*)iter, (OpiSeqCfg) {
+  OpiSeqCache *cache = opi_seq_cache_new(arr, OPI_ARRAY(arr)->len);
+  return opi_seq_new_with_cache((OpiIter*)iter, (OpiSeqCfg) {
     .next = array_iter_next,
     .copy = array_iter_copy,
     .dtor = array_iter_delete,
-  });
+  }, cache, FALSE);
 }
 
 static opi_t
@@ -883,6 +874,56 @@ Seq_foldl(void)
     if (opi_unlikely(x->type == opi_undefined_type)) {
       opi_unref(f);
       opi_unref(z);
+      opi_drop(s);
+      return x;
+    }
+
+    opi_push(x);
+    opi_push(z);
+    opi_dec_rc(z);
+    z = opi_apply(f, 2);
+    if (opi_unlikely(z->type == opi_undefined_type)) {
+      opi_unref(f);
+      opi_drop(s);
+      return z;
+    }
+    opi_inc_rc(z);
+  }
+
+  opi_unref(f);
+  opi_drop(s);
+  opi_dec_rc(z);
+  return z;
+}
+
+static opi_t
+Seq_reduce(void)
+{
+  OPI_BEGIN_FN()
+  OPI_ARG(f, opi_fn_type)
+  OPI_ARG(seq, opi_seq_type)
+
+  opi_t s = opi_seq_copy(seq);
+  opi_unref(seq);
+
+  opi_t z = opi_seq_next(s);
+  if (opi_unlikely(z == NULL)) {
+    opi_unref(f);
+    opi_drop(s);
+    return opi_undefined(opi_symbol("empty-sequence"));
+  }
+  if (opi_unlikely(z->type == opi_undefined_type)) {
+    opi_unref(f);
+    opi_drop(s);
+    return z;
+  }
+
+  opi_t x;
+  opi_inc_rc(z);
+  while ((x = opi_seq_next(s))) {
+
+    if (opi_unlikely(x->type == opi_undefined_type)) {
+      opi_unref(f);
       opi_drop(s);
       return x;
     }
@@ -1523,7 +1564,7 @@ opium_library(OpiBuilder *bldr)
   opi_fn_set_data(loadfile_fn, bldr->ctx, NULL);
   opi_builder_def_const(bldr, "loadfile", loadfile_fn);
 
-  opi_builder_def_const(bldr, "length", opi_fn_new(length , 1));
+  opi_builder_def_const(bldr, "List.length", opi_fn_new(List_length , 1));
   opi_builder_def_const(bldr, "revappend", opi_fn_new(revappend, 2));
 
   opi_builder_def_const(bldr, "Seq.iter", opi_fn_new(Seq_iter, 2));
@@ -1531,6 +1572,7 @@ opium_library(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "Seq.zip", opi_fn_new(Seq_zip, 2));
   opi_builder_def_const(bldr, "Seq.filter", opi_fn_new(Seq_filter, 2));
   opi_builder_def_const(bldr, "Seq.foldl", opi_fn_new(Seq_foldl, 3));
+  opi_builder_def_const(bldr, "Seq.reduce", opi_fn_new(Seq_reduce, 2));
   opi_builder_def_const(bldr, "Seq.unfold", opi_fn_new(Seq_unfold, 2));
 
   opi_builder_def_const(bldr, "List.toSeq", opi_fn_new(List_toSeq, 1));

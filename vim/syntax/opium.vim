@@ -84,7 +84,7 @@ syn keyword Function any? all?
 syn keyword Function revmap map
 syn keyword Function zip
 syn keyword Function foreach
-syn keyword Function foldl foldr
+syn keyword Function foldl reduce
 syn keyword Function unfold
 syn keyword Function revfilter filter
 syn keyword Function drop take
