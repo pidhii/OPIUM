@@ -158,7 +158,6 @@ start_token_t opi_start_token;
 %precedence ELSE
 %type<ast> if unless when if_let unless_let
 %token LOAD
-%token DCOL
 %token MODULE
 %token USE AS
 %nonassoc RETURN

@@ -1085,7 +1085,6 @@ opi_seq_copy(opi_t x);
 opi_t
 opi_seq_force(opi_t s, int must_cache);
 
-
 /* ==========================================================================
  * Buffer
  */

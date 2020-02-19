@@ -6,7 +6,7 @@ if exists("b:current_syntax")
   finish
 endif
 
-set comments=sr:{-,mb:-,ex:-}
+set comments=b:#
 
 set iskeyword+=?,'
 syn match opiIdentifier /\<[a-z_][a-zA-Z0-9_]*['?]?\>/
@@ -117,12 +117,10 @@ syn match opiLambda /->/
 
 syn keyword opiLoad load
 
-syn match opiTableRef /#/ nextgroup=opiKey skipwhite skipnl
+syn match opiTableRef /::/ nextgroup=opiKey 
 syn match opiKey /\k\+/ contained
 
-syn match Comment /^#!.*$/
-syn match Comment /--.*$/ contains=opiCommentLabel
-syn region Comment start=/{-/ end=/-}/ skipnl skipwhite contains=opiCommentLabel
+syn match Comment /#.*$/ contains=opiCommentLabel
 syn match opiCommentLabel /[A-Z]\w*:/ contained
 
 " Integer with - + or nothing in front
@@ -245,7 +243,7 @@ hi link opiSymbol Constant
 hi link opiKey Identifiers
 hi link opiTableRef SpecialChar
 
-hi link opiCommentLabel Label
+hi link opiCommentLabel Comment
 
 hi link opiQq Keyword
 

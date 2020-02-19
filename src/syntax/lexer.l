@@ -24,9 +24,6 @@
 extern
 cod_vec(int) opi_start_token;
 
-static
-int g_begin_cnt = 0;
-
 enum {
   BRACE_CODE,
   BRACE_STRING,
@@ -77,12 +74,7 @@ OP_CHAR "="|"+"|"-"|"*"|"/"|"%"|\.|">"|"<"|":"|"\\"|"|"|"&"|"$"|"!"|"@"
 
 [ \t\n]
 
-^#!.*$
-"--".*$
-"{-" { BEGIN(comment); }
-<comment>\n
-<comment>.
-<comment>"-}" { BEGIN(INITIAL); }
+"#".*$
 
 
 nan |
@@ -121,18 +113,8 @@ in[ \n\t]*"|>" {
   return IN;
 }
 
-
-begin {
-  g_begin_cnt += 1;
-  return BEG;
-}
-end {
-  if (g_begin_cnt && --g_begin_cnt)
-    cod_vec_push(opi_start_token, ';');
-  return END;
-}
-
-"::" { return DCOL; }
+begin { return BEG; }
+end { return END; }
 
 \" { BEGIN(string); return '"'; }
 \` { BEGIN(shell); return '`'; }
@@ -310,7 +292,7 @@ is[ \n\t]+not { return ISNOT; }
 "++" { return PLUSPLUS; }
 ".." { return DOTDOT; }
 "." { return '.'; }
-"#" { return TABLEREF; }
+"::" { return TABLEREF; }
 ";" { return ';'; }
 ";;" { return BRK; }
 "@"|"!" |

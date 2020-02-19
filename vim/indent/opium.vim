@@ -51,10 +51,10 @@ let s:type = '^\s*\%(class\|let\|type\)\>.*='
 " Skipping pattern, for comments
 function! s:GetLineWithoutFullComment(lnum)
  let lnum = prevnonblank(a:lnum - 1)
- let lline = substitute(getline(lnum), '{-.*-}\s*$', '', '')
+ let lline = substitute(getline(lnum), '{-.*$', '', '')
  while lline =~ '^\s*$' && lnum > 0
    let lnum = prevnonblank(lnum - 1)
-   let lline = substitute(getline(lnum), '{-.*-}\s*$', '', '')
+   let lline = substitute(getline(lnum), '{-.*$', '', '')
  endwhile
  return lnum
 endfunction
@@ -131,12 +131,6 @@ function! GetOCamlIndent()
      return s:FindLet(s:type, '','\<let\s*$')
    endif
 
- " Indent if current line begins with 'class' or 'type':
- elseif line =~ '^\s*\(class\|type\)\>'
-   if lline !~ s:lim . '\|\<and\s*$\|' . s:letlim
-     return s:FindLet(s:type, '','\<\(class\|type\)\s*$')
-   endif
-
  " Indent for pattern matching:
  elseif line =~ '^\s*|'
    if lline !~ '^\s*\(|[^\]]\|\(match\|type\|with\)\>\)\|\<\(function\|parser\|private\|with\)\s*$'
@@ -173,38 +167,11 @@ function! GetOCamlIndent()
    if lline !~ '^\s*\(and\|let\|type\)\>\|\<end\s*$'
      return ind - shiftwidth()
    endif
-
- " Indent if current line begins with 'with':
- elseif line =~ '^\s*with\>'
-   if lline !~ '^\s*\(match\|try\)\>'
-     return s:FindPair('\<\%(match\|try\)\>', '','\<with\>')
-   endif
-
- " Indent if current line begins with 'exception', 'external', 'include' or
- " 'open':
- elseif line =~ '^\s*\(exception\|external\|include\|open\)\>'
-   if lline !~ s:lim . '\|' . s:letlim
-     call search(line)
-     return indent(search('^\s*\(\(exception\|external\|include\|open\|type\)\>\|val\>.*:\)', 'bW'))
-   endif
-
- " Indent if current line begins with 'val':
- elseif line =~ '^\s*val\>'
-   if lline !~ '^\s*\(exception\|external\|include\|open\)\>\|' . s:obj . '\|' . s:letlim
-     return indent(search('^\s*\(\(exception\|include\|initializer\|method\|open\|type\|val\)\>\|external\>.*:\)', 'bW'))
-   endif
-
- " Indent if current line begins with 'constraint', 'inherit', 'initializer'
- " or 'method':
- elseif line =~ '^\s*\(constraint\|inherit\|initializer\|method\)\>'
-   if lline !~ s:obj
-     return indent(search('\<\(object\|object\s*(.*)\)\s*$', 'bW')) + shiftwidth()
-   endif
-
  endif
 
  " Add a 'shiftwidth' after lines ending with:
- if lline =~ '\(:\|=\|->\|<-\|(\|\[\|{\|{<\|\[|\|\[<\|\<\(begin\|do\|else\|fun\|function\|functor\|if\|initializer\|object\|parser\|private\|sig\|struct\|then\|try\)\|\<object\s*(.*)\)\s*$'
+ "if lline =~ '\(:\|=\|->\|<-\|(\|\[\|{\|{<\|\[|\|\[<\|\<\(begin\|do\|else\|fun\|function\|functor\|if\|initializer\|object\|parser\|private\|sig\|struct\|then\|try\)\|\<object\s*(.*)\)\s*$'
+ if lline =~ '\(=\|->\|<-\|(\|\[\|{\|{<\|\[|\|\[<\|\<\(begin\|do\|else\|fun\|function\|functor\|if\|initializer\|object\|parser\|private\|sig\|struct\|then\|try\)\|\<object\s*(.*)\)\s*$'
    let ind = ind + shiftwidth()
 
  " Back to normal indent after lines ending with ';;':

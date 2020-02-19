@@ -33,12 +33,12 @@ let trim = rtrim . ltrim
 
 let reverse l = revappend l nil
 
---let car x = let head:_ = x in head
---let cdr x = let _:tail = x in tail
+#let car x = let head:_ = x in head
+#let cdr x = let _:tail = x in tail
 
---------------------------------------------------------------------------------
--- Seq utilities
---
+#-------------------------------------------------------------------------------
+# Seq utilities
+#
 trait Length = let length end
 use Length.length
 
@@ -67,14 +67,14 @@ impl ToSeq for Array = let toSeq = Array.toSeq        end
 impl ToList for Array = let toList = Array.toList end
 impl ToList for Table = let toList = pairs        end
 
--- TODO: Array.toSeq, Array.foldl, Array.foldr, List.foldl
+# TODO: Array.toSeq, Array.foldl, Array.foldr, List.foldl
 let rlist x =
   if x is nil then x
   else if x is Cons then reverse x
   else if x is Array then Array.toRevList x
   else List.ofRevSeq $ ToSeq.toSeq x
 
-let list x = --reverse . rlist
+let list x = #reverse . rlist
   if x is Cons || x is nil then x
   else if x is ToList then ToList.toList x
   else if x is ToRevSeq then rlist $ ToRevSeq.toRevSeq x
@@ -99,7 +99,6 @@ let unfold = Seq.unfold
 
 let range from to = unfold (fn i -> if i < to then i : i + 1) from
 
---let gt x y = x > y
 let take n = map cdr . zip (range 0 n)
 let drop n = map cdr . filter (fn (x:_) -> x >= n) . zip (range 0 inf)
 
@@ -115,42 +114,42 @@ let all? f = all? f . list
 
 let join sep = reduce \acc x -> acc ++ sep ++ x
 
---impl Add for Seq =
-  --let add lhs rhs =
-    --if rhs is ToSeq
-    --then map (uncurry (+)) $ zip lhs rhs
-    --else map (\x -> x + rhs) lhs
-  --let radd rhs lhs = map (\x -> lhs + x) rhs
---end
---impl Sub for Seq =
-  --let sub lhs rhs =
-    --if rhs is ToSeq
-    --then map (uncurry (-)) $ zip lhs rhs
-    --else map (\x -> x - rhs) lhs
-  --let rsub rhs lhs = map (\x -> lhs - x) rhs
---end
+#impl Add for Seq =
+  #let add lhs rhs =
+    #if rhs is ToSeq
+    #then map (uncurry (+)) $ zip lhs rhs
+    #else map (\x -> x + rhs) lhs
+  #let radd rhs lhs = map (\x -> lhs + x) rhs
+#end
+#impl Sub for Seq =
+  #let sub lhs rhs =
+    #if rhs is ToSeq
+    #then map (uncurry (-)) $ zip lhs rhs
+    #else map (\x -> x - rhs) lhs
+  #let rsub rhs lhs = map (\x -> lhs - x) rhs
+#end
 
---impl Add for Cons =
-  --let add  lhs rhs = list $ ToSeq.toSeq lhs + rhs
-  --let radd rhs lhs = list $ lhs + ToSeq.toSeq rhs
---end
---impl Sub for Cons =
-  --let sub  lhs rhs = list $ ToSeq.toSeq lhs - rhs
-  --let rsub rhs lhs = list $ lhs - ToSeq.toSeq rhs
---end
+#impl Add for Cons =
+  #let add  lhs rhs = list $ ToSeq.toSeq lhs + rhs
+  #let radd rhs lhs = list $ lhs + ToSeq.toSeq rhs
+#end
+#impl Sub for Cons =
+  #let sub  lhs rhs = list $ ToSeq.toSeq lhs - rhs
+  #let rsub rhs lhs = list $ lhs - ToSeq.toSeq rhs
+#end
 
---impl Add for Array =
-  --let add  lhs rhs = Array.ofSeq $ ToSeq.toSeq lhs + rhs
-  --let radd rhs lhs = Array.ofSeq $ lhs + ToSeq.toSeq rhs
---end
---impl Sub for Array =
-  --let sub  lhs rhs = Array.ofSeq $ ToSeq.toSeq lhs - rhs
-  --let rsub rhs lhs = Array.ofSeq $ lhs - ToSeq.toSeq rhs
---end
+#impl Add for Array =
+  #let add  lhs rhs = Array.ofSeq $ ToSeq.toSeq lhs + rhs
+  #let radd rhs lhs = Array.ofSeq $ lhs + ToSeq.toSeq rhs
+#end
+#impl Sub for Array =
+  #let sub  lhs rhs = Array.ofSeq $ ToSeq.toSeq lhs - rhs
+  #let rsub rhs lhs = Array.ofSeq $ lhs - ToSeq.toSeq rhs
+#end
 
---------------------------------------------------------------------------------
--- I/O
---
+#-------------------------------------------------------------------------------
+# I/O
+#
 let open path ..mode = __base_open path (car mode or "r")
 let popen cmd ..mode = __base_popen cmd (car mode or "r")
 

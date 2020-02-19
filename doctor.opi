@@ -1,6 +1,6 @@
 #!/bin/env opium
 
-{- Show help and exit. -}
+# Show help and exit.
 let helpAndExit out err =
   fprintf out "\
 usage: %{car Sys.argv} [OPTIONS] COMMAND
@@ -16,7 +16,7 @@ COMMANDS:
 ";
   exit err
 
-{- Parse command-line arguments into table. -}
+# Parse command-line arguments into table.
 let rec parseArgs args =
   unless let arg:args = args then nil
   else if arg eq "help" then helpAndExit stdout 0
@@ -33,80 +33,77 @@ let rec parseArgs args =
     else die "missing opium-path argument"
   else die "unknown command-line option"
 
-{- Get full path given a relative one. -}
+# Get full path given a relative one.
 let realpath path = `test -e '%{path}' && realpath '%{path}'`
 
-
-{- Parsed command-line options. -}
+# Parsed command-line options.
 let cmdArgs = table . parseArgs $ cdr Sys.argv
 
-{- Force mode. -}
-let force? = when cmdArgs#force then true else false
+# Force mode.
+let force? = when cmdArgs::force then true else false
 
-{- Path to opium libraries. -}
-let installPath = cmdArgs#path or Sys.env#OPIUM_PATH or
+# Path to opium libraries.
+let installPath = cmdArgs::path or Sys.env::OPIUM_PATH or
   die "path to opium libraries not set"
 
-{- Install package. -}
+# Install package.
 let install () =
-  let packageRoot = realpath cmdArgs#install
+  let packageRoot = realpath cmdArgs::install
   or die "failed to resolve package directory"
   in
 
-  -- find install-script
+  # find install-script
   let installScript = "%{packageRoot}/install.opi" in
   `test -f %{installScript}` or die "missing install-script";
 
-  -- load installer
+  # load installer
   let installEnv = [installPath, packageRoot] in
   let config = loadfile installScript installEnv in
-  print "package %{config#name}";
+  print "package %{config::name}";
 
-  -- resolve fields
-  let packageName = config#name in
-  let packageMain = config#main in
-  let packageFiles = config#files or [packageMain] in
-  let packageBuild = config#build or \_ -> nil in
-  let packagePostinstall = config#postinstall or \_ -> nil in
+  # resolve fields
+  let packageName = config::name in
+  let packageMain = config::main in
+  let packageFiles = config::files or [packageMain] in
+  let packageBuild = config::build or \_ -> nil in
+  let packagePostinstall = config::postinstall or \_ -> nil in
 
   print "building...";
-  -- build package
+  # build package
   packageBuild packageRoot;
 
   print "installing...";
-  -- create package's private directory for dependencies
+  # create package's private directory for dependencies
   let packageDirName = "%{packageName}-dir" in
   let packageInstallPath = "%{installPath}/%{packageDirName}" in
   `mkdir %{force? && "-p" || ""} %{packageInstallPath}`
   or die "failed to create package directory, try force-option to proceed";
-  -- copy dependencies
+  # copy dependencies
   let copy file =
     `cp %{packageRoot}/%{file} %{packageInstallPath}`
     or die "failed to copy \"%{file}\""
   in foreach copy packageFiles;
-  -- create symlink to the main script
+  # create symlink to the main script
   let rel_path = "%{packageDirName}/%{packageMain}" in
   let link_path = "%{installPath}/%{packageName}" in
   `ln -s %{force? && "-f" || ""} %{rel_path} %{link_path}`;
 
-  when cmdArgs#clean then begin
+  when cmdArgs::clean then begin
     print "running post-install hooks...";
     packagePostinstall packageRoot;
   end;
 
   print "package %{packageName} was succesfully installed to %{installPath}"
 
-
-{- Reomve package. -}
+# Reomve package.
 let remove () =
-  let packageName = cmdArgs#remove in
+  let packageName = cmdArgs::remove in
   system "rm -rfv %{installPath}/%{packageName}{,-dir}"
 
-
-{- MAIN: -}
+# MAIN:
 begin
-  when cmdArgs#install then install ()
-  else when cmdArgs#remove then remove ()
+  when cmdArgs::install then install ()
+  else when cmdArgs::remove then remove ()
   else die "\
 neither of install nor remove commands specified, see help (%{car Sys.argv}) for
 list of available commands and options\
