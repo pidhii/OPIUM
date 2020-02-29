@@ -614,9 +614,11 @@ regex(void)
 {
   opi_t pattern = opi_pop();
   opi_assert(pattern->type == opi_str_type);
+  opi_t opt = opi_pop();
+  opi_assert(opt->type == opi_num_type);
 
   const char *err;
-  opi_t regex = opi_regex_new(OPI_STR(pattern)->str, 0, &err);
+  opi_t regex = opi_regex_new(OPI_STR(pattern)->str, OPI_NUM(opt)->val, &err);
   if (regex == NULL) {
     opi_error("%s\n", err);
     abort();
@@ -745,6 +747,71 @@ addressof(void)
   return ret;
 }
 
+static opi_t
+range(long double from, long double to, long double step)
+{
+  typedef struct {
+    long double cnt, end, step;
+  } Iter;
+
+  opi_t next_right(OpiIter *restrict iter) {
+    Iter *self = (void*)iter;
+    if (opi_unlikely(self->cnt > self->end))
+      return NULL;
+    opi_t ret = opi_num_new(self->cnt);
+    self->cnt += self->step;
+    return ret;
+  }
+
+  opi_t next_left(OpiIter *restrict iter) {
+    Iter *self = (void*)iter;
+    if (opi_unlikely(self->cnt < self->end))
+      return NULL;
+    opi_t ret = opi_num_new(self->cnt);
+    self->cnt += self->step;
+    return ret;
+  }
+
+  OpiIter* copy(OpiIter *iter) {
+    Iter *self = (void*)iter;
+    Iter *other = malloc(sizeof(Iter));
+    memcpy(other, self, sizeof(Iter));
+    return (OpiIter*)other;
+  }
+
+  Iter *iter = malloc(sizeof(Iter));
+  iter->cnt = from;
+  iter->end = to;
+  iter->step = step;
+  return opi_seq_new((OpiIter*)iter, (OpiSeqCfg) {
+    .next = step > 0 ? next_right : next_left,
+    .copy = copy,
+    .dtor = (void*)free
+  });
+}
+
+static
+OPI_DEF(builtin_range2,
+  opi_arg(x1_, opi_num_type)
+  opi_arg(xn_, opi_num_type)
+  long double x1 = OPI_NUM(x1_)->val;
+  long double xn = OPI_NUM(xn_)->val;
+  long double step = xn > x1 ? 1 : -1;
+  opi_return(range(x1, xn, step));
+)
+
+static
+OPI_DEF(builtin_range3,
+  opi_arg(x1_, opi_num_type)
+  opi_arg(x2_, opi_num_type)
+  opi_arg(xn_, opi_num_type)
+  long double x1 = OPI_NUM(x1_)->val;
+  long double x2 = OPI_NUM(x2_)->val;
+  long double xn = OPI_NUM(xn_)->val;
+  long double step = x2 - x1;
+  opi_return(range(x1, xn, step));
+)
+
 void
 opi_builtins(OpiBuilder *bldr)
 {
@@ -758,7 +825,7 @@ opi_builtins(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "Table", opi_fn_new(Table, 1));
   opi_builder_def_const(bldr, "number", opi_fn_new(number, 1));
 
-  opi_builder_def_const(bldr, "regex", opi_fn_new(regex, 1));
+  opi_builder_def_const(bldr, "regex", opi_fn_new(regex, 2));
 
   opi_builder_def_const(bldr, "#", opi_fn_new(table_ref, 2));
 
@@ -792,4 +859,7 @@ opi_builtins(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "__builtin_sr", opi_fn_new(search_replace, 4));
 
   opi_builder_def_const(bldr, "addressof", opi_fn_new(addressof, 1));
+
+  opi_builder_def_const(bldr, "__builtin_range2", opi_fn_new(builtin_range2, 2));
+  opi_builder_def_const(bldr, "__builtin_range3", opi_fn_new(builtin_range3, 3));
 }

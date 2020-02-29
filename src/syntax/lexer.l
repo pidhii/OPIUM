@@ -144,9 +144,9 @@ s[g]*[/|+] {
     if (*start == 'g') start++;
     else break;
   }
-  int len = yyleng - 1 - (start - yytext);
+  int len = (start - yytext) - 1;
   char buf[len + 1];
-  memcpy(buf, start, len);
+  memcpy(buf, yytext + 1, len);
   buf[len] = 0;
   yylval->str = strdup(buf);
   cod_vec_push(opi_start_token, 'r');
@@ -162,6 +162,13 @@ s[g]*[/|+] {
 <qq4>"/" { BEGIN(INITIAL); return 'q'; }
 <qq5>"|" { BEGIN(INITIAL); return 'q'; }
 <qq6>"+" { BEGIN(INITIAL); return 'q'; }
+
+<qq1>"]"[a-zA-Z]+ { BEGIN(INITIAL); yylval->str = strdup(yytext+1); cod_vec_push(opi_start_token, 'q'); return R_OPTS; }
+<qq2>")"[a-zA-Z]+ { BEGIN(INITIAL); yylval->str = strdup(yytext+1); cod_vec_push(opi_start_token, 'q'); return R_OPTS; }
+<qq3>"}"[a-zA-Z]+ { BEGIN(INITIAL); yylval->str = strdup(yytext+1); cod_vec_push(opi_start_token, 'q'); return R_OPTS; }
+<qq4>"/"[a-zA-Z]+ { BEGIN(INITIAL); yylval->str = strdup(yytext+1); cod_vec_push(opi_start_token, 'q'); return R_OPTS; }
+<qq5>"|"[a-zA-Z]+ { BEGIN(INITIAL); yylval->str = strdup(yytext+1); cod_vec_push(opi_start_token, 'q'); return R_OPTS; }
+<qq6>"+"[a-zA-Z]+ { BEGIN(INITIAL); yylval->str = strdup(yytext+1); cod_vec_push(opi_start_token, 'q'); return R_OPTS; }
 
 <sr1>"/" {  BEGIN(qq4); cod_vec_push(opi_start_token, 'q'); return 'q'; }
 <sr2>"|" {  BEGIN(qq5); cod_vec_push(opi_start_token, 'q'); return 'q'; }
@@ -200,6 +207,8 @@ s[g]*[/|+] {
 <qq6>"%{" { BEGIN(INITIAL); cod_vec_push(g_braces, BRACE_QQ6); return FMT_START; }
 
 <sr1>"%{" { BEGIN(INITIAL); cod_vec_push(g_braces, BRACE_SR1); return FMT_START; }
+<sr2>"%{" { BEGIN(INITIAL); cod_vec_push(g_braces, BRACE_SR1); return FMT_START; }
+<sr3>"%{" { BEGIN(INITIAL); cod_vec_push(g_braces, BRACE_SR1); return FMT_START; }
 
 <string,shell,qq1,qq2,qq3,qq4,qq5,qq6,sr1,sr2,sr3>.  { yylval->c = yytext[0]; return CHAR; }
 <string,shell,qq1,qq2,qq3,qq4,qq5,qq6,sr1,sr2,sr3>\n { yylval->c = yytext[0]; return CHAR; }

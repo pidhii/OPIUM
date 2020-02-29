@@ -76,7 +76,7 @@ syn keyword Function list rlist array table
 syn keyword Function length
 syn keyword Function strlen substr strstr chop ltrim rtrim trim concat
 syn keyword Function open popen
-syn keyword Function read readline readlines rewind getpos setpos
+syn keyword Function read readline readlines flush rewind getpos setpos
 syn keyword Function flip const uncurry
 syn keyword Function range
 syn keyword Function revappend reverse
@@ -160,31 +160,31 @@ syn region String matchgroup=opiOperator start=/`/ skip=/\\`/ end=/\`/ skipnl sk
 " qq[...]
 syn region String matchgroup=opiQq start=/\<qr\[/ skip=/\\]/ end=/\]/ skipnl skipwhite contains=opiFormat
 " qr(...)
-syn region String matchgroup=opiQq start=/\<qr(/ skip=/\\)/ end=/)/ skipnl skipwhite contains=opiFormat
+syn region String matchgroup=opiQq start=/\<qr(/ skip=/\\)/ end=/)[a-zA-Z]*/ skipnl skipwhite contains=opiFormat
 " qr{...}
-syn region String matchgroup=opiQq start=/\<qr{/ skip=/\\}/ end=/}/ skipnl skipwhite contains=opiFormat
+syn region String matchgroup=opiQq start=/\<qr{/ skip=/\\}/ end=/}[a-zA-Z]*/ skipnl skipwhite contains=opiFormat
 " qr/.../
-syn region String matchgroup=opiQq start=+\<qr/+ skip=+\\/+ end=+/+ skipnl skipwhite contains=opiFormat
+syn region String matchgroup=opiQq start=+\<qr/+ skip=+\\/+ end=+/[a-zA-Z]*+ skipnl skipwhite contains=opiFormat
 " qr|...|
-syn region String matchgroup=opiQq start=+\<qr|+ skip=+\\|+ end=+|+ skipnl skipwhite contains=opiFormat
+syn region String matchgroup=opiQq start=+\<qr|+ skip=+\\|+ end=+|[a-zA-Z]*+ skipnl skipwhite contains=opiFormat
 " qr+...+
-syn region String matchgroup=opiQq start=/\<qr+/ skip=/\\+/ end=/+/ skipnl skipwhite contains=opiFormat
+syn region String matchgroup=opiQq start=/\<qr+/ skip=/\\+/ end=/+[a-zA-Z]*/ skipnl skipwhite contains=opiFormat
 
 "Search Replace
 " /../../
 syn region String matchgroup=opiQq start="\<s[g]*/" skip=+\\/+ end=+/+ nextgroup=opiSrPattern1,opiSrPattern1End skipnl skipwhite contains=opiFormat
-syn region opiSrPattern1 start=+.+ matchgroup=opiQq skip=+\\/+ end=+/+ skipnl skipwhite contains=opiFormat contained
-syn match opiSrPattern1End +/+ contained
+syn region opiSrPattern1 start=+.+ matchgroup=opiQq skip=+\\/+ end=+/[a-zA-Z]*+ skipnl skipwhite contains=opiFormat contained
+syn match opiSrPattern1End +/[a-zA-Z]*+ contained
 hi link opiSrPattern1End opiQq
 " |..|..|
 syn region String matchgroup=opiQq start="\<s[g]*|" skip=+\\|+ end=+|+ nextgroup=opiSrPattern2,opiSrPattern2End skipnl skipwhite contains=opiFormat
-syn region opiSrPattern2 start=+.+ matchgroup=opiQq skip=+\\|+ end=+|+ skipnl skipwhite contains=opiFormat contained
-syn match opiSrPattern2End +|+ contained
+syn region opiSrPattern2 start=+.+ matchgroup=opiQq skip=+\\|+ end=+|[a-zA-Z]*+ skipnl skipwhite contains=opiFormat contained
+syn match opiSrPattern2End +|[a-zA-Z]*+ contained
 hi link opiSrPattern2End opiQq
 " +..+..+
 syn region String matchgroup=opiQq start="\<s[g]*+" skip=/\\+/ end=/+/ nextgroup=opiSrPattern3,opiSrPattern3End skipnl skipwhite contains=opiFormat
-syn region opiSrPattern3 start=+.+ matchgroup=opiQq skip=/\\+/ end=/+/ skipnl skipwhite contains=opiFormat contained
-syn match opiSrPattern3End /+/ contained
+syn region opiSrPattern3 start=+.+ matchgroup=opiQq skip=/\\+/ end=/+[a-zA-Z]*/ skipnl skipwhite contains=opiFormat contained
+syn match opiSrPattern3End /+[a-zA-Z]*/ contained
 hi link opiSrPattern3End opiQq
 
 syn match  SpecialChar /\\\d\+/ containedin=opiSrPattern1,opiSrPattern2,opiSrPattern3 contained

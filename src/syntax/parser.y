@@ -12,6 +12,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
+#include <pcre.h>
 
 extern int
 yylex();
@@ -101,6 +102,11 @@ start_token_t opi_start_token;
     struct cod_strvec names;
     cod_vec(OpiAst*) body;
   } table;
+
+  struct {
+    OpiAst *str;
+    int opts;
+  } restr;
 }
 
 %destructor { opi_drop($$); } <opi>
@@ -140,7 +146,7 @@ start_token_t opi_start_token;
 %token<num> NUMBER
 %token<str> SYMBOL TYPE SHELL
 %token<opi> CONST
-%token<str> S
+%token<str> S R_OPTS
 
 %nonassoc LET REC MUT IN AND
 %type<ast> use
@@ -161,7 +167,7 @@ start_token_t opi_start_token;
 %token MODULE
 %token USE AS
 %nonassoc RETURN
-%token DOTDOT
+/*%token DOTDOT*/
 
 %token FMT_START
 %token FMT_END
@@ -191,8 +197,9 @@ start_token_t opi_start_token;
 %type<patterns> patterns
 %type<pattvec> list_pattern_aux coma_list_pattern_aux
 %type<strvec> fields fields_aux
-%type<ast> string shell qr sr
-%type<fmt> str_aux shell_aux qr_aux
+%type<ast> string shell qr qr_str sr
+%type<restr> string_with_opts restring_aux qr_str_with_opts
+%type<fmt> str_aux shell_aux
 %type<fmt> fmt
 %type<ast> table_binds table
 %type<table> table_aux cond_table_aux
@@ -203,7 +210,8 @@ start_token_t opi_start_token;
 %nonassoc SETVAR
 %right OR
 %left RPIPE
-%right '$'
+/*%nonassoc DOTDOTDOT*/
+%right '$' DOTDOT
 %right SCOR
 %right SCAND
 %nonassoc IS ISNOT EQ EQUAL NUMLT NUMGT NUMLE NUMGE NUMEQ NUMNE
@@ -217,6 +225,7 @@ start_token_t opi_start_token;
 %left TABLEREF
 
 %left UMINUS
+%nonassoc LIST_DOTS
 
 %start entry
 %%
@@ -278,18 +287,23 @@ Atom
     cod_ptrvec_destroy($2.ptrvec, NULL);
     free($2.ptrvec);
   }
+  | '[' ']' { $$ = opi_ast_const(opi_nil); }
   | '[' '|' list_aux '|' ']' {
     $$ = opi_ast_apply(opi_ast_var("Array"), (OpiAst**)$3.ptrvec->data, $3.ptrvec->size);
     $$->apply.loc = location(&@$);
     cod_ptrvec_destroy($3.ptrvec, NULL);
     free($3.ptrvec);
   }
-  | '[' ']' { $$ = opi_ast_const(opi_nil); }
   | Atom TABLEREF SYMBOL {
     OpiAst *p[] = { $1, opi_ast_const(opi_symbol($3)) };
     $$ = opi_ast_apply(opi_ast_var("#"), p, 2);
     $$->apply.loc = location(&@$);
     free($3);
+  }
+  | '(' Expr ',' Expr DOTDOT Expr ')' {
+    OpiAst *p[3] = { $2, $4, $6 };
+    OpiAst *f = opi_ast_var("__builtin_range3");
+    $$ = opi_ast_apply(f, p, 3);
   }
   | Atom TABLEREF TYPE {
     OpiAst *p[] = { $1, opi_ast_const(opi_symbol($3)) };
@@ -509,6 +523,11 @@ Expr
       /*$$ = opi_ast_apply($4, &fn, 1);*/
     /*}*/
   /*}*/
+  | Expr DOTDOT Expr {
+    OpiAst *p[2] = { $1, $3 };
+    OpiAst *f = opi_ast_var("__builtin_range2");
+    $$ = opi_ast_apply(f, p, 2);
+  }
 ;
 
 if
@@ -810,15 +829,18 @@ arg_aux
 ;
 
 list_aux
-  : Atom {
+  : Expr {
     $$.ptrvec = malloc(sizeof(struct cod_ptrvec));
     cod_ptrvec_init($$.ptrvec);
     cod_ptrvec_push($$.ptrvec, $1, NULL);
   }
-  | list_aux ',' Atom {
+  | list_aux ',' Expr {
     $$ = $1;
     cod_ptrvec_push($$.ptrvec, $3, NULL);
   }
+  /*| list_aux ',' Expr ',' Expr DOTDOT Expr %prec LIST_DOTS {*/
+    /*abort();*/
+  /*}*/
 ;
 
 block
@@ -1146,6 +1168,45 @@ str_aux
   | 'q' fmt 'q' { $$ = $2; cod_vec_push($$.s, 0); }
 ;
 
+string_with_opts
+  : restring_aux
+  | string {
+    $$.str = $1;
+    $$.opts = 0;
+  }
+;
+restring_aux: 'q' fmt R_OPTS 'q' {
+  cod_vec_push($2.s, 0);
+
+  OpiAst *str;
+  if ($2.p.len == 0) {
+    str = opi_ast_const(opi_str_drain_with_len($2.s.data, $2.s.len - 1));
+    cod_vec_destroy($2.p);
+  } else {
+    char *fmt = $2.s.data;
+    OpiAst *p[$2.p.len + 1];
+    p[0] = opi_ast_const(opi_str_drain_with_len($2.s.data, $2.s.len - 1));
+    for (size_t i = 0; i < $2.p.len; ++i)
+      p[i + 1] = $2.p.data[i];
+    cod_vec_destroy($2.p);
+    str = opi_ast_apply(opi_ast_var("format"), p, $2.p.len + 1);
+  }
+  
+  int opts = 0;
+  for (char *p = $3; *p; ++p) {
+    switch (*p) {
+      case 'i': opts |= PCRE_CASELESS; break;
+      default:
+        opi_error("undefined PCRE option\n");
+        abort();
+    }
+  }
+  free($3);
+
+  $$.str = str;
+  $$.opts = opts;
+};
+
 shell: shell_aux {
   OpiAst *cmd;
   if ($1.p.len == 0) {
@@ -1165,27 +1226,74 @@ shell: shell_aux {
 };
 shell_aux: '`' fmt '`' { $$ = $2; cod_vec_push($$.s, 0); };
 
-qr: qr_aux {
-  OpiAst *str;
-  if ($1.p.len == 0) {
-    str = opi_ast_const(opi_str_drain_with_len($1.s.data, $1.s.len - 1));
-    cod_vec_destroy($1.p);
-  } else {
-    char *fmt = $1.s.data;
-    OpiAst *p[$1.p.len + 1];
-    p[0] = opi_ast_const(opi_str_drain_with_len($1.s.data, $1.s.len - 1));
-    for (size_t i = 0; i < $1.p.len; ++i)
-      p[i + 1] = $1.p.data[i];
-    cod_vec_destroy($1.p);
-    str = opi_ast_apply(opi_ast_var("format"), p, $1.p.len + 1);
+qr
+  : qr_str {
+    OpiAst *args[2] = { $1, opi_ast_const(opi_num_new(0)) };
+    $$ = opi_ast_apply(opi_ast_var("regex"), args, 2);
+    $$->apply.loc = location(&@$);
   }
-  $$ = opi_ast_apply(opi_ast_var("regex"), &str, 1);
-  $$->apply.loc = location(&@$);
-};
-qr_aux: 'r' fmt 'q' { $$ = $2; cod_vec_push($$.s, 0); };
+  | qr_str_with_opts {
+    OpiAst *args[2] = { $1.str, opi_ast_const(opi_num_new($1.opts)) };
+    $$ = opi_ast_apply(opi_ast_var("regex"), args, 2);
+    $$->apply.loc = location(&@$);
+  }
+;
 
-sr: S qr string {
-  OpiAst *p[] = { $2, $3, opi_ast_const(opi_str_drain($1)) };
+qr_str: 'r' fmt 'q' {
+  cod_vec_push($2.s, 0);
+
+  OpiAst *str;
+  if ($2.p.len == 0) {
+    str = opi_ast_const(opi_str_drain_with_len($2.s.data, $2.s.len - 1));
+    cod_vec_destroy($2.p);
+  } else {
+    char *fmt = $2.s.data;
+    OpiAst *p[$2.p.len + 1];
+    p[0] = opi_ast_const(opi_str_drain_with_len($2.s.data, $2.s.len - 1));
+    for (size_t i = 0; i < $2.p.len; ++i)
+      p[i + 1] = $2.p.data[i];
+    cod_vec_destroy($2.p);
+    str = opi_ast_apply(opi_ast_var("format"), p, $2.p.len + 1);
+  }
+  $$ = str;
+};
+
+qr_str_with_opts: 'r' fmt R_OPTS 'q' {
+  cod_vec_push($2.s, 0);
+
+  OpiAst *str;
+  if ($2.p.len == 0) {
+    str = opi_ast_const(opi_str_drain_with_len($2.s.data, $2.s.len - 1));
+    cod_vec_destroy($2.p);
+  } else {
+    char *fmt = $2.s.data;
+    OpiAst *p[$2.p.len + 1];
+    p[0] = opi_ast_const(opi_str_drain_with_len($2.s.data, $2.s.len - 1));
+    for (size_t i = 0; i < $2.p.len; ++i)
+      p[i + 1] = $2.p.data[i];
+    cod_vec_destroy($2.p);
+    str = opi_ast_apply(opi_ast_var("format"), p, $2.p.len + 1);
+  }
+
+  int opts = 0;
+  for (char *p = $3; *p; ++p) {
+    switch (*p) {
+      case 'i': opts |= PCRE_CASELESS; break;
+      default:
+        opi_error("undefined PCRE option\n");
+        abort();
+    }
+  }
+  free($3);
+
+  $$.str = str;
+  $$.opts = opts;
+};
+
+sr: S qr_str string_with_opts {
+  OpiAst *reargs[2] = { $2, opi_ast_const(opi_num_new($3.opts)) };
+  OpiAst *re = opi_ast_apply(opi_ast_var("regex"), reargs, 2);
+  OpiAst *p[] = { re, $3.str, opi_ast_const(opi_str_drain($1)) };
   $$ = opi_ast_apply(opi_ast_var("__builtin_sr"), p, 3);
 };
 
