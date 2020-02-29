@@ -9,6 +9,7 @@ OPTIONS:
   path <opium-path>
   force
   clean
+  no-clean
 
 COMMANDS:
   help
@@ -22,6 +23,7 @@ let rec parseArgs args =
   else if arg eq "help" then helpAndExit stdout 0
   else if arg eq "force" then ('force: true) : parseArgs args
   else if arg eq "clean" then ('clean: true) : parseArgs args
+  else if arg eq "no-clean" then ('clean: false) : parseArgs args
   else if arg eq "install" then
     if let path:args = args then ('install: path) : parseArgs args
     else die "missing path argument to install"
@@ -32,6 +34,9 @@ let rec parseArgs args =
     if let path:args = args then ('path: path) : parseArgs args
     else die "missing opium-path argument"
   else die "unknown command-line option"
+
+for x in l2 and y in l2 do
+done
 
 # Get full path given a relative one.
 let realpath path = `test -e '%{path}' && realpath '%{path}'`
@@ -88,10 +93,25 @@ let install () =
   let link_path = "%{installPath}/%{packageName}" in
   `ln -s %{force? && "-f" || ""} %{rel_path} %{link_path}`;
 
-  when cmdArgs::clean then begin
-    print "running post-install hooks...";
-    packagePostinstall packageRoot;
-  end;
+  let cleanup () =
+      print "running post-install hooks...";
+      packagePostinstall packageRoot;
+  in
+
+  when cmdArgs::clean then clean ->
+    if clean then cleanup ()
+  else (
+    printf "run post-install hooks? [yes/no]: ";
+    flush stdout;
+    let rec processAnswer ans =
+      if match qr/y(es)?/i ans then cleanup ()
+      else if not match qr/n(o)?/i ans then (
+        printf "please enter 'y[es]' or 'n[o]': ";
+        flush stdout;
+        processAnswer $ chop $ readline stdin;
+      )
+    in processAnswer $ chop $ readline stdin;
+  );
 
   print "package %{packageName} was succesfully installed to %{installPath}"
 
