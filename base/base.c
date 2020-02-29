@@ -490,6 +490,13 @@ OPI_DEF(base_setpos,
     opi_return(opi_undefined(opi_str_new(strerror(errno))));
 )
 
+static
+OPI_DEF(base_flush,
+  opi_arg(file, opi_file_type)
+  if (!fflush(opi_file_get_value(file)))
+    opi_return(opi_undefined(opi_str_new(strerror(errno))));
+)
+
 static opi_t
 match(void)
 {
@@ -1638,6 +1645,7 @@ opium_library(OpiBuilder *bldr)
   opi_builder_def_type(bldr, "FPos", fpos_type);
   opi_builder_def_const(bldr, "__base_getpos", opi_fn_new(base_getpos, 1));
   opi_builder_def_const(bldr, "__base_setpos", opi_fn_new(base_setpos, 2));
+  opi_builder_def_const(bldr, "__base_flush", opi_fn_new(base_flush, 1));
 
   opi_builder_def_const(bldr, "sin", opi_fn_new(sin_, 1));
   opi_builder_def_const(bldr, "cos", opi_fn_new(cos_, 1));

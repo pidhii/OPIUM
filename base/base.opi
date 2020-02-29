@@ -153,6 +153,7 @@ let join sep = reduce \acc x -> acc ++ sep ++ x
 let open path ..mode = __base_open path (car mode or "r")
 let popen cmd ..mode = __base_popen cmd (car mode or "r")
 
+let flush = __base_flush
 let rewind = __base_rewind
 let getpos = __base_getpos
 let setpos = __base_setpos
