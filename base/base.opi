@@ -88,19 +88,22 @@ let table x =
   if x is Table then x
   else Table $ list x
 
+let unfold = Seq.unfold
+
 let foreach f = Seq.iter f . ToSeq.toSeq
 let map f = Seq.map f . ToSeq.toSeq
 let zip x y = Seq.zip (ToSeq.toSeq x) (ToSeq.toSeq y)
 let filter f = Seq.filter f . ToSeq.toSeq
 let foldl f z = Seq.foldl f z . ToSeq.toSeq
+let scanl f z = Seq.scanl f z . ToSeq.toSeq
 let reduce f = Seq.reduce f . ToSeq.toSeq
-
-let unfold = Seq.unfold
+let repeat x = unfold (const $ x:nil) nil
+let iterate f = unfold (fn x -> x : f x)
 
 let range from to = unfold (fn i -> if i < to then i : i + 1) from
 
-let take n = map cdr . zip (range 0 n)
-let drop n = map cdr . filter (fn (x:_) -> x >= n) . zip (range 0 inf)
+let take limit = map cdr . zip (range 0 n)
+let drop limit = map cdr . filter (fn (x:_) -> x >= n) . zip (range 0 inf)
 
 let rec any? f l =
   unless let x:xs = l then false

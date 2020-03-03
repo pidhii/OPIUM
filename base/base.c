@@ -904,6 +904,60 @@ Seq_foldl(void)
 }
 
 static opi_t
+Seq_scanl(void)
+{
+  OPI_BEGIN_FN()
+  OPI_ARG(f, opi_fn_type)
+  OPI_ARG(z, NULL);
+  OPI_ARG(s, opi_seq_type)
+
+  typedef struct Iter_s {
+    opi_t f, z, s;
+  } Iter;
+
+  void iter_delete(OpiIter *iter) {
+    Iter *self = (void*)iter;
+    opi_unref(self->f);
+    opi_unref(self->z);
+    opi_unref(self->s);
+    free(self);
+  }
+
+  opi_t iter_next(OpiIter *iter) {
+    Iter *restrict self = (void*)iter;
+    opi_t x = opi_seq_next(self->s);
+    if (opi_unlikely(x == NULL)) return NULL;
+    if (opi_unlikely(x->type == opi_undefined_type)) return x;
+    opi_dec_rc(self->z);
+    opi_push(x);
+    opi_push(self->z);
+    opi_t z = opi_apply(self->f, 2);
+    opi_inc_rc(self->z = z);
+    return z;
+  }
+
+  OpiIter* iter_copy(OpiIter *iter) {
+    Iter *self = (void*)iter;
+    Iter *new_iter = malloc(sizeof(Iter));
+    opi_inc_rc(new_iter->f = self->f);
+    opi_inc_rc(new_iter->z = self->z);
+    opi_inc_rc(new_iter->s = opi_seq_copy(self->s));
+    return (OpiIter*)new_iter;
+  }
+
+  Iter *iter = malloc(sizeof(Iter));
+  iter->f = f;
+  iter->z = z;
+  opi_inc_rc(iter->s = opi_seq_copy(s));
+  opi_unref(s);
+  return opi_seq_new((OpiIter*)iter, (OpiSeqCfg) {
+    .next = iter_next,
+    .copy = iter_copy,
+    .dtor = iter_delete,
+  });
+}
+
+static opi_t
 Seq_reduce(void)
 {
   OPI_BEGIN_FN()
@@ -1579,6 +1633,7 @@ opium_library(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "Seq.zip", opi_fn_new(Seq_zip, 2));
   opi_builder_def_const(bldr, "Seq.filter", opi_fn_new(Seq_filter, 2));
   opi_builder_def_const(bldr, "Seq.foldl", opi_fn_new(Seq_foldl, 3));
+  opi_builder_def_const(bldr, "Seq.scanl", opi_fn_new(Seq_scanl, 3));
   opi_builder_def_const(bldr, "Seq.reduce", opi_fn_new(Seq_reduce, 2));
   opi_builder_def_const(bldr, "Seq.unfold", opi_fn_new(Seq_unfold, 2));
 

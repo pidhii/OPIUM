@@ -85,6 +85,8 @@ syn keyword Function revmap map
 syn keyword Function zip
 syn keyword Function foreach
 syn keyword Function foldl reduce
+syn keyword Function scanl
+syn keyword Function repeat iterate
 syn keyword Function unfold
 syn keyword Function revfilter filter
 syn keyword Function drop take
