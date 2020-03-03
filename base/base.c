@@ -729,8 +729,8 @@ Array_toList(void)
     return opi_undefined(opi_symbol("type-error"));
   }
   opi_t l = opi_nil;
-  opi_t *data = opi_array_get_data(arr);
-  for (int i = opi_array_get_length(arr) - 1; i >= 0; --i)
+  opi_t *restrict data = opi_array_get_data(arr);
+  for (int i = (int)opi_array_get_length(arr) - 1; i >= 0; --i)
     l = opi_cons(data[i], l);
   opi_drop(arr);
   return l;
@@ -739,7 +739,6 @@ Array_toList(void)
 static opi_t
 Array_toRevList(void)
 {
-  opi_debug("Array.toRevList\n");
   opi_t arr = opi_pop();
   if (opi_unlikely(arr->type != opi_array_type)) {
     opi_drop(arr);

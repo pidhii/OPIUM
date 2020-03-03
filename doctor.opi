@@ -35,9 +35,6 @@ let rec parseArgs args =
     else die "missing opium-path argument"
   else die "unknown command-line option"
 
-for x in l2 and y in l2 do
-done
-
 # Get full path given a relative one.
 let realpath path = `test -e '%{path}' && realpath '%{path}'`
 
