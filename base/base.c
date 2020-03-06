@@ -493,7 +493,7 @@ OPI_DEF(base_setpos,
 static
 OPI_DEF(base_flush,
   opi_arg(file, opi_file_type)
-  if (!fflush(opi_file_get_value(file)))
+  if (fflush(opi_file_get_value(file)))
     opi_return(opi_undefined(opi_str_new(strerror(errno))));
 )
 

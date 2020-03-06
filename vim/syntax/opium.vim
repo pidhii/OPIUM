@@ -47,7 +47,7 @@ syn region opiArray matchgroup=opiType start=/\[\s*|/ end=/|\s*\]/ skipwhite ski
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""'
 " Builtins:
-syn keyword Function number regex svector dvector
+syn keyword Function number symbol regex svector dvector
 syn keyword Function write display newline print printf fprintf format
 syn keyword Function car cdr
 syn keyword Function pairs

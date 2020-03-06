@@ -355,7 +355,6 @@ apply(void)
 {
   opi_t f = opi_pop();
   opi_t l = opi_pop();
-  opi_write(l, OPI_DEBUG); putc('\n', OPI_DEBUG);
 
   if (f->type != opi_fn_type) {
     opi_drop(f);
@@ -369,7 +368,6 @@ apply(void)
   size_t iarg = 1;
   for (opi_t it = l; it->type == opi_pair_type; it = opi_cdr(it))
     opi_sp[-iarg++] = opi_car(it);
-  opi_debug("apply %zu args\n", nargs);
   opi_t ret = opi_apply(f, nargs);
 
   opi_inc_rc(ret);
@@ -812,6 +810,14 @@ OPI_DEF(builtin_range3,
   opi_return(range(x1, xn, step));
 )
 
+static opi_t
+symbol(void)
+{
+  OPI_BEGIN_FN()
+  OPI_ARG(str, opi_str_type)
+  opi_return(opi_symbol(OPI_STR(str)->str));
+}
+
 void
 opi_builtins(OpiBuilder *bldr)
 {
@@ -824,6 +830,7 @@ opi_builtins(OpiBuilder *bldr)
   opi_builder_def_const(bldr, "List", opi_fn_new(List, -1));
   opi_builder_def_const(bldr, "Table", opi_fn_new(Table, 1));
   opi_builder_def_const(bldr, "number", opi_fn_new(number, 1));
+  opi_builder_def_const(bldr, "symbol", opi_fn_new(symbol, 1));
 
   opi_builder_def_const(bldr, "regex", opi_fn_new(regex, 2));
 
