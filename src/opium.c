@@ -44,6 +44,7 @@ opi_init(int flags)
 
   opi_allocators_init();
   opi_lexer_init();
+  opi_rec_scp_init();
 
   opi_undefined_init();
   opi_nil_init();
@@ -89,6 +90,7 @@ opi_cleanup(void)
 
   opi_lexer_cleanup();
   opi_allocators_cleanup();
+  opi_rec_scp_cleanup();
 
   if (g_my_stack)
     free(g_my_stack);

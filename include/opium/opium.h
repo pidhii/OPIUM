@@ -430,9 +430,11 @@ opi_traits_cleanup(void);
 typedef uint32_t opi_rc_t;
 typedef uint32_t opi_meta_t;
 
+#define OPI_SCPID_NONE 0xFFFFFFFF
+
 struct OpiHeader_s {
   OpiType *type;
-  opi_meta_t meta;
+  opi_meta_t scpid;
   opi_rc_t rc;
 };
 
@@ -461,7 +463,7 @@ opi_init_cell(void *x_, opi_type_t ty)
   opi_t restrict x = (opi_t)x_;
   x->type = ty;
   x->rc = 0;
-  x->meta = 0;
+  x->scpid = OPI_SCPID_NONE;
 }
 
 void
@@ -524,6 +526,54 @@ opi_h6w();
 
 void
 opi_h6w_free(void *ptr);
+
+/* ==========================================================================
+ * Reurcive scope
+ */
+typedef struct OpiRecNode_s {
+  opi_t val;
+  void (*destroy)(opi_t);
+  void (*free)(opi_t);
+} OpiRecNode;
+
+typedef struct OpiRecScp_s OpiRecScp;
+struct OpiRecScp_s {
+  size_t id;
+  OpiRecScp *next;
+
+  size_t rc;
+  size_t n;
+  OpiRecNode *nodes;
+};
+
+void
+opi_rec_scp_init(void);
+
+void
+opi_rec_scp_cleanup(void);
+
+OpiRecScp*
+opi_rec_scp_alloc(size_t size);
+
+static inline void
+opi_rec_scp_set(OpiRecScp *restrict scp, size_t i, opi_t val,
+    void (*destroy)(opi_t), void (*free)(opi_t))
+{
+  scp->nodes[i].val = val;
+  scp->nodes[i].destroy = destroy;
+  scp->nodes[i].free = free;
+}
+
+static inline void
+opi_rec_scp_finalize(OpiRecScp *restrict scp)
+{
+  for (size_t i = 0; i < scp->n; ++i)
+    scp->nodes[i].val->rc = 1;
+  scp->rc = scp->n;
+}
+
+OpiRecScp*
+opi_rec_scp_from_id(uint32_t id);
 
 /* ==========================================================================
  * Stack
@@ -742,7 +792,6 @@ _opi_cons_at(opi_t car, opi_t cdr, OpiPair *p)
   opi_inc_rc(p->car = car);
   opi_inc_rc(p->cdr = cdr);
   opi_init_cell(p, opi_pair_type);
-  p->header.meta = cdr->meta + 1;
 }
 
 static inline opi_t
@@ -763,7 +812,14 @@ opi_cdr(opi_t x)
 
 static inline __attribute__((pure)) size_t
 opi_length(opi_t x)
-{ return x->meta; }
+{
+  size_t len = 0;
+  while (x->type == opi_pair_type) {
+    len += 1;
+    x = opi_cdr(x);
+  }
+  return len;
+}
 
 /* ==========================================================================
  * Table
